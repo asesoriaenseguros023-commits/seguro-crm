@@ -15,7 +15,7 @@ const today = () => new Date().toISOString().split("T")[0];
 
 // Mappers
 const mapCliente = (c) => ({ ...c, agenteId: c.agente_id, fechaAlta: c.fecha_alta });
-const mapInteresado = (i) => ({ ...i, agenteId: i.agente_id, tipoSeguro: i.tipo_seguro });
+const mapInteresado = (i) => ({ ...i, agenteId: i.agente_id, tipoSeguro: i.tipo_seguro, tipoPersona: i.tipo_persona, documentosChecklist: i.documentos_checklist ? (typeof i.documentos_checklist === 'string' ? JSON.parse(i.documentos_checklist) : i.documentos_checklist) : {}, numeroContrato: i.numero_contrato, envioOficina: i.envio_oficina, fechaRegistro: i.fecha_registro, clienteId: i.cliente_id });
 const mapCotizacion = (c) => ({ ...c, interesadoId: c.interesado_id, agenteId: c.agente_id, sumaAsegurada: c.suma_asegurada, fechaCotizacion: c.fecha_cotizacion, numeroPoliza: c.numero_poliza });
 const mapPoliza = (p) => ({ ...p, cotizacionId: p.cotizacion_id, clienteId: p.cliente_id, agenteId: p.agente_id, sumaAsegurada: p.suma_asegurada, vigenciaInicio: p.vigencia_inicio, vigenciaFin: p.vigencia_fin, fechaEmision: p.fecha_emision, ramoId: p.ramo_id });
 
@@ -221,8 +221,9 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
         <div style={S.sbSection}>Principal</div>
         {[
           { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-          { id: "interesados", label: "Gestión de Clientes", icon: "users" },
-          { id: "polizas", label: "Pólizas", icon: "document" },
+          { id: "clientes", label: "Clientes", icon: "users" },
+          { id: "interesados", label: "Interesados", icon: "document" },
+          { id: "polizas", label: "Pólizas", icon: "shield" },
           { id: "renovaciones", label: "Renovaciones", icon: "bell" },
           { id: "reportes", label: "Reportes", icon: "chart" },
         ].map(i => (
@@ -262,7 +263,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ page, userRol }) => {
-  const labels = { dashboard: "Dashboard", interesados: "Gestión de Clientes", polizas: "Pólizas", renovaciones: "Renovaciones", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
+  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Interesados", polizas: "Pólizas", renovaciones: "Renovaciones", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
   return (
     <div style={S.topbar}>
       <div style={{ fontSize: 14, fontWeight: 700, color: BLUE.text }}>{labels[page] || page}</div>
@@ -341,15 +342,29 @@ const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
 
 // ─── FLUJO: INTERESADO → COTIZACIÓN → PÓLIZA ─────────────────────────────────
 
+// ─── RAMOS QUE REQUIEREN CHECKLIST ───────────────────────────────────────────
+const RAMOS_CHECKLIST = ["Responsabilidad Civil", "Cumplimiento", "Responsabilidad Civil Profesional"];
+const DOCS_NATURAL = ["SARLAFT", "Cédula", "RUT"];
+const DOCS_JURIDICA = ["Cámara de Comercio", "Estados Financieros", "RUT Empresa", "Cédula Representante Legal", "SARLAFT"];
+
 // Form Interesado
-const InteresadoForm = ({ initial, agentes, ramos, onSave, onClose }) => {
+const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) => {
   const [form, setForm] = useState(initial || {
-    nombre: "", email: "", telefono: "", celular: "", direccion: "", ciudad: "", documento: "", tipoDocumento: "CC",
-    tipoSeguro: ramos[0]?.nombre || "", agenteId: agentes[0]?.id || "", notas: "", estado: "Interesado"
+    clienteId: clientes[0]?.id || "",
+    email: "", celular: "", direccion: "", ciudad: "", documento: "", tipoDocumento: "CC",
+    tipoSeguro: ramos[0]?.nombre || "", tipoPersona: "Natural",
+    documentosChecklist: {}, numeroContrato: "", envioOficina: false,
+    agenteId: agentes[0]?.id || "", notas: "", estado: "Interesado",
+    fechaRegistro: today(),
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const valid = form.nombre && form.telefono;
+  const setDoc = (nombre, val) => setForm(f => ({ ...f, documentosChecklist: { ...f.documentosChecklist, [nombre]: val } }));
+
+  const requiereChecklist = RAMOS_CHECKLIST.includes(form.tipoSeguro);
+  const docsRequeridos = form.tipoPersona === "Natural" ? DOCS_NATURAL : DOCS_JURIDICA;
+  const clienteSeleccionado = clientes.find(c => c.id === form.clienteId);
+  const valid = form.clienteId && form.tipoSeguro;
 
   const handleSave = async () => { setSaving(true); await onSave(form); setSaving(false); };
 
@@ -362,58 +377,212 @@ const InteresadoForm = ({ initial, agentes, ramos, onSave, onClose }) => {
         </button>
       </>}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+
+        {/* Selección de cliente */}
         <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
-          <label style={S.label}>Nombre Completo *</label>
-          <input style={S.input} value={form.nombre} onChange={e => set("nombre", e.target.value)} placeholder="Nombre del interesado" />
-        </div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Tipo Documento</label>
-          <select style={S.select} value={form.tipoDocumento} onChange={e => set("tipoDocumento", e.target.value)}>
-            {["CC", "NIT", "CE", "Pasaporte"].map(t => <option key={t}>{t}</option>)}
+          <label style={S.label}>Cliente *</label>
+          <select style={S.select} value={form.clienteId} onChange={e => set("clienteId", e.target.value)}>
+            <option value="">— Selecciona un cliente —</option>
+            {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} {c.documento ? `· ${c.documento}` : ""}</option>)}
           </select>
+          {clienteSeleccionado && (
+            <div style={{ marginTop: 8, background: BLUE.light, borderRadius: 8, padding: "8px 12px", fontSize: 12.5, color: BLUE.text, border: `1px solid ${BLUE.border}` }}>
+              📋 {clienteSeleccionado.nombre} · {clienteSeleccionado.email || ""} · {clienteSeleccionado.celular || ""}
+            </div>
+          )}
         </div>
+
+        {/* Fecha registro automática */}
         <div style={S.formGroup}>
-          <label style={S.label}>N° Documento</label>
-          <input style={S.input} value={form.documento} onChange={e => set("documento", e.target.value)} />
+          <label style={S.label}>Fecha de Registro</label>
+          <input style={{ ...S.input, background: "#f8faff", color: "#6b87b0" }} type="date" value={form.fechaRegistro} readOnly />
         </div>
+
+        {/* Tipo de seguro */}
         <div style={S.formGroup}>
-          <label style={S.label}>Teléfono *</label>
-          <input style={S.input} value={form.telefono} onChange={e => set("telefono", e.target.value)} placeholder="3001234567" />
-        </div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Celular</label>
-          <input style={S.input} value={form.celular} onChange={e => set("celular", e.target.value)} />
-        </div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Correo Electrónico</label>
-          <input style={S.input} type="email" value={form.email} onChange={e => set("email", e.target.value)} />
-        </div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Ciudad</label>
-          <input style={S.input} value={form.ciudad} onChange={e => set("ciudad", e.target.value)} />
-        </div>
-        <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
-          <label style={S.label}>Dirección</label>
-          <input style={S.input} value={form.direccion} onChange={e => set("direccion", e.target.value)} />
-        </div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Tipo de Seguro Interesado</label>
-          <select style={S.select} value={form.tipoSeguro} onChange={e => set("tipoSeguro", e.target.value)}>
+          <label style={S.label}>Tipo de Seguro *</label>
+          <select style={S.select} value={form.tipoSeguro} onChange={e => { set("tipoSeguro", e.target.value); set("documentosChecklist", {}); }}>
             {ramos.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
           </select>
         </div>
+
         <div style={S.formGroup}>
           <label style={S.label}>Agente</label>
           <select style={S.select} value={form.agenteId} onChange={e => set("agenteId", e.target.value)}>
             {agentes.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
           </select>
         </div>
+
+        {/* Campos dinámicos para ramos especiales */}
+        {requiereChecklist && (
+          <div style={{ gridColumn: "1/-1", background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "16px 18px", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 12 }}>
+              📄 Documentos requeridos — {form.tipoSeguro}
+            </div>
+
+            {/* Tipo persona */}
+            <div style={S.formGroup}>
+              <label style={S.label}>Tipo de Persona *</label>
+              <div style={{ display: "flex", gap: 10 }}>
+                {["Natural", "Jurídica"].map(tp => (
+                  <button key={tp} onClick={() => { set("tipoPersona", tp); set("documentosChecklist", {}); }}
+                    style={{ padding: "8px 20px", borderRadius: 8, border: `1.5px solid ${form.tipoPersona === tp ? BLUE.primary : BLUE.border}`, background: form.tipoPersona === tp ? BLUE.primary : "#fff", color: form.tipoPersona === tp ? "#fff" : BLUE.text, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+                    {tp === "Natural" ? "👤 Persona Natural" : "🏢 Persona Jurídica"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Checklist documentos */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {docsRequeridos.map(doc => (
+                <div key={doc} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", borderRadius: 8, padding: "10px 14px", border: `1px solid ${BLUE.border}` }}>
+                  <span style={{ fontSize: 13.5, color: BLUE.text }}>{doc}</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["Sí", "No"].map(val => (
+                      <button key={val} onClick={() => setDoc(doc, val)}
+                        style={{ padding: "4px 12px", borderRadius: 6, border: `1px solid ${form.documentosChecklist[doc] === val ? (val === "Sí" ? "#16a34a" : "#dc2626") : BLUE.border}`, background: form.documentosChecklist[doc] === val ? (val === "Sí" ? "#f0fdf4" : "#fef2f2") : "#fff", color: form.documentosChecklist[doc] === val ? (val === "Sí" ? "#16a34a" : "#dc2626") : "#888", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                        {val === "Sí" ? "✓ Sí" : "✗ No"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Contrato */}
+            <div style={{ ...S.formGroup, marginTop: 14, marginBottom: 0 }}>
+              <label style={S.label}>N° Contrato</label>
+              <input style={S.input} value={form.numeroContrato} onChange={e => set("numeroContrato", e.target.value)} placeholder="Número de contrato" />
+            </div>
+          </div>
+        )}
+
         <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
           <label style={S.label}>Notas</label>
-          <textarea style={{ ...S.input, minHeight: 70, resize: "vertical" }} value={form.notas} onChange={e => set("notas", e.target.value)} />
+          <textarea style={{ ...S.input, minHeight: 60, resize: "vertical" }} value={form.notas} onChange={e => set("notas", e.target.value)} />
+        </div>
+
+        {/* Envío a oficina */}
+        <div style={{ gridColumn: "1/-1", display: "flex", alignItems: "center", gap: 12, background: form.envioOficina ? "#f0fdf4" : BLUE.light, border: `1px solid ${form.envioOficina ? "#bbf7d0" : BLUE.border}`, borderRadius: 10, padding: "12px 16px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
+            <input type="checkbox" checked={form.envioOficina} onChange={e => set("envioOficina", e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: "#16a34a", cursor: "pointer" }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: form.envioOficina ? "#16a34a" : BLUE.text }}>
+              {form.envioOficina ? "✓ Enviado a oficina" : "Envío a oficina"}
+            </span>
+          </label>
         </div>
       </div>
     </Modal>
+  );
+};
+
+// ─── MÓDULO CLIENTES ─────────────────────────────────────────────────────────
+const ClientesPage = ({ clientes, agentes, onAdd, onEdit, onDelete, userRol, agenteActualId }) => {
+  const [q, setQ] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [delItem, setDelItem] = useState(null);
+  const [form, setForm] = useState({ nombre: "", email: "", documento: "", tipoDocumento: "CC", ciudad: "", direccion: "", agenteId: agentes[0]?.id || "", notas: "" });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const clientesFiltrados = useMemo(() => {
+    const base = esAdmin(userRol) ? clientes : clientes.filter(c => c.agenteId === agenteActualId);
+    return base.filter(c => !q || c.nombre?.toLowerCase().includes(q.toLowerCase()) || c.email?.toLowerCase().includes(q.toLowerCase()) || c.documento?.includes(q));
+  }, [clientes, q, userRol, agenteActualId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    if (editItem) { await onEdit({ ...editItem, ...form }); setEditItem(null); }
+    else { await onAdd(form); setShowForm(false); setForm({ nombre: "", email: "", documento: "", tipoDocumento: "CC", ciudad: "", direccion: "", agenteId: agentes[0]?.id || "", notas: "" }); }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div><div style={S.pageTitle}>Clientes</div><div style={S.pageSub}>{clientesFiltrados.length} clientes registrados</div></div>
+        <button style={S.btn("primary")} onClick={() => setShowForm(true)}><Icon name="plus" size={16} />Nuevo Cliente</button>
+      </div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+        <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar por nombre, email, documento…" value={q} onChange={e => setQ(e.target.value)} /></div>
+      </div>
+      <div style={S.tableWrap}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1.4fr 1fr 0.8fr 100px" }}>
+          <span>Nombre</span><span>Email</span><span>Documento</span><span>Ciudad</span><span>Acciones</span>
+        </div>
+        {clientesFiltrados.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay clientes registrados</div>
+          : clientesFiltrados.map(c => (
+            <div key={c.id} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1.4fr 1fr 0.8fr 100px" }}
+              onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
+              onMouseLeave={e => e.currentTarget.style.background = ""}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{c.nombre}</div>
+              <div style={{ fontSize: 13, color: "#555" }}>{c.email || "—"}</div>
+              <div style={{ fontSize: 13 }}>{c.tipoDocumento}: {c.documento || "—"}</div>
+              <div style={{ fontSize: 13, color: "#555" }}>{c.ciudad || "—"}</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button style={S.btn("ghost")} onClick={() => { setEditItem(c); setForm({ nombre: c.nombre, email: c.email || "", documento: c.documento || "", tipoDocumento: c.tipoDocumento || "CC", ciudad: c.ciudad || "", direccion: c.direccion || "", agenteId: c.agenteId || agentes[0]?.id || "", notas: c.notas || "" }); }}><Icon name="edit" size={14} /></button>
+                {esAdmin(userRol) && <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(c)}><Icon name="trash" size={14} /></button>}
+              </div>
+            </div>
+          ))}
+      </div>
+
+      {(showForm || editItem) && (
+        <Modal title={editItem ? "Editar Cliente" : "Nuevo Cliente"} onClose={() => { setShowForm(false); setEditItem(null); }} wide
+          footer={<>
+            <button style={S.btn("secondary")} onClick={() => { setShowForm(false); setEditItem(null); }}>Cancelar</button>
+            <button style={{ ...S.btn("primary"), opacity: !saving ? 1 : 0.5 }} onClick={handleSave} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</button>
+          </>}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+            <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
+              <label style={S.label}>Nombre Completo *</label>
+              <input style={S.input} value={form.nombre} onChange={e => set("nombre", e.target.value)} placeholder="Nombre completo" />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Tipo Documento</label>
+              <select style={S.select} value={form.tipoDocumento} onChange={e => set("tipoDocumento", e.target.value)}>
+                {["CC", "NIT", "CE", "Pasaporte"].map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>N° Documento</label>
+              <input style={S.input} value={form.documento} onChange={e => set("documento", e.target.value)} />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Correo Electrónico</label>
+              <input style={S.input} type="email" value={form.email} onChange={e => set("email", e.target.value)} />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Ciudad</label>
+              <input style={S.input} value={form.ciudad} onChange={e => set("ciudad", e.target.value)} />
+            </div>
+            <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
+              <label style={S.label}>Dirección</label>
+              <input style={S.input} value={form.direccion} onChange={e => set("direccion", e.target.value)} />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Agente</label>
+              <select style={S.select} value={form.agenteId} onChange={e => set("agenteId", e.target.value)}>
+                {agentes.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              </select>
+            </div>
+            <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
+              <label style={S.label}>Notas</label>
+              <textarea style={{ ...S.input, minHeight: 60, resize: "vertical" }} value={form.notas} onChange={e => set("notas", e.target.value)} />
+            </div>
+          </div>
+        </Modal>
+      )}
+      {delItem && (
+        <Modal title="Confirmar eliminación" onClose={() => setDelItem(null)}
+          footer={<><button style={S.btn("secondary")} onClick={() => setDelItem(null)}>Cancelar</button><button style={S.btn("danger")} onClick={async () => { await onDelete(delItem.id); setDelItem(null); }}>Eliminar</button></>}>
+          <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar al cliente <strong>{delItem.nombre}</strong>?</p>
+        </Modal>
+      )}
+    </div>
   );
 };
 
@@ -564,7 +733,7 @@ const EmisionForm = ({ cotizacion, interesado, ramos, onSave, onClose }) => {
 };
 
 // ─── PÁGINA GESTIÓN DE CLIENTES (Interesados + Cotizaciones) ─────────────────
-const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, onAddInteresado, onEditInteresado, onDeleteInteresado, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
+const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, clientes, onAddInteresado, onEditInteresado, onDeleteInteresado, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("interesados"); // "interesados" | "cotizaciones"
   const [showFormInteresado, setShowFormInteresado] = useState(false);
@@ -628,29 +797,32 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, o
       {/* Tab Interesados */}
       {tab === "interesados" && (
         <div style={S.tableWrap}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 1fr 100px" }}>
-            <span>Nombre</span><span>Contacto</span><span>Tipo Seguro</span><span>Ciudad</span><span>Estado</span><span>Acciones</span>
+          <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr 110px" }}>
+            <span>Cliente</span><span>Tipo Seguro</span><span>Fecha</span><span>Cotizaciones</span><span>Oficina</span><span>Acciones</span>
           </div>
           {interesadosFiltrados.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay interesados registrados</div>
             : interesadosFiltrados.map(i => {
               const nCots = cotizaciones.filter(c => c.interesadoId === i.id).length;
+              const cliente = clientes.find(c => c.id === i.clienteId);
               return (
-                <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 1fr 100px" }}
+                <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr 110px" }}
                   onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{i.nombre}</div>
-                    <div style={{ fontSize: 11.5, color: "#888" }}>{i.documento ? `${i.tipoDocumento}: ${i.documento}` : ""}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{cliente?.nombre || i.nombre || "—"}</div>
+                    <div style={{ fontSize: 11.5, color: "#888" }}>{cliente?.email || ""}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 13 }}>{i.telefono}</div>
-                    <div style={{ fontSize: 11.5, color: "#888" }}>{i.email}</div>
+                    <span style={S.chip(BLUE.primary)}>{i.tipoSeguro || "—"}</span>
+                    {RAMOS_CHECKLIST.includes(i.tipoSeguro) && (
+                      <div style={{ fontSize: 11, color: "#888", marginTop: 3 }}>{i.tipoPersona || ""}</div>
+                    )}
                   </div>
-                  <span style={S.chip(BLUE.primary)}>{i.tipoSeguro || "—"}</span>
-                  <div style={{ fontSize: 13, color: "#555" }}>{i.ciudad || "—"}</div>
+                  <div style={{ fontSize: 12.5, color: "#555" }}>{fmtDate(i.fechaRegistro)}</div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <span style={S.chip(nCots > 0 ? "#16a34a" : "#f59e0b")}>{nCots > 0 ? `${nCots} cot.` : "Sin cotizar"}</span>
                   </div>
+                  <div>{i.envioOficina ? <span style={S.chip("#16a34a")}>✓ Enviado</span> : <span style={S.chip("#6b7280")}>Pendiente</span>}</div>
                   <div style={{ display: "flex", gap: 3 }}>
                     <button title="Nueva Cotización" style={{ ...S.btn("secondary"), padding: "5px 10px", fontSize: 12 }} onClick={() => setShowCotizacion(i)}>
                       Cotizar
@@ -704,7 +876,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, o
 
       {/* Modales */}
       {(showFormInteresado || editInteresado) && (
-        <InteresadoForm initial={editInteresado} agentes={agentes} ramos={ramos} onSave={handleSaveInteresado} onClose={() => { setShowFormInteresado(false); setEditInteresado(null); }} />
+        <InteresadoForm initial={editInteresado} agentes={agentes} ramos={ramos} clientes={clientes} onSave={handleSaveInteresado} onClose={() => { setShowFormInteresado(false); setEditInteresado(null); }} />
       )}
       {showCotizacion && (
         <CotizacionForm interesado={showCotizacion} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setShowCotizacion(null)} />
@@ -1113,6 +1285,7 @@ export default function App() {
 
   const [agentes, setAgentes] = useState([]);
   const [ramos, setRamos] = useState([]);
+  const [clientes, setClientes] = useState([]);
   const [interesados, setInteresados] = useState([]);
   const [cotizaciones, setCotizaciones] = useState([]);
   const [polizas, setPolizas] = useState([]);
@@ -1133,15 +1306,17 @@ export default function App() {
     if (!loggedIn) return;
     const cargar = async () => {
       setLoading(true);
-      const [{ data: ags }, { data: rms }, { data: ints }, { data: cots }, { data: pols }] = await Promise.all([
+      const [{ data: ags }, { data: rms }, { data: cls }, { data: ints }, { data: cots }, { data: pols }] = await Promise.all([
         supabase.from('agentes').select('*').order('nombre'),
         supabase.from('ramos').select('*').order('nombre'),
+        supabase.from('clientes').select('*').order('nombre'),
         supabase.from('interesados').select('*').order('created_at', { ascending: false }),
         supabase.from('cotizaciones').select('*').order('created_at', { ascending: false }),
         supabase.from('polizas').select('*').order('created_at', { ascending: false }),
       ]);
       if (ags) setAgentes(ags);
       if (rms) setRamos(rms);
+      if (cls) setClientes(cls.map(c => ({ ...c, agenteId: c.agente_id, tipoDocumento: c.tipo_documento })));
       if (ints) setInteresados(ints.map(mapInteresado));
       if (cots) setCotizaciones(cots.map(mapCotizacion));
       if (pols) setPolizas(pols.map(p => ({ ...mapPoliza(p), ramo: p.ramo, clienteNombre: p.cliente_nombre, clienteTelefono: p.cliente_telefono })));
@@ -1156,14 +1331,40 @@ export default function App() {
     setLoggedIn(true);
   };
 
+  // CRUD Clientes
+  const addCliente = async (f) => {
+    const { data } = await supabase.from('clientes').insert([{ nombre: f.nombre, email: f.email, documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion, agente_id: f.agenteId, notas: f.notas }]).select().single();
+    if (data) setClientes(prev => [...prev, { ...data, agenteId: data.agente_id, tipoDocumento: data.tipo_documento }]);
+  };
+  const editCliente = async (f) => {
+    await supabase.from('clientes').update({ nombre: f.nombre, email: f.email, documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion, agente_id: f.agenteId, notas: f.notas }).eq('id', f.id);
+    setClientes(prev => prev.map(x => x.id === f.id ? { ...x, ...f, agenteId: f.agenteId, tipoDocumento: f.tipoDocumento } : x));
+  };
+  const deleteCliente = async (id) => {
+    await supabase.from('clientes').delete().eq('id', id);
+    setClientes(prev => prev.filter(x => x.id !== id));
+  };
+
   // CRUD Interesados
   const addInteresado = async (f) => {
-    const { data } = await supabase.from('interesados').insert([{ nombre: f.nombre, email: f.email, telefono: f.telefono, celular: f.celular, direccion: f.direccion, ciudad: f.ciudad, documento: f.documento, tipo_documento: f.tipoDocumento, tipo_seguro: f.tipoSeguro, agente_id: f.agenteId, notas: f.notas, estado: f.estado }]).select().single();
+    const { data } = await supabase.from('interesados').insert([{
+      cliente_id: f.clienteId, email: f.email, celular: f.celular, direccion: f.direccion, ciudad: f.ciudad,
+      documento: f.documento, tipo_documento: f.tipoDocumento, tipo_seguro: f.tipoSeguro,
+      tipo_persona: f.tipoPersona, documentos_checklist: JSON.stringify(f.documentosChecklist),
+      numero_contrato: f.numeroContrato, envio_oficina: f.envioOficina,
+      agente_id: f.agenteId, notas: f.notas, estado: f.estado, fecha_registro: f.fechaRegistro,
+    }]).select().single();
     if (data) setInteresados(prev => [mapInteresado(data), ...prev]);
   };
   const editInteresado = async (f) => {
-    await supabase.from('interesados').update({ nombre: f.nombre, email: f.email, telefono: f.telefono, celular: f.celular, direccion: f.direccion, ciudad: f.ciudad, documento: f.documento, tipo_documento: f.tipoDocumento, tipo_seguro: f.tipoSeguro, agente_id: f.agenteId, notas: f.notas }).eq('id', f.id);
-    setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, ...mapInteresado({ ...x, ...f, agente_id: f.agenteId, tipo_seguro: f.tipoSeguro }) } : x));
+    await supabase.from('interesados').update({
+      cliente_id: f.clienteId, email: f.email, celular: f.celular, direccion: f.direccion, ciudad: f.ciudad,
+      documento: f.documento, tipo_documento: f.tipoDocumento, tipo_seguro: f.tipoSeguro,
+      tipo_persona: f.tipoPersona, documentos_checklist: JSON.stringify(f.documentosChecklist),
+      numero_contrato: f.numeroContrato, envio_oficina: f.envioOficina,
+      agente_id: f.agenteId, notas: f.notas,
+    }).eq('id', f.id);
+    setInteresados(prev => prev.map(x => x.id === f.id ? mapInteresado({ ...x, ...f, agente_id: f.agenteId, tipo_seguro: f.tipoSeguro, tipo_persona: f.tipoPersona, documentos_checklist: JSON.stringify(f.documentosChecklist), numero_contrato: f.numeroContrato, envio_oficina: f.envioOficina, cliente_id: f.clienteId }) : x));
   };
   const deleteInteresado = async (id) => {
     await supabase.from('interesados').delete().eq('id', id);
@@ -1241,7 +1442,7 @@ export default function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setLoggedIn(false); setAgentes([]); setRamos([]); setInteresados([]); setCotizaciones([]); setPolizas([]);
+    setLoggedIn(false); setAgentes([]); setRamos([]); setClientes([]); setInteresados([]); setCotizaciones([]); setPolizas([]);
     setUserRol(ROL_AGENTE); setAgenteActualId(null);
   };
 
@@ -1257,8 +1458,10 @@ export default function App() {
     switch (page) {
       case "dashboard":
         return <Dashboard interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} userName={userName} onNav={handleNav} />;
+      case "clientes":
+        return <ClientesPage clientes={clientes} agentes={agentes} onAdd={addCliente} onEdit={editCliente} onDelete={deleteCliente} userRol={userRol} agenteActualId={agenteActualId} />;
       case "interesados":
-        return <InteresadosPage interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} onAddInteresado={addInteresado} onEditInteresado={editInteresado} onDeleteInteresado={deleteInteresado} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
+        return <InteresadosPage interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} clientes={clientes} onAddInteresado={addInteresado} onEditInteresado={editInteresado} onDeleteInteresado={deleteInteresado} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "polizas":
         return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
