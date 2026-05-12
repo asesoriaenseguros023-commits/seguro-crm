@@ -165,7 +165,7 @@ const LoginPage = ({ onLogin }) => {
   const handleLogin = async () => {
     if (!pass) { setError("Ingresa la contraseña."); return; }
     setLoading(true); setError("");
-    const { error: err } = await supabase.auth.signInWithPassword({ email: minchitas@gmail.com, password: pass });
+    const { error: err } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password: pass });
     if (err) { setError("Contraseña incorrecta."); setLoading(false); }
     else { onLogin(); }
   };
@@ -1472,9 +1472,9 @@ export default function App() {
   const [polizas, setPolizas] = useState([]);
 
   const resolverRol = async (email) => {
-    const { data } = await supabase.from('agentes').select('id, nombre, rol').eq('email', email).single();
-    if (data) { setUserName(data.nombre || email); setUserRol(data.rol === ROL_ADMIN ? ROL_ADMIN : ROL_AGENTE); setAgenteActualId(data.id); }
-    else { setUserName(email); setUserRol(ROL_AGENTE); }
+    setUserName("Administrador");
+    setUserRol(ROL_ADMIN);
+    setAgenteActualId(null);
   };
 
   useEffect(() => {
@@ -1487,15 +1487,13 @@ export default function App() {
     if (!loggedIn) return;
     const cargar = async () => {
       setLoading(true);
-      const [{ data: ags }, { data: rms }, { data: cls }, { data: ints }, { data: cots }, { data: pols }] = await Promise.all([
-        supabase.from('agentes').select('*').order('nombre'),
+      const [{ data: rms }, { data: cls }, { data: ints }, { data: cots }, { data: pols }] = await Promise.all([
         supabase.from('ramos').select('*').order('nombre'),
         supabase.from('clientes').select('*').order('nombre'),
         supabase.from('interesados').select('*').order('created_at', { ascending: false }),
         supabase.from('cotizaciones').select('*').order('created_at', { ascending: false }),
         supabase.from('polizas').select('*').order('created_at', { ascending: false }),
       ]);
-      if (ags) setAgentes(ags);
       if (rms) setRamos(rms);
       if (cls) setClientes(cls.map(c => ({ ...c, tipoDocumento: c.tipo_documento, tipoPersona: c.tipo_persona, nombreContacto: c.nombre_contacto, telefonoContacto: c.telefono_contacto })));
       if (ints) setInteresados(ints.map(mapInteresado));
@@ -1514,12 +1512,13 @@ export default function App() {
 
   // CRUD Clientes
   const addCliente = async (f) => {
-    const { data } = await supabase.from('clientes').insert([{ nombre: f.nombre, email: f.email, celular: f.celular, documento: f.documento, tipo_documento: f.tipoDocumento, tipo_persona: f.tipoPersona, ciudad: f.ciudad, direccion: f.direccion, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto, notas: f.notas }]).select().single();
-    if (data) setClientes(prev => [...prev, { ...data, tipoDocumento: data.tipo_documento, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto }]);
+    const { data, error } = await supabase.from('clientes').insert([{ nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono, tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto, notas: f.notas }]).select().single();
+    if (error) { console.error('addCliente error:', error); return; }
+    if (data) setClientes(prev => [...prev, { ...data, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto }]);
   };
   const editCliente = async (f) => {
-    await supabase.from('clientes').update({ nombre: f.nombre, email: f.email, celular: f.celular, documento: f.documento, tipo_documento: f.tipoDocumento, tipo_persona: f.tipoPersona, ciudad: f.ciudad, direccion: f.direccion, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto, notas: f.notas }).eq('id', f.id);
-    setClientes(prev => prev.map(x => x.id === f.id ? { ...x, ...f, tipoDocumento: f.tipoDocumento, tipoPersona: f.tipoPersona, nombreContacto: f.nombreContacto, telefonoContacto: f.telefonoContacto } : x));
+    await supabase.from('clientes').update({ nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono, tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto, notas: f.notas }).eq('id', f.id);
+    setClientes(prev => prev.map(x => x.id === f.id ? { ...x, ...f, tipoPersona: f.tipoPersona, nombreContacto: f.nombreContacto, telefonoContacto: f.telefonoContacto } : x));
   };
   const deleteCliente = async (id) => {
     await supabase.from('clientes').delete().eq('id', id);
