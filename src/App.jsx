@@ -154,18 +154,19 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
 );
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
+const ADMIN_EMAIL = "Asesoria en Seguros Tocancipa"; // ← reemplaza con el email real registrado en Supabase // ← cambia este email al del usuario admin en Supabase
+
 const LoginPage = ({ onLogin }) => {
-  const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !pass) { setError("Ingresa tu usuario y contraseña."); return; }
+    if (!pass) { setError("Ingresa la contraseña."); return; }
     setLoading(true); setError("");
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (err) { setError("Credenciales incorrectas."); setLoading(false); }
+    const { error: err } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password: pass });
+    if (err) { setError("Contraseña incorrecta."); setLoading(false); }
     else { onLogin(); }
   };
 
@@ -180,17 +181,16 @@ const LoginPage = ({ onLogin }) => {
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4, letterSpacing: 1 }}>NIT: 46.662.968</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 16, padding: 32, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: BLUE.text, marginBottom: 24, textAlign: "center" }}>Iniciar sesión</div>
-          <div style={S.formGroup}>
-            <label style={S.label}>Usuario</label>
-            <input style={S.input} type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="correo@empresa.com" />
+          <div style={{ fontSize: 18, fontWeight: 700, color: BLUE.text, marginBottom: 8, textAlign: "center" }}>Iniciar sesión</div>
+          <div style={{ fontSize: 13, color: "#6b87b0", textAlign: "center", marginBottom: 24 }}>
+            Administrador del sistema
           </div>
           <div style={S.formGroup}>
             <label style={S.label}>Contraseña</label>
             <div style={{ position: "relative" }}>
               <input style={{ ...S.input, paddingRight: 44 }} type={showPass ? "text" : "password"} value={pass}
                 onChange={e => { setPass(e.target.value); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="••••••••" />
+                onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="••••••••" autoFocus />
               <button onClick={() => setShowPass(v => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#888" }}>
                 {showPass ? "🙈" : "👁"}
               </button>
@@ -222,7 +222,8 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
         {[
           { id: "dashboard", label: "Dashboard", icon: "dashboard" },
           { id: "clientes", label: "Clientes", icon: "users" },
-          { id: "interesados", label: "Interesados", icon: "document" },
+          { id: "interesados", label: "Leads", icon: "document" },
+          { id: "cotizaciones", label: "Cotizaciones", icon: "tag" },
           { id: "polizas", label: "Pólizas", icon: "shield" },
           { id: "renovaciones", label: "Renovaciones", icon: "bell" },
           { id: "reportes", label: "Reportes", icon: "chart" },
@@ -263,7 +264,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ page, userRol }) => {
-  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Interesados", polizas: "Pólizas", renovaciones: "Renovaciones", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
+  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
   return (
     <div style={S.topbar}>
       <div style={{ fontSize: 14, fontWeight: 700, color: BLUE.text }}>{labels[page] || page}</div>
@@ -285,12 +286,25 @@ const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
   const urgentes = proxVencer.filter(p => diasParaVencer(p.vigenciaFin) <= 7);
   const cotPendientes = cotizaciones.filter(c => c.estado === "Pendiente");
 
+  const [ahora, setAhora] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fmtFechaLarga = (d) => d.toLocaleDateString("es-CO", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const fmtHora = (d) => d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
   return (
     <div>
       <div style={S.pageHeader}>
         <div>
-          <div style={S.pageTitle}>Bienvenido, {userName?.split(" ")[0] || "usuario"}</div>
-          <div style={S.pageSub}>Resumen de la cartera al día de hoy</div>
+          <div style={S.pageTitle}>Bienvenido al entorno de Gestión de Pólizas de Asesoría en Seguros Tocancipá</div>
+          <div style={S.pageSub}>Vista de información de negocio</div>
+        </div>
+        <div style={{ textAlign: "right", background: "#fff", borderRadius: 12, padding: "12px 18px", boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}` }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: BLUE.primary, letterSpacing: 1, fontVariantNumeric: "tabular-nums" }}>{fmtHora(ahora)}</div>
+          <div style={{ fontSize: 11.5, color: "#6b87b0", marginTop: 3, textTransform: "capitalize" }}>{fmtFechaLarga(ahora)}</div>
         </div>
       </div>
 
@@ -305,7 +319,7 @@ const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
       )}
 
       <div style={S.statGrid}>
-        <div style={S.statCard(BLUE.primary)}><div style={S.statNum}>{interesados.length}</div><div style={S.statLabel}>Interesados</div></div>
+        <div style={S.statCard(BLUE.primary)}><div style={S.statNum}>{interesados.length}</div><div style={S.statLabel}>Leads</div></div>
         <div style={S.statCard("#f59e0b")}><div style={S.statNum}>{cotPendientes.length}</div><div style={S.statLabel}>Cotizaciones Pendientes</div></div>
         <div style={S.statCard("#16a34a")}><div style={S.statNum}>{activas.length}</div><div style={S.statLabel}>Pólizas Activas</div></div>
         <div style={S.statCard("#dc2626")}><div style={S.statNum}>{proxVencer.length}</div><div style={S.statLabel}>Por Vencer (30d)</div></div>
@@ -340,21 +354,21 @@ const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
   );
 };
 
-// ─── FLUJO: INTERESADO → COTIZACIÓN → PÓLIZA ─────────────────────────────────
+// ─── FLUJO: LEAD → COTIZACIÓN → PÓLIZA ─────────────────────────────────
 
 // ─── RAMOS QUE REQUIEREN CHECKLIST ───────────────────────────────────────────
 const RAMOS_CHECKLIST = ["Responsabilidad Civil", "Cumplimiento", "Responsabilidad Civil Profesional"];
 const DOCS_NATURAL = ["SARLAFT", "Cédula", "RUT"];
 const DOCS_JURIDICA = ["Cámara de Comercio", "Estados Financieros", "RUT Empresa", "Cédula Representante Legal", "SARLAFT"];
 
-// Form Interesado
+// Form Lead
 const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) => {
   const [form, setForm] = useState(initial || {
     clienteId: clientes[0]?.id || "",
     email: "", celular: "", direccion: "", ciudad: "", documento: "", tipoDocumento: "CC",
     tipoSeguro: ramos[0]?.nombre || "", tipoPersona: "Natural",
     documentosChecklist: {}, numeroContrato: "", envioOficina: false,
-    agenteId: agentes[0]?.id || "", notas: "", estado: "Interesado",
+    agenteId: agentes[0]?.id || "", notas: "", estado: "Lead",
     fechaRegistro: today(),
   });
   const [saving, setSaving] = useState(false);
@@ -369,11 +383,11 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
   const handleSave = async () => { setSaving(true); await onSave(form); setSaving(false); };
 
   return (
-    <Modal title={initial?.id ? "Editar Interesado" : "Nuevo Interesado"} onClose={onClose} wide
+    <Modal title={initial?.id ? "Editar Lead" : "Nuevo Lead"} onClose={onClose} wide
       footer={<>
         <button style={S.btn("secondary")} onClick={onClose}>Cancelar</button>
         <button style={{ ...S.btn("primary"), opacity: valid && !saving ? 1 : 0.5 }} onClick={handleSave} disabled={!valid || saving}>
-          {saving ? "Guardando…" : "Guardar Interesado"}
+          {saving ? "Guardando…" : "Guardar Lead"}
         </button>
       </>}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
@@ -842,10 +856,95 @@ const EmisionForm = ({ cotizacion, interesado, ramos, onSave, onClose }) => {
   );
 };
 
-// ─── PÁGINA GESTIÓN DE CLIENTES (Interesados + Cotizaciones) ─────────────────
+// ─── PÁGINA COTIZACIONES (módulo independiente) ───────────────────────────────
+const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
+  const [q, setQ] = useState("");
+  const [showCotizacion, setShowCotizacion] = useState(null);
+  const [editCotizacion, setEditCotizacion] = useState(null);
+  const [showEmision, setShowEmision] = useState(null);
+
+  const cotizacionesFiltradas = useMemo(() => {
+    const base = esAdmin(userRol) ? cotizaciones : cotizaciones.filter(c => c.agenteId === agenteActualId);
+    return base.filter(c => !q || c.aseguradora?.toLowerCase().includes(q.toLowerCase()) || c.ramo?.toLowerCase().includes(q.toLowerCase()) || c.numeroPoliza?.toLowerCase().includes(q.toLowerCase()));
+  }, [cotizaciones, q, userRol, agenteActualId]);
+
+  const handleSaveCotizacion = async (form) => {
+    if (editCotizacion) { await onEditCotizacion({ ...editCotizacion, ...form }); setEditCotizacion(null); }
+    else { await onAddCotizacion(form); setShowCotizacion(null); }
+  };
+  const handleEmitir = async (form) => {
+    await onEmitirPoliza({ cotizacion: showEmision.cotizacion, interesado: showEmision.interesado, ...form });
+    setShowEmision(null);
+  };
+
+  const estadoCotColor = (e) => ({ Pendiente: "#f59e0b", Emitida: "#16a34a", Cancelada: "#6b7280" }[e] || "#6b7280");
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Cotizaciones</div>
+          <div style={S.pageSub}>{cotizacionesFiltradas.length} cotizaciones registradas</div>
+        </div>
+        <button style={S.btn("primary")} onClick={() => setShowCotizacion(true)}><Icon name="plus" size={16} />Nueva Cotización</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+        <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar por aseguradora, ramo, n° póliza…" value={q} onChange={e => setQ(e.target.value)} /></div>
+      </div>
+
+      <div style={S.tableWrap}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 0.8fr 120px" }}>
+          <span>Lead</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Fecha</span><span>Estado</span><span>Acciones</span>
+        </div>
+        {cotizacionesFiltradas.length === 0
+          ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay cotizaciones registradas</div>
+          : cotizacionesFiltradas.map(c => {
+            const interesado = interesados.find(i => i.id === c.interesadoId);
+            const yaEmitida = polizas.some(p => p.cotizacionId === c.id);
+            return (
+              <div key={c.id} style={{ ...S.tableRow, gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 0.8fr 120px" }}
+                onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
+                onMouseLeave={e => e.currentTarget.style.background = ""}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{interesado?.nombre || "—"}</div>
+                  <div style={{ fontSize: 11.5, color: "#888" }}>{c.numeroPoliza || ""}</div>
+                </div>
+                <span style={S.chip(BLUE.primary)}>{c.ramo || "—"}</span>
+                <div style={{ fontSize: 13 }}>{c.aseguradora}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{fmt(c.prima || 0)}</div>
+                <div style={{ fontSize: 13 }}>{fmtDate(c.fechaCotizacion)}</div>
+                <span style={S.badge(estadoCotColor(yaEmitida ? "Emitida" : c.estado))}>{yaEmitida ? "Emitida" : c.estado}</span>
+                <div style={{ display: "flex", gap: 3 }}>
+                  {!yaEmitida && c.estado !== "Cancelada" && (
+                    <button title="Emitir Póliza" style={{ ...S.btn("success"), padding: "5px 10px", fontSize: 12 }}
+                      onClick={() => setShowEmision({ cotizacion: c, interesado })}>
+                      Emitir
+                    </button>
+                  )}
+                  <button style={S.btn("ghost")} onClick={() => setEditCotizacion(c)}><Icon name="edit" size={14} /></button>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      {showCotizacion && (
+        <CotizacionForm interesado={null} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setShowCotizacion(null)} />
+      )}
+      {editCotizacion && (
+        <CotizacionForm initial={editCotizacion} interesado={interesados.find(i => i.id === editCotizacion.interesadoId)} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setEditCotizacion(null)} />
+      )}
+      {showEmision && (
+        <EmisionForm cotizacion={showEmision.cotizacion} interesado={showEmision.interesado} ramos={ramos} onSave={handleEmitir} onClose={() => setShowEmision(null)} />
+      )}
+    </div>
+  );
+};
+
+// ─── PÁGINA LEADS ───────────────────────────
 const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, clientes, onAddInteresado, onEditInteresado, onDeleteInteresado, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState("interesados"); // "interesados" | "cotizaciones"
   const [showFormInteresado, setShowFormInteresado] = useState(false);
   const [editInteresado, setEditInteresado] = useState(null);
   const [delInteresado, setDelInteresado] = useState(null);
@@ -857,11 +956,6 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
     const base = esAdmin(userRol) ? interesados : interesados.filter(i => i.agenteId === agenteActualId);
     return base.filter(i => !q || i.nombre?.toLowerCase().includes(q.toLowerCase()) || i.telefono?.includes(q) || i.email?.toLowerCase().includes(q.toLowerCase()));
   }, [interesados, q, userRol, agenteActualId]);
-
-  const cotizacionesFiltradas = useMemo(() => {
-    const base = esAdmin(userRol) ? cotizaciones : cotizaciones.filter(c => c.agenteId === agenteActualId);
-    return base.filter(c => !q || c.aseguradora?.toLowerCase().includes(q.toLowerCase()) || c.ramo?.toLowerCase().includes(q.toLowerCase()));
-  }, [cotizaciones, q, userRol, agenteActualId]);
 
   const handleSaveInteresado = async (form) => {
     if (editInteresado) { await onEditInteresado({ ...editInteresado, ...form }); setEditInteresado(null); }
@@ -884,19 +978,10 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
     <div>
       <div style={S.pageHeader}>
         <div>
-          <div style={S.pageTitle}>Gestión de Clientes</div>
-          <div style={S.pageSub}>Flujo: Interesado → Cotización → Póliza emitida</div>
+          <div style={S.pageTitle}>Leads</div>
+          <div style={S.pageSub}>{interesadosFiltrados.length} leads registrados</div>
         </div>
-        <button style={S.btn("primary")} onClick={() => setShowFormInteresado(true)}><Icon name="plus" size={16} />Nuevo Interesado</button>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: BLUE.light, padding: 4, borderRadius: 10, width: "fit-content", border: `1px solid ${BLUE.border}` }}>
-        {[["interesados", `Interesados (${interesadosFiltrados.length})`], ["cotizaciones", `Cotizaciones (${cotizacionesFiltradas.length})`]].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ padding: "7px 18px", borderRadius: 8, border: "none", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: tab === id ? BLUE.primary : "transparent", color: tab === id ? "#fff" : BLUE.primary, transition: "all 0.15s" }}>
-            {label}
-          </button>
-        ))}
+        <button style={S.btn("primary")} onClick={() => setShowFormInteresado(true)}><Icon name="plus" size={16} />Nuevo Lead</button>
       </div>
 
       {/* Search */}
@@ -904,13 +989,12 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
         <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar…" value={q} onChange={e => setQ(e.target.value)} /></div>
       </div>
 
-      {/* Tab Interesados */}
-      {tab === "interesados" && (
+      {/* Tabla Interesados */}
         <div style={S.tableWrap}>
           <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr 110px" }}>
             <span>Cliente</span><span>Tipo Seguro</span><span>Fecha</span><span>Cotizaciones</span><span>Oficina</span><span>Acciones</span>
           </div>
-          {interesadosFiltrados.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay interesados registrados</div>
+          {interesadosFiltrados.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay leads registrados</div>
             : interesadosFiltrados.map(i => {
               const nCots = cotizaciones.filter(c => c.interesadoId === i.id).length;
               const cliente = clientes.find(c => c.id === i.clienteId);
@@ -944,58 +1028,13 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
               );
             })}
         </div>
-      )}
-
-      {/* Tab Cotizaciones */}
-      {tab === "cotizaciones" && (
-        <div style={S.tableWrap}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 0.8fr 120px" }}>
-            <span>Interesado</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Fecha</span><span>Estado</span><span>Acciones</span>
-          </div>
-          {cotizacionesFiltradas.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay cotizaciones</div>
-            : cotizacionesFiltradas.map(c => {
-              const interesado = interesados.find(i => i.id === c.interesadoId);
-              const yaEmitida = polizas.some(p => p.cotizacionId === c.id);
-              return (
-                <div key={c.id} style={{ ...S.tableRow, gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 0.8fr 120px" }}
-                  onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
-                  onMouseLeave={e => e.currentTarget.style.background = ""}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{interesado?.nombre || "—"}</div>
-                    <div style={{ fontSize: 11.5, color: "#888" }}>{c.numeroPoliza || ""}</div>
-                  </div>
-                  <span style={S.chip(BLUE.primary)}>{c.ramo || "—"}</span>
-                  <div style={{ fontSize: 13 }}>{c.aseguradora}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{fmt(c.prima || 0)}</div>
-                  <div style={{ fontSize: 13 }}>{fmtDate(c.fechaCotizacion)}</div>
-                  <span style={S.badge(estadoCotColor(yaEmitida ? "Emitida" : c.estado))}>{yaEmitida ? "Emitida" : c.estado}</span>
-                  <div style={{ display: "flex", gap: 3 }}>
-                    {!yaEmitida && c.estado !== "Cancelada" && (
-                      <button title="Emitir Póliza" style={{ ...S.btn("success"), padding: "5px 10px", fontSize: 12 }}
-                        onClick={() => setShowEmision({ cotizacion: c, interesado })}>
-                        Emitir
-                      </button>
-                    )}
-                    <button style={S.btn("ghost")} onClick={() => setEditCotizacion(c)}><Icon name="edit" size={14} /></button>
-                  </div>
-                </div>
-              );
-            })}
-        </div>
-      )}
 
       {/* Modales */}
       {(showFormInteresado || editInteresado) && (
         <InteresadoForm initial={editInteresado} agentes={agentes} ramos={ramos} clientes={clientes} onSave={handleSaveInteresado} onClose={() => { setShowFormInteresado(false); setEditInteresado(null); }} />
       )}
       {showCotizacion && (
-        <CotizacionForm interesado={showCotizacion} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setShowCotizacion(null)} />
-      )}
-      {editCotizacion && (
-        <CotizacionForm initial={editCotizacion} interesado={interesados.find(i => i.id === editCotizacion.interesadoId)} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setEditCotizacion(null)} />
-      )}
-      {showEmision && (
-        <EmisionForm cotizacion={showEmision.cotizacion} interesado={showEmision.interesado} ramos={ramos} onSave={handleEmitir} onClose={() => setShowEmision(null)} />
+        <CotizacionForm interesado={showCotizacion} agentes={agentes} ramos={ramos} onSave={async (form) => { await onAddCotizacion(form); setShowCotizacion(null); }} onClose={() => setShowCotizacion(null)} />
       )}
       {delInteresado && (
         <Modal title="Confirmar eliminación" onClose={() => setDelInteresado(null)}
@@ -1003,7 +1042,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
             <button style={S.btn("secondary")} onClick={() => setDelInteresado(null)}>Cancelar</button>
             <button style={S.btn("danger")} onClick={async () => { await onDeleteInteresado(delInteresado.id); setDelInteresado(null); }}>Eliminar</button>
           </>}>
-          <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar al interesado <strong>{delInteresado.nombre}</strong>? Sus cotizaciones también serán eliminadas.</p>
+          <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar al lead <strong>{delInteresado.nombre}</strong>? Sus cotizaciones también serán eliminadas.</p>
         </Modal>
       )}
     </div>
@@ -1572,6 +1611,8 @@ export default function App() {
         return <ClientesPage clientes={clientes} onAdd={addCliente} onEdit={editCliente} onDelete={deleteCliente} userRol={userRol} />;
       case "interesados":
         return <InteresadosPage interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} clientes={clientes} onAddInteresado={addInteresado} onEditInteresado={editInteresado} onDeleteInteresado={deleteInteresado} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
+      case "cotizaciones":
+        return <CotizacionesPage cotizaciones={cotizaciones} interesados={interesados} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "polizas":
         return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
