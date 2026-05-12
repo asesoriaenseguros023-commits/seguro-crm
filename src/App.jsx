@@ -170,39 +170,66 @@ const LoginPage = ({ onLogin }) => {
     else { onLogin(); }
   };
 
+  const inputStyle = {
+    width: "100%", border: "1.5px solid #d1d5db", borderRadius: 8, padding: "12px 14px",
+    fontSize: 14, color: "#1a1a1a", background: "#fff", outline: "none",
+    fontFamily: "inherit", boxSizing: "border-box",
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${BLUE.sidebarDark} 0%, ${BLUE.primary} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 420 }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 72, height: 72, background: "#fff", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-            <Icon name="shield" size={36} />
+    <div style={{ minHeight: "100vh", background: BLUE.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ width: 80, height: 80, background: "#fff", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: BLUE.primary, lineHeight: 1 }}>aS</div>
+              <div style={{ fontSize: 8, color: BLUE.primary, letterSpacing: 0.5, marginTop: 2 }}>en seguros</div>
+            </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>Asesoría en Seguros Tocancipá</div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4, letterSpacing: 1 }}>NIT: 46.662.968</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>Asesoría en Seguros Tocancipá</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 4 }}>NIT: 46.662.968</div>
         </div>
-        <div style={{ background: "#fff", borderRadius: 16, padding: 32, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: BLUE.text, marginBottom: 8, textAlign: "center" }}>Iniciar sesión</div>
-          <div style={{ fontSize: 13, color: "#6b87b0", textAlign: "center", marginBottom: 24 }}>
-            Administrador del sistema
+
+        {/* Card */}
+        <div style={{ background: "#fff", borderRadius: 14, padding: "32px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#111", marginBottom: 24, textAlign: "center" }}>Iniciar sesión</div>
+
+          {/* Usuario fijo */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Usuario</label>
+            <input style={{ ...inputStyle, background: "#f9fafb", color: "#6b7280", cursor: "not-allowed" }}
+              type="text" value="Administrador" readOnly />
           </div>
-          <div style={S.formGroup}>
-            <label style={S.label}>Contraseña</label>
+
+          {/* Contraseña */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Contraseña</label>
             <div style={{ position: "relative" }}>
-              <input style={{ ...S.input, paddingRight: 44 }} type={showPass ? "text" : "password"} value={pass}
+              <input style={{ ...inputStyle, paddingRight: 44 }}
+                type={showPass ? "text" : "password"} value={pass}
                 onChange={e => { setPass(e.target.value); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="••••••••" autoFocus />
-              <button onClick={() => setShowPass(v => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#888" }}>
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                placeholder="••••••••" autoFocus />
+              <button onClick={() => setShowPass(v => !v)}
+                style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 16 }}>
                 {showPass ? "🙈" : "👁"}
               </button>
             </div>
           </div>
-          {error && <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 14 }}>{error}</div>}
-          <button style={{ ...S.btn("primary"), width: "100%", justifyContent: "center", padding: "11px 16px", fontSize: 15, opacity: loading ? 0.7 : 1 }}
+
+          {error && <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
+          <button
+            style={{ width: "100%", background: BLUE.primary, color: "#fff", border: "none", borderRadius: 8, padding: "13px 16px", fontSize: 16, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}
             onClick={handleLogin} disabled={loading}>
             {loading ? "Iniciando sesión…" : "Entrar"}
           </button>
         </div>
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Calle 11 No 5 - 89 Primer Piso Emisora de Tocancipá</div>
+
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+          Calle 11 No 5 - 89 Primer Piso Emisora de Tocancipá
+        </div>
       </div>
     </div>
   );
@@ -265,10 +292,24 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ page, userRol }) => {
   const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
+  const [ahora, setAhora] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const fmtFechaCorta = (d) => d.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const fmtHora = (d) => d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   return (
     <div style={S.topbar}>
       <div style={{ fontSize: 14, fontWeight: 700, color: BLUE.text }}>{labels[page] || page}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: "#6b87b0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 12, color: "#6b87b0" }}>
+        {/* Reloj */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, borderRight: `1px solid ${BLUE.border}`, paddingRight: 20 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: BLUE.primary, fontVariantNumeric: "tabular-nums" }}>{fmtHora(ahora)}</div>
+            <div style={{ fontSize: 11, color: "#6b87b0", textTransform: "capitalize" }}>{fmtFechaCorta(ahora)}</div>
+          </div>
+        </div>
         <span style={S.chip(esAdmin(userRol) ? "#7c3aed" : BLUE.primary)}>{userRol}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a" }} />Sistema en línea
@@ -286,26 +327,11 @@ const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
   const urgentes = proxVencer.filter(p => diasParaVencer(p.vigenciaFin) <= 7);
   const cotPendientes = cotizaciones.filter(c => c.estado === "Pendiente");
 
-  const [ahora, setAhora] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setAhora(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const fmtFechaLarga = (d) => d.toLocaleDateString("es-CO", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  const fmtHora = (d) => d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-
   return (
     <div>
-      <div style={S.pageHeader}>
-        <div>
-          <div style={S.pageTitle}>Bienvenido al entorno de Gestión de Pólizas de Asesoría en Seguros Tocancipá</div>
-          <div style={S.pageSub}>Vista de información de negocio</div>
-        </div>
-        <div style={{ textAlign: "right", background: "#fff", borderRadius: 12, padding: "12px 18px", boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}` }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: BLUE.primary, letterSpacing: 1, fontVariantNumeric: "tabular-nums" }}>{fmtHora(ahora)}</div>
-          <div style={{ fontSize: 11.5, color: "#6b87b0", marginTop: 3, textTransform: "capitalize" }}>{fmtFechaLarga(ahora)}</div>
-        </div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={S.pageTitle}>Bienvenido al entorno de Gestión de Pólizas de Asesoría en Seguros Tocancipá</div>
+        <div style={S.pageSub}>Vista de información de negocio</div>
       </div>
 
       {urgentes.length > 0 && (
@@ -318,10 +344,14 @@ const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
         </div>
       )}
 
-      <div style={S.statGrid}>
+      {/* Fila 1: 3 tarjetas */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={S.statCard(BLUE.primary)}><div style={S.statNum}>{interesados.length}</div><div style={S.statLabel}>Leads</div></div>
         <div style={S.statCard("#f59e0b")}><div style={S.statNum}>{cotPendientes.length}</div><div style={S.statLabel}>Cotizaciones Pendientes</div></div>
         <div style={S.statCard("#16a34a")}><div style={S.statNum}>{activas.length}</div><div style={S.statLabel}>Pólizas Activas</div></div>
+      </div>
+      {/* Fila 2: 2 tarjetas */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
         <div style={S.statCard("#dc2626")}><div style={S.statNum}>{proxVencer.length}</div><div style={S.statLabel}>Por Vencer (30d)</div></div>
         <div style={S.statCard("#7c3aed")}><div style={S.statNum}>{fmt(primaTotal)}</div><div style={S.statLabel}>Prima Total Activa</div></div>
       </div>
