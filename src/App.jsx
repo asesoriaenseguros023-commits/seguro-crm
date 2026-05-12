@@ -165,7 +165,7 @@ const LoginPage = ({ onLogin }) => {
   const handleLogin = async () => {
     if (!pass) { setError("Ingresa la contraseña."); return; }
     setLoading(true); setError("");
-    const { error: err } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password: pass });
+    const { error: err } = await supabase.auth.signInWithPassword({ email: minchitas@gmail.com, password: pass });
     if (err) { setError("Contraseña incorrecta."); setLoading(false); }
     else { onLogin(); }
   };
