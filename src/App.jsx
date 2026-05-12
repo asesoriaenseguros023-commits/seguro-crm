@@ -63,11 +63,11 @@ const Icon = ({ name, size = 18 }) => {
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const S = {
-  app: { display: "flex", minHeight: "100vh", background: "#f0f4ff", fontFamily: "'DM Sans', sans-serif", color: "#1a1a1a" },
+  app: { display: "flex", minHeight: "100vh", background: `linear-gradient(135deg, ${BLUE.sidebarDark} 0%, #0a2255 100%)`, fontFamily: "'DM Sans', sans-serif", color: "#1a1a1a" },
   sidebar: { width: 230, background: `linear-gradient(180deg, ${BLUE.sidebarDark} 0%, ${BLUE.sidebar} 100%)`, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" },
   main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
   topbar: { background: "#fff", borderBottom: `1px solid ${BLUE.border}`, padding: "0 28px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 },
-  content: { flex: 1, padding: "28px 32px", overflowY: "auto" },
+  content: { flex: 1, padding: "28px 32px", overflowY: "auto", background: "#f0f4ff" },
   sbLogo: { padding: "20px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.1)" },
   sbLogoText: { fontSize: 18, color: "#fff", fontWeight: 700, letterSpacing: -0.5 },
   sbLogoSub: { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 3 },
@@ -181,11 +181,8 @@ const LoginPage = ({ onLogin }) => {
       <div style={{ width: "100%", maxWidth: 400 }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ width: 80, height: 80, background: "#fff", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: BLUE.primary, lineHeight: 1 }}>aS</div>
-              <div style={{ fontSize: 8, color: BLUE.primary, letterSpacing: 0.5, marginTop: 2 }}>en seguros</div>
-            </div>
+          <div style={{ width: 110, height: 110, borderRadius: 18, overflow: "hidden", margin: "0 auto 16px", boxShadow: "0 4px 24px rgba(0,0,0,0.25)" }}>
+            <img src="/logo.png" alt="Logo Asesoría en Seguros" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           </div>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>Asesoría en Seguros Tocancipá</div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 4 }}>NIT: 46.662.968</div>
@@ -241,8 +238,13 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
   return (
     <div style={S.sidebar}>
       <div style={S.sbLogo}>
-        <div style={S.sbLogoText}>Asesoría en Seguros</div>
-        <div style={S.sbLogoSub}>Tocancipá · NIT 46.662.968</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover" }} />
+          <div>
+            <div style={S.sbLogoText}>Asesoría en Seguros</div>
+            <div style={S.sbLogoSub}>Tocancipá · NIT 46.662.968</div>
+          </div>
+        </div>
       </div>
       <div style={S.sbNav}>
         <div style={S.sbSection}>Principal</div>
