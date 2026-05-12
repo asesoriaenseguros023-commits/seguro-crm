@@ -154,7 +154,7 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
 );
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-const ADMIN_EMAIL = "Asesoria en Seguros Tocancipa"; // ← reemplaza con el email real registrado en Supabase // ← cambia este email al del usuario admin en Supabase
+const ADMIN_EMAIL = "minchitas@gmail.com";
 
 const LoginPage = ({ onLogin }) => {
   const [pass, setPass] = useState("");
