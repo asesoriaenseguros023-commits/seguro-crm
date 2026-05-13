@@ -1220,24 +1220,29 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId }) => {
 };
 
 // ─── REPORTES ─────────────────────────────────────────────────────────────────
-const ReportesPage = ({ polizas, ramos }) => {
+const ReportesPage = ({ polizas, ramos, clientes }) => {
   const [fechaInicio, setFechaInicio] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().split("T")[0]; });
   const [fechaFin, setFechaFin] = useState(today());
   const [filtroAseg, setFiltroAseg] = useState("Todas");
+  const [filtroRamo, setFiltroRamo] = useState("Todos");
+  const [filtroCliente, setFiltroCliente] = useState("Todos");
 
   const polizasFiltradas = useMemo(() => polizas.filter(p => {
     const fe = p.fechaEmision || p.vigenciaInicio;
     if (!fe) return false;
     const matchFecha = fe >= fechaInicio && fe <= fechaFin;
     const matchAseg = filtroAseg === "Todas" || p.aseguradora === filtroAseg;
-    return matchFecha && matchAseg;
-  }), [polizas, fechaInicio, fechaFin, filtroAseg]);
+    const matchRamo = filtroRamo === "Todos" || p.ramo === filtroRamo;
+    const matchCliente = filtroCliente === "Todos" || p.clienteNombre === filtroCliente;
+    return matchFecha && matchAseg && matchRamo && matchCliente;
+  }), [polizas, fechaInicio, fechaFin, filtroAseg, filtroRamo, filtroCliente]);
 
   const aseguradoras = [...new Set(polizas.map(p => p.aseguradora).filter(Boolean))].sort();
+  const ramosLista = [...new Set(polizas.map(p => p.ramo).filter(Boolean))].sort();
+  const clientesLista = [...new Set(polizas.map(p => p.clienteNombre).filter(Boolean))].sort();
   const totalPrima = polizasFiltradas.reduce((s, p) => s + Number(p.prima || 0), 0);
   const totalSuma = polizasFiltradas.reduce((s, p) => s + Number(p.sumaAsegurada || 0), 0);
 
-  // Agrupado por aseguradora
   const porAseg = useMemo(() => {
     const map = {};
     polizasFiltradas.forEach(p => {
@@ -1248,7 +1253,6 @@ const ReportesPage = ({ polizas, ramos }) => {
     return Object.values(map).sort((a, b) => b.prima - a.prima);
   }, [polizasFiltradas]);
 
-  // Agrupado por ramo
   const porRamo = useMemo(() => {
     const map = {};
     polizasFiltradas.forEach(p => {
@@ -1262,41 +1266,66 @@ const ReportesPage = ({ polizas, ramos }) => {
 
   const maxPrima = porAseg.length > 0 ? Math.max(...porAseg.map(a => a.prima)) : 1;
 
+  const exportXLSX = () => {
+    const rows = [
+      ["#", "N° Póliza", "Cliente", "Ramo", "Aseguradora", "Prima", "Suma Asegurada", "Fecha Emisión"],
+      ...polizasFiltradas.map((p, i) => [
+        i + 1, p.numero || "—", p.clienteNombre || "—", p.ramo || "—",
+        p.aseguradora || "—", Number(p.prima || 0), Number(p.sumaAsegurada || 0), p.fechaEmision || ""
+      ])
+    ];
+    const ws = rows.map(r => r.join("\t")).join("\n");
+    const blob = new Blob([ws], { type: "text/tab-separated-values" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `reporte_polizas_${fechaInicio}_${fechaFin}.xls`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <div style={S.pageHeader}>
-        <div><div style={S.pageTitle}>Reportes</div><div style={S.pageSub}>Pólizas emitidas por fecha y aseguradora</div></div>
+        <div><div style={S.pageTitle}>Reportes</div><div style={S.pageSub}>Pólizas emitidas — {polizasFiltradas.length} registros</div></div>
+        <button style={S.btn("success")} onClick={exportXLSX}>
+          <Icon name="download" size={16} />Exportar Excel
+        </button>
       </div>
 
       {/* Filtros */}
-      <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px", marginBottom: 24, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px", marginBottom: 24, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
         <div style={S.formGroup}>
           <label style={S.label}>Fecha Inicio</label>
-          <input style={{ ...S.input, width: 160 }} type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} />
+          <input style={{ ...S.input, width: 150 }} type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} />
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Fecha Fin</label>
-          <input style={{ ...S.input, width: 160 }} type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} />
+          <input style={{ ...S.input, width: 150 }} type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} />
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Aseguradora</label>
-          <select style={{ ...S.select, width: 200 }} value={filtroAseg} onChange={e => setFiltroAseg(e.target.value)}>
+          <select style={{ ...S.select, width: 180 }} value={filtroAseg} onChange={e => setFiltroAseg(e.target.value)}>
             <option value="Todas">Todas</option>
             {aseguradoras.map(a => <option key={a}>{a}</option>)}
           </select>
         </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Ramo de Seguro</label>
+          <select style={{ ...S.select, width: 180 }} value={filtroRamo} onChange={e => setFiltroRamo(e.target.value)}>
+            <option value="Todos">Todos</option>
+            {ramosLista.map(r => <option key={r}>{r}</option>)}
+          </select>
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Cliente</label>
+          <select style={{ ...S.select, width: 200 }} value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}>
+            <option value="Todos">Todos</option>
+            {clientesLista.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
       </div>
 
-      {/* Totales */}
-      <div style={S.statGrid}>
-        <div style={S.statCard(BLUE.primary)}><div style={S.statNum}>{polizasFiltradas.length}</div><div style={S.statLabel}>Pólizas Emitidas</div></div>
-        <div style={S.statCard("#16a34a")}><div style={S.statNum}>{fmt(totalPrima)}</div><div style={S.statLabel}>Prima Total</div></div>
-        <div style={S.statCard("#7c3aed")}><div style={S.statNum}>{fmt(totalSuma)}</div><div style={S.statLabel}>Suma Asegurada Total</div></div>
-        <div style={S.statCard("#f59e0b")}><div style={S.statNum}>{porAseg.length}</div><div style={S.statLabel}>Aseguradoras</div></div>
-      </div>
-
+      {/* Gráficas */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
-        {/* Por aseguradora */}
         <div style={{ background: "#fff", borderRadius: 12, padding: "20px", boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 16 }}>Por Aseguradora</div>
           {porAseg.length === 0 ? <div style={{ color: "#aaa", fontSize: 13 }}>Sin datos en este rango</div>
@@ -1312,8 +1341,6 @@ const ReportesPage = ({ polizas, ramos }) => {
               </div>
             ))}
         </div>
-
-        {/* Por ramo */}
         <div style={{ background: "#fff", borderRadius: 12, padding: "20px", boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 16 }}>Por Ramo</div>
           {porRamo.length === 0 ? <div style={{ color: "#aaa", fontSize: 13 }}>Sin datos en este rango</div>
@@ -1330,16 +1357,20 @@ const ReportesPage = ({ polizas, ramos }) => {
       </div>
 
       {/* Tabla detalle */}
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b87b0", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>Detalle de Pólizas Emitidas</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b87b0", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>
+        Detalle de Pólizas Emitidas — {polizasFiltradas.length} registros · Prima total: {fmt(totalPrima)} · Suma asegurada: {fmt(totalSuma)}
+      </div>
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr" }}>
-          <span>N° Póliza</span><span>Cliente</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Suma Aseg.</span><span>Fecha Emisión</span>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 1.1fr 1.3fr 0.9fr 1fr 1fr 1fr 1fr" }}>
+          <span>#</span><span>N° Póliza</span><span>Cliente</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Suma Aseg.</span><span>Fecha Emisión</span>
         </div>
-        {polizasFiltradas.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay pólizas en este rango de fechas</div>
-          : polizasFiltradas.map(p => (
-            <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr" }}
+        {polizasFiltradas.length === 0
+          ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay pólizas en este rango de fechas</div>
+          : polizasFiltradas.map((p, idx) => (
+            <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 1.1fr 1.3fr 0.9fr 1fr 1fr 1fr 1fr" }}
               onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
+              <div style={{ fontWeight: 700, color: "#aaa", fontSize: 13 }}>{idx + 1}</div>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{p.numero || "—"}</div>
               <div style={{ fontSize: 13 }}>{p.clienteNombre || "—"}</div>
               <span style={S.chip(BLUE.primary)}>{p.ramo || "—"}</span>
@@ -1700,13 +1731,23 @@ export default function App() {
 
   // CRUD Clientes
   const addCliente = async (f) => {
-    const { data, error } = await supabase.from('clientes').insert([{ nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono, tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto, notas: f.notas }]).select().single();
+    const { data, error } = await supabase.from('clientes').insert([{
+      nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono,
+      tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto,
+      documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion,
+      notas: f.notas
+    }]).select().single();
     if (error) { console.error('addCliente error:', error); return; }
-    if (data) setClientes(prev => [...prev, { ...data, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto }]);
+    if (data) setClientes(prev => [...prev, { ...data, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto, tipoDocumento: data.tipo_documento }]);
   };
   const editCliente = async (f) => {
-    await supabase.from('clientes').update({ nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono, tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto, notas: f.notas }).eq('id', f.id);
-    setClientes(prev => prev.map(x => x.id === f.id ? { ...x, ...f, tipoPersona: f.tipoPersona, nombreContacto: f.nombreContacto, telefonoContacto: f.telefonoContacto } : x));
+    await supabase.from('clientes').update({
+      nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono,
+      tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto,
+      documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion,
+      notas: f.notas
+    }).eq('id', f.id);
+    setClientes(prev => prev.map(x => x.id === f.id ? { ...x, ...f, tipoPersona: f.tipoPersona, nombreContacto: f.nombreContacto, telefonoContacto: f.telefonoContacto, tipoDocumento: f.tipoDocumento } : x));
   };
   const deleteCliente = async (id) => {
     await supabase.from('clientes').delete().eq('id', id);
@@ -1845,7 +1886,7 @@ export default function App() {
       case "renovaciones":
         return <RenovacionesPage polizas={polizas} userRol={userRol} agenteActualId={agenteActualId} />;
       case "reportes":
-        return <ReportesPage polizas={polizas} ramos={ramos} />;
+        return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
       case "configuracion":
         return esAdmin(userRol) ? <ConfiguracionPage agentes={agentes} polizas={polizas} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} /> : null;
       case "ramos":
