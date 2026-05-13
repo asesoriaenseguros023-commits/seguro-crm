@@ -1431,8 +1431,19 @@ const ConfiguracionPage = ({ agentes, polizas, onAdd, onEdit, onDelete }) => {
 };
 
 // ─── RAMOS (Paramétrico Admin) ────────────────────────────────────────────────
-const DOCS_BASE = ["Cédula", "SARLAFT", "RUT", "Contrato", "Carta de Autorización", "Cámara de Comercio", "Estados Financieros", "Cédula Rep. Legal"];
-const DOCS_GLOBALES_KEY = "docs_globales";
+const DOCS_NATURAL_DEFAULT = ["Cédula", "SARLAFT", "RUT", "Contrato", "Carta de Autorización"];
+const DOCS_JURIDICA_DEFAULT = ["Cámara de Comercio", "RUT Empresa", "SARLAFT", "Estados Financieros", "Cédula Rep. Legal", "Contrato", "Carta de Autorización"];
+const DOCS_KEY_NAT = "docs_natural_v2";
+const DOCS_KEY_JUR = "docs_juridica_v2";
+
+const initDocs = (key, defaults) => {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) return JSON.parse(stored);
+    localStorage.setItem(key, JSON.stringify(defaults));
+    return defaults;
+  } catch { return defaults; }
+};
 
 const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
@@ -1441,9 +1452,8 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
   const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true, documentos: {} });
   const [nuevoDoc, setNuevoDoc] = useState("");
   const [tipoPersona, setTipoPersona] = useState("Natural");
-  const [docsGlobales, setDocsGlobales] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(DOCS_GLOBALES_KEY) || "[]"); } catch { return []; }
-  });
+  const [docsNatural, setDocsNatural] = useState(() => initDocs(DOCS_KEY_NAT, DOCS_NATURAL_DEFAULT));
+  const [docsJuridica, setDocsJuridica] = useState(() => initDocs(DOCS_KEY_JUR, DOCS_JURIDICA_DEFAULT));
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleDoc = (doc, tp) => setForm(f => {
@@ -1451,31 +1461,35 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
     return { ...f, documentos: { ...f.documentos, [key]: !f.documentos[key] } };
   });
 
-  // Docs base separados por tipo
-  const DOCS_NATURAL_BASE = ["Cédula", "SARLAFT", "RUT", "Contrato", "Carta de Autorización"];
-  const DOCS_JURIDICA_BASE = ["Cámara de Comercio", "RUT Empresa", "SARLAFT", "Estados Financieros", "Cédula Rep. Legal", "Contrato", "Carta de Autorización"];
-
-  const docsNaturalGlobales = docsGlobales.filter(d => !d.startsWith("J_")).concat(
-    ramos.flatMap(r => r.documentos ? Object.keys(r.documentos).filter(k => !k.startsWith("J_")) : [])
-  );
-  const docsJuridicaGlobales = docsGlobales.filter(d => d.startsWith("J_")).map(d => d.slice(2)).concat(
-    ramos.flatMap(r => r.documentos ? Object.keys(r.documentos).filter(k => k.startsWith("J_")).map(k => k.slice(2)) : [])
-  );
-
-  const docsNatural = Array.from(new Set([...DOCS_NATURAL_BASE, ...docsNaturalGlobales]));
-  const docsJuridica = Array.from(new Set([...DOCS_JURIDICA_BASE, ...docsJuridicaGlobales]));
   const docsMostrar = tipoPersona === "Natural" ? docsNatural : docsJuridica;
 
   const agregarDocGlobal = () => {
     const d = nuevoDoc.trim();
     if (!d) { setNuevoDoc(""); return; }
-    const key = tipoPersona === "Natural" ? d : `J_${d}`;
-    if (!docsGlobales.includes(key)) {
-      const nuevos = [...docsGlobales, key];
-      setDocsGlobales(nuevos);
-      localStorage.setItem(DOCS_GLOBALES_KEY, JSON.stringify(nuevos));
+    if (tipoPersona === "Natural") {
+      if (docsNatural.includes(d)) { setNuevoDoc(""); return; }
+      const nuevos = [...docsNatural, d];
+      setDocsNatural(nuevos);
+      localStorage.setItem(DOCS_KEY_NAT, JSON.stringify(nuevos));
+    } else {
+      if (docsJuridica.includes(d)) { setNuevoDoc(""); return; }
+      const nuevos = [...docsJuridica, d];
+      setDocsJuridica(nuevos);
+      localStorage.setItem(DOCS_KEY_JUR, JSON.stringify(nuevos));
     }
     setNuevoDoc("");
+  };
+
+  const eliminarDoc = (doc) => {
+    if (tipoPersona === "Natural") {
+      const nuevos = docsNatural.filter(d => d !== doc);
+      setDocsNatural(nuevos);
+      localStorage.setItem(DOCS_KEY_NAT, JSON.stringify(nuevos));
+    } else {
+      const nuevos = docsJuridica.filter(d => d !== doc);
+      setDocsJuridica(nuevos);
+      localStorage.setItem(DOCS_KEY_JUR, JSON.stringify(nuevos));
+    }
   };
 
   const handleSave = async () => {
@@ -1533,12 +1547,8 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
                 <th key={doc} style={thStyle}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
                     <span>{doc}</span>
-                    <button title="Eliminar documento" onClick={() => {
-                      const key = tipoPersona === "Natural" ? doc : `J_${doc}`;
-                      const nuevos = docsGlobales.filter(d => d !== key);
-                      setDocsGlobales(nuevos);
-                      localStorage.setItem(DOCS_GLOBALES_KEY, JSON.stringify(nuevos));
-                    }} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 12, lineHeight: 1, padding: "0 2px", opacity: 0.6 }}>✕</button>
+                    <button title="Eliminar documento" onClick={() => eliminarDoc(doc)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 13, lineHeight: 1, padding: "0 2px", fontWeight: 700 }}>✕</button>
                   </div>
                 </th>
               ))}
