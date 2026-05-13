@@ -1983,7 +1983,7 @@ const SoatPage = () => {
   const [importMsg, setImportMsg] = useState("");
   const [activeTab, setActiveTab] = useState("info");
   const [callLog, setCallLog] = useState({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""});
-  const fileRef = React.useRef();
+  const fileRef = useRef();
 
   useEffect(() => { try { localStorage.setItem(SOAT_KEY, JSON.stringify(clientes)); } catch {} }, [clientes]);
 
@@ -2428,9 +2428,8 @@ export default function App() {
       // Verificar si ya existe cotización para este lead en Supabase
       const { data: existing } = await supabase.from('cotizaciones').select('id').eq('lead_id', f.id).limit(1);
       if (!existing || existing.length === 0) {
-        const { data: cot } = await supabase.from('cotizaciones').insert([{
+        const { data: cot, error: cotError } = await supabase.from('cotizaciones').insert([{
           lead_id: f.id,
-          interesado_id: f.id,
           cliente_nombre: clienteNombre,
           cliente_telefono: cliente?.celular || cliente?.telefono || "",
           ramo: f.tipoSeguro,
@@ -2438,6 +2437,7 @@ export default function App() {
           accion: "En Curso",
           fecha_cotizacion: today(),
         }]).select().single();
+        if (cotError) console.error('Error creando cotización desde lead:', cotError);
         if (cot) setCotizaciones(prev => [mapCotizacion(cot), ...prev]);
       }
     }
