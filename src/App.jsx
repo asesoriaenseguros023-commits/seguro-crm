@@ -255,6 +255,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
           { id: "cotizaciones", label: "Cotizaciones", icon: "tag" },
           { id: "polizas", label: "Pólizas", icon: "shield" },
           { id: "renovaciones", label: "Renovaciones", icon: "bell" },
+          { id: "soat", label: "Seguimiento SOAT", icon: "shield" },
           { id: "reportes", label: "Reportes", icon: "chart" },
         ].map(i => (
           <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => onNav(i.id)}>
@@ -293,7 +294,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ page, userRol }) => {
-  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
+  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", soat: "Seguimiento Clientes SOAT", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
   const [ahora, setAhora] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setAhora(new Date()), 1000);
@@ -1203,23 +1204,46 @@ const PolizasPage = ({ polizas, interesados, ramos, userRol, agenteActualId }) =
   const [q, setQ] = useState("");
   const [filtroRamo, setFiltroRamo] = useState("Todos");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
+  const [filtroAnio, setFiltroAnio] = useState("Todos");
+  const [filtroMes, setFiltroMes] = useState("Todos");
 
   const polizasPorRol = esAdmin(userRol) ? polizas : polizas.filter(p => p.agenteId === agenteActualId);
+
+  // Años disponibles de las pólizas
+  const anios = useMemo(() => {
+    const s = new Set();
+    polizasPorRol.forEach(p => { const f = p.fechaEmision || p.vigenciaInicio; if(f) s.add(f.substring(0,4)); });
+    return Array.from(s).sort().reverse();
+  }, [polizasPorRol]);
+
+  const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
   const filtered = useMemo(() => polizasPorRol.filter(p => {
     const matchQ = !q || p.numero?.toLowerCase().includes(q.toLowerCase()) || p.clienteNombre?.toLowerCase().includes(q.toLowerCase()) || p.aseguradora?.toLowerCase().includes(q.toLowerCase());
-    return matchQ && (filtroRamo === "Todos" || p.ramo === filtroRamo) && (filtroEstado === "Todos" || p.estado === filtroEstado);
-  }), [polizasPorRol, q, filtroRamo, filtroEstado]);
+    const fe = p.fechaEmision || p.vigenciaInicio || "";
+    const matchAnio = filtroAnio === "Todos" || fe.startsWith(filtroAnio);
+    const matchMes = filtroMes === "Todos" || fe.substring(5,7) === String(meses.indexOf(filtroMes)+1).padStart(2,"0");
+    return matchQ && (filtroRamo === "Todos" || p.ramo === filtroRamo) && (filtroEstado === "Todos" || p.estado === filtroEstado) && matchAnio && matchMes;
+  }), [polizasPorRol, q, filtroRamo, filtroEstado, filtroAnio, filtroMes]);
 
   return (
     <div>
       <div style={S.pageHeader}>
         <div>
           <div style={S.pageTitle}>Pólizas</div>
-          <div style={S.pageSub}>{polizasPorRol.length} pólizas · {polizasPorRol.filter(p => p.estado === "Activa").length} activas</div>
+          <div style={S.pageSub}>{filtered.length} de {polizasPorRol.length} pólizas · {polizasPorRol.filter(p => p.estado === "Activa").length} activas</div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar póliza, cliente, aseguradora…" value={q} onChange={e => setQ(e.target.value)} /></div>
+        <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={filtroAnio} onChange={e => setFiltroAnio(e.target.value)}>
+          <option value="Todos">Todos los años</option>
+          {anios.map(a => <option key={a}>{a}</option>)}
+        </select>
+        <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={filtroMes} onChange={e => setFiltroMes(e.target.value)}>
+          <option value="Todos">Todos los meses</option>
+          {meses.map(m => <option key={m}>{m}</option>)}
+        </select>
         <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={filtroRamo} onChange={e => setFiltroRamo(e.target.value)}>
           <option value="Todos">Todos los ramos</option>
           {ramos.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
@@ -1925,6 +1949,371 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
   );
 };
 
+// ─── SEGUIMIENTO CLIENTES SOAT ────────────────────────────────────────────────
+const SOAT_KEY = "soat-crm-v2";
+const FASES_SOAT = [
+  {id:"pendiente",   label:"📋 Pendiente",         color:"#3b82f6", bg:"#dbeafe", text:"#1d4ed8"},
+  {id:"en_gestion",  label:"📞 En gestión",         color:"#f59e0b", bg:"#fef3c7", text:"#92400e"},
+  {id:"interesado",  label:"🟢 Interesado",         color:"#22c55e", bg:"#dcfce7", text:"#166534"},
+  {id:"cotizado",    label:"💰 Cotización enviada", color:"#06b6d4", bg:"#cffafe", text:"#155e75"},
+  {id:"compro",      label:"🏆 Compró",             color:"#8b5cf6", bg:"#ede9fe", text:"#5b21b6"},
+  {id:"no_interes",  label:"🔴 No interesado",      color:"#ef4444", bg:"#fee2e2", text:"#991b1b"},
+  {id:"competencia", label:"⚔️ Competencia",        color:"#f97316", bg:"#ffedd5", text:"#9a3412"},
+  {id:"ilocalizable",label:"⚫ Ilocalizable",        color:"#6b7280", bg:"#f3f4f6", text:"#374151"},
+];
+const FM_SOAT = Object.fromEntries(FASES_SOAT.map(f=>[f.id,f]));
+const MOTIVOS_SOAT = ["Precio muy alto","Ya compró con otra aseguradora","No tiene vehículo activo","No le interesa renovar aún","Prefiere pagar en oficina","Problemas económicos","No contestó / Buzón","Número equivocado","Otro"];
+const ACCIONES_SOAT = ["Llamar en fecha acordada","Enviar cotización por WhatsApp","Esperar decisión del cliente","Llamar en 3 días","Llamar en 1 semana","No volver a contactar","Hacer seguimiento post-venta"];
+
+let soatNid = Date.now();
+const soatNewId = () => `s${++soatNid}`;
+const soatEmpty = () => ({id: soatNewId(), nombre:"", telefono:"", placa:"", fechaCompra:"", fase:"pendiente", agente:"Sin asignar", intentos:0, proximaAccion:"", fechaProxima:"", motivoNoCompra:"", valorCotizado:"", grupoEnvio:"", historial:[], notas:""});
+
+const parseDateSoat = (str) => { if(!str)return null; const s=str.trim(),p=s.split(/[-\/]/); if(p.length!==3)return null; try{return new Date(p[0].length===4?s:`${p[2]}-${p[1]}-${p[0]}`);}catch{return null;} };
+const diasRenSoat = (fc) => { const f=parseDateSoat(fc); if(!f)return null; const r=new Date(f); r.setFullYear(r.getFullYear()+1); return Math.ceil((r-new Date())/86400000); };
+
+const SoatPage = () => {
+  const [clientes, setClientes] = useState(() => { try { const s=localStorage.getItem(SOAT_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [filtroFase, setFiltroFase] = useState("Todos");
+  const [filtroAgente, setFiltroAgente] = useState("Todos");
+  const [busqueda, setBusqueda] = useState("");
+  const [modal, setModal] = useState(null);
+  const [agentes, setAgentes] = useState(["Sin asignar","YELI","ENCARNACION","SANTIAGO","WEYMAR"]);
+  const [nuevoAgente, setNuevoAgente] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [activeTab, setActiveTab] = useState("info");
+  const [callLog, setCallLog] = useState({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""});
+  const fileRef = React.useRef();
+
+  useEffect(() => { try { localStorage.setItem(SOAT_KEY, JSON.stringify(clientes)); } catch {} }, [clientes]);
+
+  const updateC = (id, field, value) => {
+    setClientes(p => p.map(c => c.id===id ? {...c,[field]:value} : c));
+    if(modal?.id===id) setModal(p => ({...p,[field]:value}));
+  };
+
+  const openModal = (c) => { setModal(c); setActiveTab("info"); setCallLog({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""}); };
+
+  const registrarLlamada = () => {
+    if(!callLog.resultado) return;
+    const entry = {fecha: new Date().toLocaleDateString("es-CO"), ...callLog, agente: modal.agente};
+    const updated = {...modal, historial:[entry,...(modal.historial||[])], intentos:(modal.intentos||0)+1, fase:callLog.resultado, proximaAccion:callLog.proximaAccion||modal.proximaAccion, fechaProxima:callLog.fechaProxima||modal.fechaProxima, motivoNoCompra:callLog.motivo||modal.motivoNoCompra};
+    setClientes(p => p.map(c => c.id===modal.id ? updated : c));
+    setModal(updated); setCallLog({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""}); setActiveTab("historial");
+  };
+
+  const deleteC = (id) => { if(!confirm("¿Eliminar cliente?")) return; setClientes(p => p.filter(c => c.id!==id)); setModal(null); };
+  const addCliente = () => { const c=soatEmpty(); setClientes(p=>[c,...p]); openModal(c); };
+
+  const importCSV = (e) => {
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload = ev => {
+      const lines=ev.target.result.trim().split("\n");
+      const hdr=lines[0].toLowerCase().replace(/\r/g,"").split(/[,;]/);
+      const col=ks=>hdr.findIndex(h=>ks.some(p=>h.includes(p)));
+      const iN=col(["nombre","name"]),iT=col(["tel","cel","phone"]);
+      const iF=col(["ultima compra","fecha compra","fecha","date"]);
+      const iP=col(["placa","plate"]),iA=col(["asignado","agente","agent"]);
+      const iE=col(["estado","status"]),iV=col(["veces"]),iG=col(["grupo"]);
+      if(iN===-1){setImportMsg("❌ No se encontró columna 'nombre'");return;}
+      const fm={"interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion","volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro","ilocalizable":"ilocalizable"};
+      const nuevos=lines.slice(1).filter(l=>l.trim()).map(line=>{
+        const c=line.replace(/\r/g,"").split(/[,;]/);
+        const er=(iE>=0?c[iE]?.trim():"").toLowerCase();
+        return{...soatEmpty(),id:soatNewId(),nombre:c[iN]?.trim()||"",telefono:iT>=0?c[iT]?.trim():"",fechaCompra:iF>=0?c[iF]?.trim():"",placa:iP>=0?c[iP]?.trim():"",agente:iA>=0&&c[iA]?.trim()?c[iA].trim():"Sin asignar",fase:fm[er]||"pendiente",intentos:iV>=0?parseInt(c[iV])||0:0,grupoEnvio:iG>=0?c[iG]?.trim():""};
+      }).filter(c=>c.nombre);
+      setClientes(p=>[...p,...nuevos]);
+      setImportMsg(`✅ ${nuevos.length} clientes importados`);
+      setTimeout(()=>setImportMsg(""),4000);
+    };
+    reader.readAsText(file); e.target.value="";
+  };
+
+  const exportCSV = () => {
+    const cols=["Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Grupo Envío","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Valor Cotizado","Notas"];
+    const rows=filtrados.map(c=>[c.nombre,c.telefono,c.placa,c.fechaCompra,FM_SOAT[c.fase]?.label||c.fase,c.agente,c.grupoEnvio||"",c.intentos,c.proximaAccion,c.fechaProxima,c.motivoNoCompra,c.valorCotizado,c.notas]);
+    const csv=[cols,...rows].map(r=>r.map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`).join(",")).join("\n");
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"})); a.download="soat-seguimiento.csv"; a.click();
+  };
+
+  const filtrados = clientes.filter(c => {
+    const mF=filtroFase==="Todos"||c.fase===filtroFase;
+    const mA=filtroAgente==="Todos"||c.agente===filtroAgente;
+    const mB=!busqueda||c.nombre.toLowerCase().includes(busqueda.toLowerCase())||(c.telefono||"").includes(busqueda)||(c.placa||"").toLowerCase().includes(busqueda.toLowerCase());
+    return mF&&mA&&mB;
+  });
+
+  const stats = {
+    total:clientes.length,
+    sinGestionar:clientes.filter(c=>c.intentos===0).length,
+    enGestion:clientes.filter(c=>c.fase==="en_gestion"||c.fase==="pendiente").length,
+    interesados:clientes.filter(c=>c.fase==="interesado"||c.fase==="cotizado").length,
+    compro:clientes.filter(c=>c.fase==="compro").length,
+    proximos30:clientes.filter(c=>{const d=diasRenSoat(c.fechaCompra);return d!==null&&d>=0&&d<=30;}).length,
+  };
+
+  const alertaHoy = clientes.filter(c => { if(!c.fechaProxima)return false; const d=parseDateSoat(c.fechaProxima); return d&&d<=new Date(); });
+
+  const inpS = { background:"#f8faff", border:`1px solid ${BLUE.border}`, borderRadius:8, padding:"8px 11px", color:BLUE.text, fontSize:13, outline:"none", width:"100%", fontFamily:"inherit" };
+  const lblS = { fontSize:11, color:"#6b87b0", textTransform:"uppercase", marginBottom:4, letterSpacing:"0.05em", display:"block" };
+  const selS = { ...inpS, cursor:"pointer" };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Seguimiento Clientes SOAT</div>
+          <div style={S.pageSub}>{clientes.length} clientes registrados</div>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={()=>fileRef.current.click()} style={S.btn("secondary")}><Icon name="upload" size={16}/>Importar CSV</button>
+          <button onClick={exportCSV} style={S.btn("success")}><Icon name="download" size={16}/>Exportar CSV</button>
+          <button onClick={addCliente} style={S.btn("primary")}><Icon name="plus" size={16}/>Nuevo Cliente</button>
+          <input ref={fileRef} type="file" accept=".csv" onChange={importCSV} style={{display:"none"}}/>
+        </div>
+      </div>
+
+      {/* Alertas */}
+      {importMsg && <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#16a34a"}}>{importMsg}</div>}
+      {alertaHoy.length>0 && <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#92400e"}}>🔔 <strong>{alertaHoy.length} cliente{alertaHoy.length>1?"s":""}</strong> con seguimiento pendiente para hoy o antes</div>}
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:18}}>
+        {[
+          {label:"Total",value:stats.total,color:BLUE.primary},
+          {label:"Sin gestionar",value:stats.sinGestionar,color:"#f97316"},
+          {label:"En gestión",value:stats.enGestion,color:"#f59e0b"},
+          {label:"Interesados",value:stats.interesados,color:"#16a34a"},
+          {label:"Compraron",value:stats.compro,color:"#8b5cf6"},
+          {label:"Vencen ≤30d",value:stats.proximos30,color:"#dc2626"},
+        ].map(s=>(
+          <div key={s.label} style={{background:"#fff",border:`1px solid ${BLUE.border}`,borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(26,86,219,0.07)"}}>
+            <div style={{fontSize:22,fontWeight:700,color:s.color}}>{s.value}</div>
+            <div style={{fontSize:11,color:"#6b87b0",marginTop:2}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtro fases */}
+      <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+        {[{id:"Todos",label:"Todos",color:"#6b7280"},...FASES_SOAT].map(f => {
+          const cnt=f.id==="Todos"?clientes.length:clientes.filter(c=>c.fase===f.id).length;
+          const active=filtroFase===f.id;
+          return <button key={f.id} onClick={()=>setFiltroFase(f.id)}
+            style={{background:active?f.color:"#fff",border:`1.5px solid ${active?f.color:BLUE.border}`,borderRadius:20,padding:"5px 14px",fontSize:12,color:active?"#fff":f.color||"#555",cursor:"pointer",whiteSpace:"nowrap",fontWeight:active?600:400}}>
+            {f.label} ({cnt})
+          </button>;
+        })}
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center"}}>
+        <div style={S.searchBar}><Icon name="search" size={16}/><input style={S.searchInput} placeholder="Buscar nombre, teléfono o placa..." value={busqueda} onChange={e=>setBusqueda(e.target.value)}/></div>
+        <select value={filtroAgente} onChange={e=>setFiltroAgente(e.target.value)} style={{...S.select,width:"auto",padding:"7px 12px"}}>
+          <option value="Todos">Todos los agentes</option>
+          {agentes.map(a=><option key={a}>{a}</option>)}
+        </select>
+        <span style={{fontSize:12,color:"#6b87b0",whiteSpace:"nowrap"}}>{filtrados.length} registros</span>
+      </div>
+
+      {/* Tabla */}
+      <div style={{...S.tableWrap,overflowX:"auto"}}>
+        <div style={{minWidth:900}}>
+          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"1.5fr 1fr 0.8fr 0.9fr 0.7fr 1.4fr 0.5fr 0.9fr 1.2fr 0.8fr 80px"}}>
+            <span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renovación</span><span>Fase</span><span>Intentos</span><span>Agente</span><span>Próxima acción</span><span>Fecha próx.</span><span></span>
+          </div>
+          {filtrados.length===0
+            ? <div style={{padding:40,textAlign:"center",color:"#aaa"}}>Sin registros. Importa un CSV o agrega clientes.</div>
+            : filtrados.map(c => {
+              const dias=diasRenSoat(c.fechaCompra);
+              const fase=FM_SOAT[c.fase]||FASES_SOAT[0];
+              const urgente=c.fechaProxima&&parseDateSoat(c.fechaProxima)<=new Date();
+              return (
+                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"1.5fr 1fr 0.8fr 0.9fr 0.7fr 1.4fr 0.5fr 0.9fr 1.2fr 0.8fr 80px"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=BLUE.light}
+                  onMouseLeave={e=>e.currentTarget.style.background=""}>
+                  <div style={{fontWeight:600,fontSize:13,cursor:"pointer",color:BLUE.primary}} onClick={()=>openModal(c)}>
+                    {c.nombre||"—"}{c.historial?.length>0&&<span style={{marginLeft:6,fontSize:10,color:"#aaa"}}>💬{c.historial.length}</span>}
+                  </div>
+                  <div style={{fontSize:12.5,color:"#555"}}>{c.telefono||"—"}</div>
+                  <div style={{fontSize:12.5,color:"#555"}}>{c.placa||"—"}</div>
+                  <div style={{fontSize:12,color:"#555"}}>{c.fechaCompra||"—"}</div>
+                  <div>{dias!==null?<span style={{fontSize:11,color:dias<0?"#dc2626":dias<=30?"#f97316":"#16a34a",background:dias<0?"#fee2e2":dias<=30?"#ffedd5":"#dcfce7",padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap"}}>{dias<0?"Venció":dias===0?"Hoy":`${dias}d`}</span>:"—"}</div>
+                  <select value={c.fase} onChange={e=>updateC(c.id,"fase",e.target.value)}
+                    style={{fontSize:11,padding:"3px 7px",borderRadius:6,border:`1.5px solid ${fase.color}`,background:fase.bg,color:fase.text,cursor:"pointer",outline:"none",fontWeight:600,width:"100%"}}>
+                    {FASES_SOAT.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                  <div style={{textAlign:"center"}}>
+                    <span style={{background:BLUE.light,borderRadius:20,padding:"2px 10px",fontSize:12,color:c.intentos>=3?"#dc2626":c.intentos>=1?"#f59e0b":"#aaa"}}>{c.intentos||0}</span>
+                  </div>
+                  <select value={c.agente} onChange={e=>updateC(c.id,"agente",e.target.value)}
+                    style={{fontSize:11,padding:"3px 7px",borderRadius:6,border:`1px solid ${BLUE.border}`,background:"#fff",color:BLUE.text,cursor:"pointer",outline:"none",width:"100%"}}>
+                    {agentes.map(a=><option key={a}>{a}</option>)}
+                  </select>
+                  <div style={{fontSize:11.5,color:"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.proximaAccion||"—"}</div>
+                  <div>{c.fechaProxima?<span style={{fontSize:11,color:urgente?"#dc2626":"#555",background:urgente?"#fee2e2":"transparent",padding:urgente?"2px 7px":"0",borderRadius:20}}>{urgente?"🔔 ":""}{c.fechaProxima}</span>:"—"}</div>
+                  <button onClick={()=>openModal(c)} style={{...S.btn("secondary"),padding:"4px 10px",fontSize:12}}>Ver</button>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+
+      {/* Agentes */}
+      <div style={{marginTop:20,background:"#fff",border:`1px solid ${BLUE.border}`,borderRadius:12,padding:"14px 18px"}}>
+        <div style={{fontWeight:600,marginBottom:10,color:"#6b87b0",fontSize:12,textTransform:"uppercase"}}>⚙️ Agentes comerciales</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          {agentes.slice(1).map(a=>(
+            <div key={a} style={{background:BLUE.light,borderRadius:20,padding:"4px 12px",fontSize:12,display:"flex",gap:8,alignItems:"center",color:BLUE.text}}>
+              {a} <span style={{cursor:"pointer",color:"#dc2626",fontWeight:700}} onClick={()=>setAgentes(p=>p.filter(x=>x!==a))}>×</span>
+            </div>
+          ))}
+          <input value={nuevoAgente} onChange={e=>setNuevoAgente(e.target.value)} placeholder="Nuevo agente..."
+            onKeyDown={e=>{if(e.key==="Enter"&&nuevoAgente.trim()){setAgentes(p=>[...p,nuevoAgente.trim()]);setNuevoAgente("");}}}
+            style={{...S.input,width:140,padding:"5px 10px",fontSize:12}}/>
+          <button onClick={()=>{if(nuevoAgente.trim()){setAgentes(p=>[...p,nuevoAgente.trim()]);setNuevoAgente("");}}} style={S.btn("secondary")}>+ Agregar</button>
+        </div>
+      </div>
+
+      {/* Modal detalle */}
+      {modal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}} onClick={()=>setModal(null)}>
+          <div style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:"20px 24px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:18,color:BLUE.text}}>{modal.nombre||"Nuevo cliente"}</div>
+                <div style={{fontSize:12,color:"#888",marginTop:2}}>{modal.telefono}{modal.placa?` · ${modal.placa}`:""} · {modal.intentos||0} intento{modal.intentos!==1?"s":""}{modal.valorCotizado?` · $${modal.valorCotizado}`:""}</div>
+              </div>
+              <button onClick={()=>setModal(null)} style={{background:"transparent",border:"none",color:"#aaa",fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
+            {/* Tabs */}
+            <div style={{display:"flex",gap:0,padding:"14px 24px 0",borderBottom:`1px solid ${BLUE.border}`}}>
+              {[["info","📋 Info"],["llamada","📞 Llamada"],["historial",`🕐 Historial (${modal.historial?.length||0})`]].map(([t,l])=>(
+                <button key={t} onClick={()=>setActiveTab(t)}
+                  style={{background:activeTab===t?BLUE.light:"transparent",border:"none",color:activeTab===t?BLUE.primary:"#aaa",borderRadius:"8px 8px 0 0",padding:"8px 16px",fontSize:13,cursor:"pointer",fontWeight:activeTab===t?600:400}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div style={{padding:"20px 24px 24px"}}>
+              {activeTab==="info" && (
+                <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de compra","fechaCompra"],["Valor cotizado ($)","valorCotizado"],["Grupo de envío","grupoEnvio"]].map(([l,f])=>(
+                      <div key={f}>
+                        <label style={lblS}>{l}</label>
+                        <input value={modal[f]||""} onChange={e=>{updateC(modal.id,f,e.target.value);setModal(p=>({...p,[f]:e.target.value}));}} style={inpS}/>
+                      </div>
+                    ))}
+                    <div>
+                      <label style={lblS}>Fase actual</label>
+                      <select value={modal.fase} onChange={e=>{updateC(modal.id,"fase",e.target.value);setModal(p=>({...p,fase:e.target.value}));}} style={selS}>
+                        {FASES_SOAT.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lblS}>Agente</label>
+                      <select value={modal.agente} onChange={e=>{updateC(modal.id,"agente",e.target.value);setModal(p=>({...p,agente:e.target.value}));}} style={selS}>
+                        {agentes.map(a=><option key={a}>{a}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lblS}>Próxima acción</label>
+                      <select value={modal.proximaAccion||""} onChange={e=>{updateC(modal.id,"proximaAccion",e.target.value);setModal(p=>({...p,proximaAccion:e.target.value}));}} style={selS}>
+                        <option value="">Sin definir</option>
+                        {ACCIONES_SOAT.map(a=><option key={a}>{a}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lblS}>Fecha próximo contacto</label>
+                      <input type="date" value={modal.fechaProxima||""} onChange={e=>{updateC(modal.id,"fechaProxima",e.target.value);setModal(p=>({...p,fechaProxima:e.target.value}));}} style={inpS}/>
+                    </div>
+                    <div style={{gridColumn:"1/-1"}}>
+                      <label style={lblS}>Motivo no compra</label>
+                      <select value={modal.motivoNoCompra||""} onChange={e=>{updateC(modal.id,"motivoNoCompra",e.target.value);setModal(p=>({...p,motivoNoCompra:e.target.value}));}} style={selS}>
+                        <option value="">N/A</option>
+                        {MOTIVOS_SOAT.map(m=><option key={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={lblS}>Notas generales</label>
+                    <textarea value={modal.notas||""} onChange={e=>{updateC(modal.id,"notas",e.target.value);setModal(p=>({...p,notas:e.target.value}));}} rows={3} style={{...inpS,resize:"vertical"}}/>
+                  </div>
+                  <button onClick={()=>deleteC(modal.id)} style={{...S.btn("danger"),width:"100%",justifyContent:"center"}}>Eliminar cliente</button>
+                </div>
+              )}
+              {activeTab==="llamada" && (
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{background:BLUE.light,border:`1px solid ${BLUE.border}`,borderRadius:12,padding:16}}>
+                    <div style={{fontSize:11,color:"#6b87b0",marginBottom:10,textTransform:"uppercase"}}>Intento #{(modal.intentos||0)+1} · Agente: {modal.agente}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div style={{gridColumn:"1/-1"}}>
+                        <label style={lblS}>Resultado *</label>
+                        <select value={callLog.resultado} onChange={e=>setCallLog(p=>({...p,resultado:e.target.value}))} style={selS}>
+                          <option value="">Selecciona resultado...</option>
+                          {FASES_SOAT.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lblS}>Motivo no compra</label>
+                        <select value={callLog.motivo} onChange={e=>setCallLog(p=>({...p,motivo:e.target.value}))} style={selS}>
+                          <option value="">N/A</option>
+                          {MOTIVOS_SOAT.map(m=><option key={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lblS}>Próxima acción</label>
+                        <select value={callLog.proximaAccion} onChange={e=>setCallLog(p=>({...p,proximaAccion:e.target.value}))} style={selS}>
+                          <option value="">Sin definir</option>
+                          {ACCIONES_SOAT.map(a=><option key={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lblS}>Fecha próximo contacto</label>
+                        <input type="date" value={callLog.fechaProxima} onChange={e=>setCallLog(p=>({...p,fechaProxima:e.target.value}))} style={inpS}/>
+                      </div>
+                      <div style={{gridColumn:"1/-1"}}>
+                        <label style={lblS}>Nota de la llamada</label>
+                        <textarea value={callLog.nota} onChange={e=>setCallLog(p=>({...p,nota:e.target.value}))} rows={2} placeholder="Ej: Cliente pide que lo llamen el martes..." style={{...inpS,resize:"vertical"}}/>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={registrarLlamada} disabled={!callLog.resultado}
+                    style={{...S.btn(callLog.resultado?"success":"secondary"),width:"100%",justifyContent:"center",opacity:callLog.resultado?1:0.4,cursor:callLog.resultado?"pointer":"not-allowed"}}>
+                    ✅ Guardar registro de llamada
+                  </button>
+                </div>
+              )}
+              {activeTab==="historial" && (
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {(!modal.historial||modal.historial.length===0)&&<div style={{textAlign:"center",color:"#aaa",padding:30}}>Sin llamadas registradas aún.</div>}
+                  {(modal.historial||[]).map((h,i)=>{
+                    const f=FM_SOAT[h.resultado];
+                    return(
+                      <div key={i} style={{background:BLUE.light,border:`1px solid ${BLUE.border}`,borderRadius:10,padding:"12px 14px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <span style={{fontSize:12,fontWeight:600,color:f?.text||BLUE.text,background:f?.bg||BLUE.light,padding:"2px 10px",borderRadius:20}}>{f?.label||h.resultado}</span>
+                          <span style={{fontSize:11,color:"#aaa"}}>{h.fecha} · {h.agente}</span>
+                        </div>
+                        {h.motivo&&<div style={{fontSize:12,color:"#888",marginBottom:3}}>📌 Motivo: {h.motivo}</div>}
+                        {h.proximaAccion&&<div style={{fontSize:12,color:"#888",marginBottom:3}}>🗓 Acción: {h.proximaAccion}{h.fechaProxima?` · ${h.fechaProxima}`:""}</div>}
+                        {h.nota&&<div style={{fontSize:12,color:"#555",fontStyle:"italic",marginTop:4}}>"{h.nota}"</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -2036,8 +2425,9 @@ export default function App() {
     // Si se marcó envioOficina y antes no estaba, crear cotización automáticamente
     const anterior = interesados.find(x => x.id === f.id);
     if (f.envioOficina && !anterior?.envioOficina) {
-      const yaExiste = cotizaciones.some(c => c.leadId === f.id);
-      if (!yaExiste) {
+      // Verificar si ya existe cotización para este lead en Supabase
+      const { data: existing } = await supabase.from('cotizaciones').select('id').eq('lead_id', f.id).limit(1);
+      if (!existing || existing.length === 0) {
         const { data: cot } = await supabase.from('cotizaciones').insert([{
           lead_id: f.id,
           interesado_id: f.id,
@@ -2199,6 +2589,8 @@ export default function App() {
         return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
         return <RenovacionesPage polizas={polizas} userRol={userRol} agenteActualId={agenteActualId} onImportPolizas={importPolizas} onUpdatePoliza={(id, changes) => setPolizas(prev => prev.map(p => p.id === id ? { ...p, ...changes } : p))} />;
+      case "soat":
+        return <SoatPage />;
       case "reportes":
         return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
       case "configuracion":
