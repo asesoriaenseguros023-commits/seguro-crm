@@ -407,10 +407,16 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
   const clienteSeleccionado = clientes.find(c => c.id === form.clienteId);
   const ramoSeleccionado = ramos.find(r => r.nombre === form.tipoSeguro);
 
-  // Documentos del ramo seleccionado (configurados en Ramos de Seguros)
-  const docsDelRamo = ramoSeleccionado?.documentos
-    ? Object.entries(ramoSeleccionado.documentos).filter(([, v]) => v).map(([k]) => k)
-    : [];
+  // Documentos del ramo según tipo de persona del cliente
+  const docsDelRamo = useMemo(() => {
+    if (!ramoSeleccionado?.documentos) return [];
+    const esJuridica = clienteSeleccionado?.tipo_persona === "Jurídica";
+    if (esJuridica) {
+      return Object.entries(ramoSeleccionado.documentos).filter(([k, v]) => v && k.startsWith("J_")).map(([k]) => k.slice(2));
+    } else {
+      return Object.entries(ramoSeleccionado.documentos).filter(([k, v]) => v && !k.startsWith("J_")).map(([k]) => k);
+    }
+  }, [ramoSeleccionado, clienteSeleccionado]);
 
   const valid = form.clienteId && form.tipoSeguro;
   const handleSave = async () => { setSaving(true); await onSave(form); setSaving(false); };
@@ -1053,6 +1059,11 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{cliente?.nombre || i.nombre || "—"}</div>
                   <div style={{ fontSize: 11, color: "#888" }}>{cliente?.email || ""}</div>
+                  <div style={{ fontSize: 11, color: "#6b87b0" }}>
+                    {cliente?.tipo_persona === "Jurídica"
+                      ? (cliente?.telefono_contacto || cliente?.nombre_contacto || "")
+                      : (cliente?.celular || cliente?.telefono || "")}
+                  </div>
                 </div>
                 <span style={S.chip(BLUE.primary)}>{i.tipoSeguro || "—"}</span>
                 <div>
@@ -1429,26 +1440,41 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true, documentos: {} });
   const [nuevoDoc, setNuevoDoc] = useState("");
+  const [tipoPersona, setTipoPersona] = useState("Natural");
   const [docsGlobales, setDocsGlobales] = useState(() => {
     try { return JSON.parse(localStorage.getItem(DOCS_GLOBALES_KEY) || "[]"); } catch { return []; }
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const toggleDoc = (doc) => setForm(f => ({ ...f, documentos: { ...f.documentos, [doc]: !f.documentos[doc] } }));
+  const toggleDoc = (doc, tp) => setForm(f => {
+    const key = tp === "Natural" ? doc : `J_${doc}`;
+    return { ...f, documentos: { ...f.documentos, [key]: !f.documentos[key] } };
+  });
 
-  // Todos los docs: base + los que vienen de ramos existentes + globales agregados
-  const todosLosDocs = useMemo(() => {
-    const s = new Set([...DOCS_BASE, ...docsGlobales]);
-    ramos.forEach(r => { if (r.documentos) Object.keys(r.documentos).forEach(d => s.add(d)); });
-    return Array.from(s);
-  }, [ramos, docsGlobales]);
+  // Docs base separados por tipo
+  const DOCS_NATURAL_BASE = ["Cédula", "SARLAFT", "RUT", "Contrato", "Carta de Autorización"];
+  const DOCS_JURIDICA_BASE = ["Cámara de Comercio", "RUT Empresa", "SARLAFT", "Estados Financieros", "Cédula Rep. Legal", "Contrato", "Carta de Autorización"];
+
+  const docsNaturalGlobales = docsGlobales.filter(d => !d.startsWith("J_")).concat(
+    ramos.flatMap(r => r.documentos ? Object.keys(r.documentos).filter(k => !k.startsWith("J_")) : [])
+  );
+  const docsJuridicaGlobales = docsGlobales.filter(d => d.startsWith("J_")).map(d => d.slice(2)).concat(
+    ramos.flatMap(r => r.documentos ? Object.keys(r.documentos).filter(k => k.startsWith("J_")).map(k => k.slice(2)) : [])
+  );
+
+  const docsNatural = Array.from(new Set([...DOCS_NATURAL_BASE, ...docsNaturalGlobales]));
+  const docsJuridica = Array.from(new Set([...DOCS_JURIDICA_BASE, ...docsJuridicaGlobales]));
+  const docsMostrar = tipoPersona === "Natural" ? docsNatural : docsJuridica;
 
   const agregarDocGlobal = () => {
     const d = nuevoDoc.trim();
-    if (!d || todosLosDocs.includes(d)) { setNuevoDoc(""); return; }
-    const nuevos = [...docsGlobales, d];
-    setDocsGlobales(nuevos);
-    localStorage.setItem(DOCS_GLOBALES_KEY, JSON.stringify(nuevos));
+    if (!d) { setNuevoDoc(""); return; }
+    const key = tipoPersona === "Natural" ? d : `J_${d}`;
+    if (!docsGlobales.includes(key)) {
+      const nuevos = [...docsGlobales, key];
+      setDocsGlobales(nuevos);
+      localStorage.setItem(DOCS_GLOBALES_KEY, JSON.stringify(nuevos));
+    }
     setNuevoDoc("");
   };
 
@@ -1459,20 +1485,28 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
     setSaving(false);
   };
 
-  const thStyle = { padding: "11px 14px", textAlign: "center", fontWeight: 700, color: BLUE.primary, fontSize: 11.5, borderBottom: `1px solid ${BLUE.border}`, minWidth: 100, whiteSpace: "nowrap", letterSpacing: 0.3 };
+  const thStyle = { padding: "11px 14px", textAlign: "center", fontWeight: 700, color: BLUE.primary, fontSize: 11.5, borderBottom: `1px solid ${BLUE.border}`, minWidth: 110, whiteSpace: "nowrap", letterSpacing: 0.3 };
   const tdStyle = (idx) => ({ textAlign: "center", borderBottom: `1px solid ${BLUE.border}`, padding: "10px 8px", background: idx % 2 === 0 ? "#fff" : "#f8faff" });
+
+  // Check if ramo has doc for current tipo persona
+  const ramoTieneDoc = (r, doc) => tipoPersona === "Natural" ? r.documentos?.[doc] : r.documentos?.[`J_${doc}`];
+
+  const btnTP = (tp) => ({
+    padding: "7px 18px", borderRadius: 8, border: `1.5px solid ${tipoPersona === tp ? BLUE.primary : BLUE.border}`,
+    background: tipoPersona === tp ? BLUE.primary : "#fff", color: tipoPersona === tp ? "#fff" : BLUE.text,
+    fontSize: 13, fontWeight: 600, cursor: "pointer"
+  });
 
   return (
     <div>
       <div style={S.pageHeader}>
         <div><div style={S.pageTitle}>Ramos de Seguros</div><div style={S.pageSub}>Configura qué documentos requiere cada ramo</div></div>
         <div style={{ display: "flex", gap: 8 }}>
-          {/* Agregar documento global */}
           <div style={{ display: "flex", gap: 6 }}>
-            <input style={{ ...S.input, width: 220, padding: "8px 12px", fontSize: 13 }} value={nuevoDoc}
+            <input style={{ ...S.input, width: 200, padding: "8px 12px", fontSize: 13 }} value={nuevoDoc}
               onChange={e => setNuevoDoc(e.target.value)}
               onKeyDown={e => e.key === "Enter" && agregarDocGlobal()}
-              placeholder="+ Nuevo documento global…" />
+              placeholder={`+ Doc ${tipoPersona}…`} />
             <button style={S.btn("secondary")} onClick={agregarDocGlobal}>Agregar</button>
           </div>
           <button style={S.btn("primary")} onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", descripcion: "", activo: true, documentos: {} }); }}>
@@ -1481,36 +1515,32 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
         </div>
       </div>
 
-      {/* Matriz ramos × documentos */}
+      {/* Selector tipo persona */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#6b87b0", marginRight: 4 }}>Ver documentos para:</span>
+        <button style={btnTP("Natural")} onClick={() => setTipoPersona("Natural")}>👤 Persona Natural</button>
+        <button style={btnTP("Jurídica")} onClick={() => setTipoPersona("Jurídica")}>🏢 Persona Jurídica</button>
+      </div>
+
+      {/* Matriz */}
       <div style={{ overflowX: "auto", marginBottom: 24 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", fontSize: 13 }}>
           <thead>
             <tr style={{ background: BLUE.light }}>
+              <th style={{ ...thStyle, minWidth: 80 }}>ACCIONES</th>
               <th style={{ ...thStyle, textAlign: "left", minWidth: 180, position: "sticky", left: 0, background: BLUE.light, zIndex: 2 }}>RAMO</th>
-              {todosLosDocs.map(doc => <th key={doc} style={thStyle}>{doc}</th>)}
-              <th style={{ ...thStyle, minWidth: 90 }}>ACCIONES</th>
+              {docsMostrar.map(doc => <th key={doc} style={thStyle}>{doc}</th>)}
             </tr>
           </thead>
           <tbody>
             {ramos.length === 0 && (
-              <tr><td colSpan={todosLosDocs.length + 2} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay ramos. Agrega el primero.</td></tr>
+              <tr><td colSpan={docsMostrar.length + 2} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay ramos. Agrega el primero.</td></tr>
             )}
             {ramos.map((r, idx) => (
               <tr key={r.id}>
-                <td style={{ ...tdStyle(idx), textAlign: "left", padding: "12px 16px", fontWeight: 600, color: BLUE.text, position: "sticky", left: 0, zIndex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {r.nombre}
-                    <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>{r.activo !== false ? "Activo" : "Inactivo"}</span>
-                  </div>
-                </td>
-                {todosLosDocs.map(doc => (
-                  <td key={doc} style={tdStyle(idx)}>
-                    {r.documentos?.[doc] ? <span style={{ color: "#16a34a", fontSize: 18, fontWeight: 700 }}>✓</span> : <span style={{ color: "#d1d5db" }}>—</span>}
-                  </td>
-                ))}
                 <td style={tdStyle(idx)}>
                   <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                    <button style={S.btn("ghost")} title="Editar" onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false, documentos: { ...r.documentos } || {} }); setShowForm(true); }}>
+                    <button style={S.btn("ghost")} title="Editar" onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false, documentos: { ...(r.documentos || {}) } }); setShowForm(true); }}>
                       <Icon name="edit" size={14} />
                     </button>
                     <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar" onClick={() => setDelItem(r)}>
@@ -1518,6 +1548,17 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
                     </button>
                   </div>
                 </td>
+                <td style={{ ...tdStyle(idx), textAlign: "left", padding: "12px 16px", fontWeight: 600, color: BLUE.text, position: "sticky", left: 0, zIndex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {r.nombre}
+                    <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>{r.activo !== false ? "Activo" : "Inactivo"}</span>
+                  </div>
+                </td>
+                {docsMostrar.map(doc => (
+                  <td key={doc} style={tdStyle(idx)}>
+                    {ramoTieneDoc(r, doc) ? <span style={{ color: "#16a34a", fontSize: 18, fontWeight: 700 }}>✓</span> : <span style={{ color: "#d1d5db" }}>—</span>}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -1533,18 +1574,35 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
           </>}>
           <div style={S.formGroup}><label style={S.label}>Nombre del Ramo *</label><input style={S.input} value={form.nombre} onChange={e => set("nombre", e.target.value)} placeholder="Ej. SOAT, Vida, Automóvil" /></div>
           <div style={S.formGroup}><label style={S.label}>Descripción</label><input style={S.input} value={form.descripcion} onChange={e => set("descripcion", e.target.value)} /></div>
-          <div style={{ ...S.formGroup, display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <div style={{ ...S.formGroup, display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <input type="checkbox" checked={form.activo} onChange={e => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Ramo activo</span>
           </div>
-          <label style={S.label}>Documentos requeridos para este ramo</label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {todosLosDocs.map(doc => (
-              <label key={doc} style={{ display: "flex", alignItems: "center", gap: 8, background: form.documentos[doc] ? "#f0fdf4" : BLUE.light, border: `1px solid ${form.documentos[doc] ? "#bbf7d0" : BLUE.border}`, borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>
-                <input type="checkbox" checked={!!form.documentos[doc]} onChange={() => toggleDoc(doc)} style={{ width: 16, height: 16, accentColor: "#16a34a", cursor: "pointer" }} />
-                <span style={{ fontSize: 13, color: form.documentos[doc] ? "#16a34a" : BLUE.text, fontWeight: form.documentos[doc] ? 600 : 400 }}>{doc}</span>
-              </label>
-            ))}
+
+          {/* Docs Natural */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: BLUE.primary, letterSpacing: 0.5, marginBottom: 8 }}>👤 DOCUMENTOS PERSONA NATURAL</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {docsNatural.map(doc => (
+                <label key={doc} style={{ display: "flex", alignItems: "center", gap: 8, background: form.documentos[doc] ? "#f0fdf4" : BLUE.light, border: `1px solid ${form.documentos[doc] ? "#bbf7d0" : BLUE.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!form.documentos[doc]} onChange={() => toggleDoc(doc, "Natural")} style={{ width: 15, height: 15, accentColor: "#16a34a" }} />
+                  <span style={{ fontSize: 12.5, color: form.documentos[doc] ? "#16a34a" : BLUE.text, fontWeight: form.documentos[doc] ? 600 : 400 }}>{doc}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Docs Jurídica */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#7c3aed", letterSpacing: 0.5, marginBottom: 8 }}>🏢 DOCUMENTOS PERSONA JURÍDICA</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {docsJuridica.map(doc => (
+                <label key={doc} style={{ display: "flex", alignItems: "center", gap: 8, background: form.documentos[`J_${doc}`] ? "#faf5ff" : BLUE.light, border: `1px solid ${form.documentos[`J_${doc}`] ? "#e9d5ff" : BLUE.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!form.documentos[`J_${doc}`]} onChange={() => toggleDoc(doc, "Jurídica")} style={{ width: 15, height: 15, accentColor: "#7c3aed" }} />
+                  <span style={{ fontSize: 12.5, color: form.documentos[`J_${doc}`] ? "#7c3aed" : BLUE.text, fontWeight: form.documentos[`J_${doc}`] ? 600 : 400 }}>{doc}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </Modal>
       )}
