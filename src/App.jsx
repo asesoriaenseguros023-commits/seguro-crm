@@ -396,20 +396,26 @@ const DOCS_JURIDICA = ["Cámara de Comercio", "RUT Empresa", "SARLAFT", "Estados
 // Form Lead
 const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) => {
   const [form, setForm] = useState(initial || {
-    clienteId: clientes[0]?.id || "",
-    tipoSeguro: ramos[0]?.nombre || "", tipoPersona: "Natural",
-    documentosChecklist: {}, numeroContrato: "", envioOficina: false,
+    clienteId: "",
+    tipoSeguro: "", documentosChecklist: {}, envioOficina: false,
     notas: "", estado: "Lead", fechaRegistro: today(),
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setDoc = (nombre, val) => setForm(f => ({ ...f, documentosChecklist: { ...f.documentosChecklist, [nombre]: val } }));
 
-  const docsRequeridos = form.tipoPersona === "Natural" ? DOCS_NATURAL : DOCS_JURIDICA;
   const clienteSeleccionado = clientes.find(c => c.id === form.clienteId);
-  const valid = form.clienteId && form.tipoSeguro;
+  const ramoSeleccionado = ramos.find(r => r.nombre === form.tipoSeguro);
 
+  // Documentos del ramo seleccionado (configurados en Ramos de Seguros)
+  const docsDelRamo = ramoSeleccionado?.documentos
+    ? Object.entries(ramoSeleccionado.documentos).filter(([, v]) => v).map(([k]) => k)
+    : [];
+
+  const valid = form.clienteId && form.tipoSeguro;
   const handleSave = async () => { setSaving(true); await onSave(form); setSaving(false); };
+
+  const infoStyle = { background: "#f8faff", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: BLUE.text, border: `1px solid ${BLUE.border}` };
 
   return (
     <Modal title={initial?.id ? "Editar Lead" : "Nuevo Lead"} onClose={onClose} wide
@@ -426,14 +432,26 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
           <label style={S.label}>Cliente *</label>
           <select style={S.select} value={form.clienteId} onChange={e => set("clienteId", e.target.value)}>
             <option value="">— Selecciona un cliente —</option>
-            {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} {c.rfc ? `· ${c.rfc}` : ""}</option>)}
+            {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
-          {clienteSeleccionado && (
-            <div style={{ marginTop: 8, background: BLUE.light, borderRadius: 8, padding: "8px 12px", fontSize: 12.5, color: BLUE.text, border: `1px solid ${BLUE.border}` }}>
-              📋 {clienteSeleccionado.nombre} · {clienteSeleccionado.email || ""} · {clienteSeleccionado.celular || clienteSeleccionado.telefono || ""}
-            </div>
-          )}
         </div>
+
+        {/* Info del cliente seleccionado */}
+        {clienteSeleccionado && (
+          <>
+            <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
+              <div style={{ ...infoStyle, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>TIPO DE PERSONA</span><strong>{clienteSeleccionado.tipo_persona || "Natural"}</strong></div>
+                <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>CORREO</span>{clienteSeleccionado.email || "—"}</div>
+                <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>TELÉFONO</span>{clienteSeleccionado.telefono || clienteSeleccionado.celular || "—"}</div>
+                {(clienteSeleccionado.tipo_persona === "Jurídica") && <>
+                  <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>CONTACTO</span>{clienteSeleccionado.nombre_contacto || "—"}</div>
+                  <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>TEL. CONTACTO</span>{clienteSeleccionado.telefono_contacto || "—"}</div>
+                </>}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Fecha */}
         <div style={S.formGroup}>
@@ -441,7 +459,7 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
           <input style={{ ...S.input, background: "#f8faff", color: "#6b87b0" }} type="date" value={form.fechaRegistro} readOnly />
         </div>
 
-        {/* Tipo de Seguro desde ramos */}
+        {/* Tipo de Seguro */}
         <div style={S.formGroup}>
           <label style={S.label}>Tipo de Seguro *</label>
           <select style={S.select} value={form.tipoSeguro} onChange={e => { set("tipoSeguro", e.target.value); set("documentosChecklist", {}); }}>
@@ -450,45 +468,31 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
           </select>
         </div>
 
-        {/* Tipo de persona */}
-        <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
-          <label style={S.label}>Tipo de Persona</label>
-          <div style={{ display: "flex", gap: 10 }}>
-            {["Natural", "Jurídica"].map(tp => (
-              <button key={tp} onClick={() => { set("tipoPersona", tp); set("documentosChecklist", {}); }}
-                style={{ padding: "8px 20px", borderRadius: 8, border: `1.5px solid ${form.tipoPersona === tp ? BLUE.primary : BLUE.border}`, background: form.tipoPersona === tp ? BLUE.primary : "#fff", color: form.tipoPersona === tp ? "#fff" : BLUE.text, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
-                {tp === "Natural" ? "👤 Persona Natural" : "🏢 Persona Jurídica"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Checklist documentos - siempre visible */}
-        <div style={{ gridColumn: "1/-1", background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "16px 18px", marginBottom: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 12 }}>
-            📄 Documentos — {form.tipoSeguro || "Selecciona un tipo de seguro"}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {docsRequeridos.map(doc => (
-              <div key={doc} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", borderRadius: 8, padding: "10px 14px", border: `1px solid ${form.documentosChecklist[doc] === "Sí" ? "#bbf7d0" : BLUE.border}` }}>
-                <span style={{ fontSize: 13.5, color: BLUE.text }}>{doc}</span>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+        {/* Documentos — solo si hay ramo seleccionado y tiene docs configurados */}
+        {form.tipoSeguro && docsDelRamo.length > 0 && (
+          <div style={{ gridColumn: "1/-1", background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "16px 18px", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 12 }}>
+              📄 Documentos — {form.tipoSeguro}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {docsDelRamo.map(doc => (
+                <label key={doc} style={{ display: "flex", alignItems: "center", gap: 10, background: form.documentosChecklist[doc] === "Sí" ? "#f0fdf4" : "#fff", border: `1px solid ${form.documentosChecklist[doc] === "Sí" ? "#bbf7d0" : BLUE.border}`, borderRadius: 8, padding: "10px 14px", cursor: "pointer" }}>
                   <input type="checkbox"
                     checked={form.documentosChecklist[doc] === "Sí"}
                     onChange={e => setDoc(doc, e.target.checked ? "Sí" : "No")}
                     style={{ width: 17, height: 17, accentColor: "#16a34a", cursor: "pointer" }} />
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: form.documentosChecklist[doc] === "Sí" ? "#16a34a" : "#aaa" }}>
-                    {form.documentosChecklist[doc] === "Sí" ? "✓" : ""}
-                  </span>
+                  <span style={{ fontSize: 13.5, color: form.documentosChecklist[doc] === "Sí" ? "#16a34a" : BLUE.text, fontWeight: form.documentosChecklist[doc] === "Sí" ? 600 : 400 }}>{doc}</span>
                 </label>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          <div style={{ ...S.formGroup, marginTop: 14, marginBottom: 0 }}>
-            <label style={S.label}>N° Contrato</label>
-            <input style={S.input} value={form.numeroContrato || ""} onChange={e => set("numeroContrato", e.target.value)} placeholder="Número de contrato" />
+        )}
+
+        {form.tipoSeguro && docsDelRamo.length === 0 && (
+          <div style={{ gridColumn: "1/-1", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#92400e" }}>
+            ⚠️ Este ramo no tiene documentos configurados. Ve a <strong>Ramos de Seguros</strong> para agregarlos.
           </div>
-        </div>
+        )}
 
         <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
           <label style={S.label}>Notas</label>
