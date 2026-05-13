@@ -1383,57 +1383,119 @@ const ConfiguracionPage = ({ agentes, polizas, onAdd, onEdit, onDelete }) => {
   );
 };
 
+// ─── DOCUMENTOS BASE ─────────────────────────────────────────────────────────
+const DOCS_BASE = ["Cédula", "SARLAFT", "RUT", "Contrato", "Carta de Autorización", "Cámara de Comercio", "Estados Financieros", "Cédula Rep. Legal"];
+
 // ─── RAMOS (Paramétrico Admin) ────────────────────────────────────────────────
 const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true });
+  const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true, documentos: {} });
+  const [nuevoDoc, setNuevoDoc] = useState("");
+  const [docsExtra, setDocsExtra] = useState([]);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleDoc = (doc) => setForm(f => ({ ...f, documentos: { ...f.documentos, [doc]: !f.documentos[doc] } }));
+
+  // Todos los documentos que aparecen en algún ramo
+  const todosLosDocs = useMemo(() => {
+    const set = new Set(DOCS_BASE);
+    ramos.forEach(r => { if (r.documentos) Object.keys(r.documentos).forEach(d => set.add(d)); });
+    docsExtra.forEach(d => set.add(d));
+    return Array.from(set);
+  }, [ramos, docsExtra]);
 
   const handleSave = async () => {
     setSaving(true);
     if (editItem) { await onEdit({ ...editItem, ...form }); setEditItem(null); }
-    else { await onAdd(form); setShowForm(false); setForm({ nombre: "", descripcion: "", activo: true }); }
+    else { await onAdd(form); setShowForm(false); setForm({ nombre: "", descripcion: "", activo: true, documentos: {} }); }
     setSaving(false);
+  };
+
+  const agregarDocExtra = () => {
+    const d = nuevoDoc.trim();
+    if (d && !todosLosDocs.includes(d)) { setDocsExtra(prev => [...prev, d]); }
+    setNuevoDoc("");
   };
 
   return (
     <div>
       <div style={S.pageHeader}>
-        <div><div style={S.pageTitle}>Ramos de Seguros</div><div style={S.pageSub}>Configuración paramétrica de ramos</div></div>
-        <button style={S.btn("primary")} onClick={() => setShowForm(true)}><Icon name="plus" size={16} />Nuevo Ramo</button>
+        <div><div style={S.pageTitle}>Ramos de Seguros</div><div style={S.pageSub}>Configura qué documentos requiere cada ramo</div></div>
+        <button style={S.btn("primary")} onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", descripcion: "", activo: true, documentos: {} }); }}><Icon name="plus" size={16} />Nuevo Ramo</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-        {ramos.map(r => (
-          <div key={r.id} style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: BLUE.text }}>{r.nombre}</div>
-                {r.descripcion && <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{r.descripcion}</div>}
-              </div>
-              <div style={{ display: "flex", gap: 3 }}>
-                <button style={S.btn("ghost")} onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo }); }}><Icon name="edit" size={14} /></button>
-                <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => onDelete(r.id)}><Icon name="trash" size={14} /></button>
-              </div>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>{r.activo !== false ? "Activo" : "Inactivo"}</span>
-            </div>
-          </div>
-        ))}
-        {ramos.length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay ramos configurados. Agrega el primero.</div>}
-      </div>
+
+      {/* Matriz ramos × documentos */}
+      {ramos.length > 0 && (
+        <div style={{ overflowX: "auto", marginBottom: 24 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", overflow: "hidden", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: BLUE.light }}>
+                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: BLUE.text, fontSize: 12, letterSpacing: 0.5, borderBottom: `1px solid ${BLUE.border}`, minWidth: 160, position: "sticky", left: 0, background: BLUE.light, zIndex: 1 }}>RAMO</th>
+                {todosLosDocs.map(doc => (
+                  <th key={doc} style={{ padding: "10px 12px", textAlign: "center", fontWeight: 600, color: BLUE.primary, fontSize: 11.5, borderBottom: `1px solid ${BLUE.border}`, minWidth: 110, whiteSpace: "nowrap" }}>{doc}</th>
+                ))}
+                <th style={{ padding: "10px 12px", borderBottom: `1px solid ${BLUE.border}`, minWidth: 80 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ramos.map((r, idx) => (
+                <tr key={r.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f8faff" }}>
+                  <td style={{ padding: "12px 16px", fontWeight: 600, color: BLUE.text, borderBottom: `1px solid ${BLUE.border}`, position: "sticky", left: 0, background: idx % 2 === 0 ? "#fff" : "#f8faff", zIndex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {r.nombre}
+                      <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>{r.activo !== false ? "Activo" : "Inactivo"}</span>
+                    </div>
+                  </td>
+                  {todosLosDocs.map(doc => (
+                    <td key={doc} style={{ textAlign: "center", borderBottom: `1px solid ${BLUE.border}`, padding: "10px 8px" }}>
+                      {r.documentos?.[doc] ? <span style={{ color: "#16a34a", fontSize: 18 }}>✓</span> : <span style={{ color: "#e5e7eb", fontSize: 16 }}>—</span>}
+                    </td>
+                  ))}
+                  <td style={{ textAlign: "center", borderBottom: `1px solid ${BLUE.border}`, padding: "8px" }}>
+                    <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                      <button style={S.btn("ghost")} onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false, documentos: r.documentos || {} }); setShowForm(true); }}><Icon name="edit" size={14} /></button>
+                      <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => onDelete(r.id)}><Icon name="trash" size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {ramos.length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay ramos configurados. Agrega el primero.</div>}
+
+      {/* Modal nuevo/editar ramo */}
       {(showForm || editItem) && (
-        <Modal title={editItem ? "Editar Ramo" : "Nuevo Ramo"} onClose={() => { setShowForm(false); setEditItem(null); }}
+        <Modal title={editItem ? `Editar Ramo — ${editItem.nombre}` : "Nuevo Ramo"} onClose={() => { setShowForm(false); setEditItem(null); }} wide
           footer={<><button style={S.btn("secondary")} onClick={() => { setShowForm(false); setEditItem(null); }}>Cancelar</button><button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</button></>}>
           <div style={S.formGroup}><label style={S.label}>Nombre del Ramo *</label><input style={S.input} value={form.nombre} onChange={e => set("nombre", e.target.value)} placeholder="Ej. SOAT, Vida, Automóvil" /></div>
           <div style={S.formGroup}><label style={S.label}>Descripción</label><input style={S.input} value={form.descripcion} onChange={e => set("descripcion", e.target.value)} /></div>
-          <div style={S.formGroup}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <input type="checkbox" checked={form.activo} onChange={e => set("activo", e.target.checked)} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Ramo activo</span>
-            </label>
+          <div style={{ ...S.formGroup, display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.activo} onChange={e => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Ramo activo</span>
+          </div>
+
+          {/* Documentos requeridos */}
+          <div style={{ marginTop: 8 }}>
+            <label style={S.label}>Documentos requeridos</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              {todosLosDocs.map(doc => (
+                <label key={doc} style={{ display: "flex", alignItems: "center", gap: 8, background: form.documentos[doc] ? "#f0fdf4" : BLUE.light, border: `1px solid ${form.documentos[doc] ? "#bbf7d0" : BLUE.border}`, borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!form.documentos[doc]} onChange={() => toggleDoc(doc)}
+                    style={{ width: 16, height: 16, accentColor: "#16a34a", cursor: "pointer" }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: form.documentos[doc] ? "#16a34a" : BLUE.text }}>{doc}</span>
+                </label>
+              ))}
+            </div>
+            {/* Agregar documento personalizado */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...S.input, flex: 1 }} value={nuevoDoc} onChange={e => setNuevoDoc(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && agregarDocExtra()}
+                placeholder="Agregar documento personalizado…" />
+              <button style={S.btn("secondary")} onClick={agregarDocExtra}>+ Agregar</button>
+            </div>
           </div>
         </Modal>
       )}
@@ -1594,11 +1656,11 @@ export default function App() {
 
   // CRUD Ramos
   const addRamo = async (r) => {
-    const { data } = await supabase.from('ramos').insert([{ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo }]).select().single();
+    const { data } = await supabase.from('ramos').insert([{ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo, documentos: r.documentos || {} }]).select().single();
     if (data) setRamos(prev => [...prev, data]);
   };
   const editRamo = async (r) => {
-    await supabase.from('ramos').update({ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo }).eq('id', r.id);
+    await supabase.from('ramos').update({ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo, documentos: r.documentos || {} }).eq('id', r.id);
     setRamos(prev => prev.map(x => x.id === r.id ? { ...x, ...r } : x));
   };
   const deleteRamo = async (id) => {
