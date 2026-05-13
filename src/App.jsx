@@ -442,6 +442,7 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
             <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
               <div style={{ ...infoStyle, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>TIPO DE PERSONA</span><strong>{clienteSeleccionado.tipo_persona || "Natural"}</strong></div>
+                <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>DOCUMENTO</span>{clienteSeleccionado.rfc || clienteSeleccionado.documento || "—"}</div>
                 <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>CORREO</span>{clienteSeleccionado.email || "—"}</div>
                 <div><span style={{ fontSize: 11, color: "#aaa", display: "block" }}>TELÉFONO</span>{clienteSeleccionado.telefono || clienteSeleccionado.celular || "—"}</div>
                 {(clienteSeleccionado.tipo_persona === "Jurídica") && <>
@@ -505,7 +506,7 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
             <input type="checkbox" checked={form.envioOficina} onChange={e => set("envioOficina", e.target.checked)}
               style={{ width: 18, height: 18, accentColor: "#16a34a", cursor: "pointer" }} />
             <span style={{ fontSize: 14, fontWeight: 600, color: form.envioOficina ? "#16a34a" : BLUE.text }}>
-              {form.envioOficina ? "✓ Enviado a oficina" : "Envío a oficina"}
+              {form.envioOficina ? "✓ Enviado a cotización" : "Enviado a cotización"}
             </span>
           </label>
         </div>
@@ -1579,24 +1580,28 @@ export default function App() {
 
   // CRUD Interesados
   const addInteresado = async (f) => {
-    const { data } = await supabase.from('interesados').insert([{
-      cliente_id: f.clienteId, email: f.email, celular: f.celular, direccion: f.direccion, ciudad: f.ciudad,
-      documento: f.documento, tipo_documento: f.tipoDocumento, tipo_seguro: f.tipoSeguro,
-      tipo_persona: f.tipoPersona, documentos_checklist: JSON.stringify(f.documentosChecklist),
-      numero_contrato: f.numeroContrato, envio_oficina: f.envioOficina,
-      agente_id: f.agenteId, notas: f.notas, estado: f.estado, fecha_registro: f.fechaRegistro,
+    const { data, error } = await supabase.from('interesados').insert([{
+      cliente_id: f.clienteId,
+      tipo_seguro: f.tipoSeguro,
+      documentos_checklist: f.documentosChecklist || {},
+      envio_oficina: f.envioOficina || false,
+      notas: f.notas || "",
+      estado: f.estado || "Lead",
+      fecha_registro: f.fechaRegistro,
     }]).select().single();
+    if (error) { console.error('addInteresado error:', error); return; }
     if (data) setInteresados(prev => [mapInteresado(data), ...prev]);
   };
   const editInteresado = async (f) => {
-    await supabase.from('interesados').update({
-      cliente_id: f.clienteId, email: f.email, celular: f.celular, direccion: f.direccion, ciudad: f.ciudad,
-      documento: f.documento, tipo_documento: f.tipoDocumento, tipo_seguro: f.tipoSeguro,
-      tipo_persona: f.tipoPersona, documentos_checklist: JSON.stringify(f.documentosChecklist),
-      numero_contrato: f.numeroContrato, envio_oficina: f.envioOficina,
-      agente_id: f.agenteId, notas: f.notas,
+    const { error } = await supabase.from('interesados').update({
+      cliente_id: f.clienteId,
+      tipo_seguro: f.tipoSeguro,
+      documentos_checklist: f.documentosChecklist || {},
+      envio_oficina: f.envioOficina || false,
+      notas: f.notas || "",
     }).eq('id', f.id);
-    setInteresados(prev => prev.map(x => x.id === f.id ? mapInteresado({ ...x, ...f, agente_id: f.agenteId, tipo_seguro: f.tipoSeguro, tipo_persona: f.tipoPersona, documentos_checklist: JSON.stringify(f.documentosChecklist), numero_contrato: f.numeroContrato, envio_oficina: f.envioOficina, cliente_id: f.clienteId }) : x));
+    if (error) { console.error('editInteresado error:', error); return; }
+    setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, clienteId: f.clienteId, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
   };
   const deleteInteresado = async (id) => {
     await supabase.from('interesados').delete().eq('id', id);
