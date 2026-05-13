@@ -16,8 +16,8 @@ const today = () => new Date().toISOString().split("T")[0];
 // Mappers
 const mapCliente = (c) => ({ ...c, agenteId: c.agente_id, fechaAlta: c.fecha_alta });
 const mapInteresado = (i) => ({ ...i, agenteId: i.agente_id, tipoSeguro: i.tipo_seguro, tipoPersona: i.tipo_persona, documentosChecklist: i.documentos_checklist ? (typeof i.documentos_checklist === 'string' ? JSON.parse(i.documentos_checklist) : i.documentos_checklist) : {}, numeroContrato: i.numero_contrato, envioOficina: i.envio_oficina, fechaRegistro: i.fecha_registro, clienteId: i.cliente_id });
-const mapCotizacion = (c) => ({ ...c, interesadoId: c.interesado_id, agenteId: c.agente_id, sumaAsegurada: c.suma_asegurada, fechaCotizacion: c.fecha_cotizacion, numeroPoliza: c.numero_poliza });
-const mapPoliza = (p) => ({ ...p, cotizacionId: p.cotizacion_id, clienteId: p.cliente_id, agenteId: p.agente_id, sumaAsegurada: p.suma_asegurada, vigenciaInicio: p.vigencia_inicio, vigenciaFin: p.vigencia_fin, fechaEmision: p.fecha_emision, ramoId: p.ramo_id });
+const mapCotizacion = (c) => ({ ...c, interesadoId: c.interesado_id, leadId: c.lead_id, agenteId: c.agente_id, sumaAsegurada: c.suma_asegurada, fechaCotizacion: c.fecha_cotizacion, numeroPoliza: c.numero_poliza, clienteNombre: c.cliente_nombre, clienteTelefono: c.cliente_telefono, accion: c.accion || 'En Curso', numeroPolizaEmitida: c.numero_poliza_emitida, aseguradoraEmitida: c.aseguradora_emitida, primaEmitida: c.prima_emitida, ivaEmitida: c.iva_emitida, gastosEmitida: c.gastos_emitida, totalPagoEmitida: c.total_pago_emitida });
+const mapPoliza = (p) => ({ ...p, cotizacionId: p.cotizacion_id, clienteId: p.cliente_id, agenteId: p.agente_id, sumaAsegurada: p.suma_asegurada, vigenciaInicio: p.vigencia_inicio, vigenciaFin: p.vigencia_fin, fechaEmision: p.fecha_emision, ramoId: p.ramo_id, decisionRenovacion: p.decision_renovacion || "" });
 
 const ROL_ADMIN = "Admin";
 const ROL_AGENTE = "Agente";
@@ -899,27 +899,26 @@ const EmisionForm = ({ cotizacion, interesado, ramos, onSave, onClose }) => {
 };
 
 // ─── PÁGINA COTIZACIONES (módulo independiente) ───────────────────────────────
+const ESTADOS_COT = ["Corrección SARLAFT", "Corrección Contrato", "Cotización Completada"];
+const ACCIONES_COT = ["En Curso", "Cliente Rechaza", "Póliza Emitida"];
+const accionColor = (a) => ({ "En Curso": "#f59e0b", "Cliente Rechaza": "#dc2626", "Póliza Emitida": "#16a34a" }[a] || "#6b7280");
+const estadoCotColor2 = (e) => ({ "Corrección SARLAFT": "#f59e0b", "Corrección Contrato": "#d97706", "Cotización Completada": "#16a34a", "Pendiente": "#6b7280" }[e] || "#6b7280");
+
 const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
   const [q, setQ] = useState("");
-  const [showCotizacion, setShowCotizacion] = useState(null);
-  const [editCotizacion, setEditCotizacion] = useState(null);
-  const [showEmision, setShowEmision] = useState(null);
+  const [editModal, setEditModal] = useState(null); // cotizacion being edited
+  const [saving, setSaving] = useState(false);
 
   const cotizacionesFiltradas = useMemo(() => {
     const base = esAdmin(userRol) ? cotizaciones : cotizaciones.filter(c => c.agenteId === agenteActualId);
-    return base.filter(c => !q || c.aseguradora?.toLowerCase().includes(q.toLowerCase()) || c.ramo?.toLowerCase().includes(q.toLowerCase()) || c.numeroPoliza?.toLowerCase().includes(q.toLowerCase()));
+    return base.filter(c => !q || c.clienteNombre?.toLowerCase().includes(q.toLowerCase()) || c.ramo?.toLowerCase().includes(q.toLowerCase()) || c.numeroPolizaEmitida?.toLowerCase().includes(q.toLowerCase()));
   }, [cotizaciones, q, userRol, agenteActualId]);
 
-  const handleSaveCotizacion = async (form) => {
-    if (editCotizacion) { await onEditCotizacion({ ...editCotizacion, ...form }); setEditCotizacion(null); }
-    else { await onAddCotizacion(form); setShowCotizacion(null); }
+  const handleSave = async (cot, changes) => {
+    setSaving(cot.id);
+    await onEditCotizacion({ ...cot, ...changes });
+    setSaving(false);
   };
-  const handleEmitir = async (form) => {
-    await onEmitirPoliza({ cotizacion: showEmision.cotizacion, interesado: showEmision.interesado, ...form });
-    setShowEmision(null);
-  };
-
-  const estadoCotColor = (e) => ({ Pendiente: "#f59e0b", Emitida: "#16a34a", Cancelada: "#6b7280" }[e] || "#6b7280");
 
   return (
     <div>
@@ -928,59 +927,144 @@ const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, 
           <div style={S.pageTitle}>Cotizaciones</div>
           <div style={S.pageSub}>{cotizacionesFiltradas.length} cotizaciones registradas</div>
         </div>
-        <button style={S.btn("primary")} onClick={() => setShowCotizacion(true)}><Icon name="plus" size={16} />Nueva Cotización</button>
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-        <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar por aseguradora, ramo, n° póliza…" value={q} onChange={e => setQ(e.target.value)} /></div>
+        <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar cliente, ramo, n° póliza…" value={q} onChange={e => setQ(e.target.value)} /></div>
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 0.8fr 120px" }}>
-          <span>Lead</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Fecha</span><span>Estado</span><span>Acciones</span>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "50px 1.6fr 1fr 1fr 1fr 160px" }}>
+          <span>#</span><span>Lead / Cliente</span><span>Ramo</span><span>Estado</span><span>Acción</span><span>Acciones</span>
         </div>
         {cotizacionesFiltradas.length === 0
           ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay cotizaciones registradas</div>
-          : cotizacionesFiltradas.map(c => {
-            const interesado = interesados.find(i => i.id === c.interesadoId);
-            const yaEmitida = polizas.some(p => p.cotizacionId === c.id);
+          : cotizacionesFiltradas.map((c, idx) => {
+            const interesado = interesados.find(i => i.id === c.interesadoId || i.id === c.leadId);
             return (
-              <div key={c.id} style={{ ...S.tableRow, gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 0.8fr 120px" }}
-                onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
-                onMouseLeave={e => e.currentTarget.style.background = ""}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{interesado?.nombre || "—"}</div>
-                  <div style={{ fontSize: 11.5, color: "#888" }}>{c.numeroPoliza || ""}</div>
+              <div key={c.id}>
+                <div style={{ ...S.tableRow, gridTemplateColumns: "50px 1.6fr 1fr 1fr 1fr 160px" }}
+                  onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
+                  onMouseLeave={e => e.currentTarget.style.background = ""}>
+                  <div style={{ fontWeight: 700, color: "#aaa", fontSize: 13 }}>{idx + 1}</div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.clienteNombre || interesado?.nombre || "—"}</div>
+                    {c.clienteTelefono && <div style={{ fontSize: 11.5, color: "#888" }}>{c.clienteTelefono}</div>}
+                    <div style={{ fontSize: 11, color: "#aaa" }}>{fmtDate(c.fechaCotizacion)}</div>
+                  </div>
+                  <span style={S.chip(BLUE.primary)}>{c.ramo || "—"}</span>
+                  {/* Estado selector */}
+                  <select value={c.estado || "Pendiente"}
+                    onChange={async e => { await handleSave(c, { estado: e.target.value }); }}
+                    style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: `1.5px solid ${estadoCotColor2(c.estado)}`, background: "#fff", color: estadoCotColor2(c.estado), fontWeight: 600, cursor: "pointer", maxWidth: 170 }}>
+                    <option value="Pendiente">Pendiente</option>
+                    {ESTADOS_COT.map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                  {/* Acción selector */}
+                  <select value={c.accion || "En Curso"}
+                    onChange={async e => { await handleSave(c, { accion: e.target.value }); }}
+                    style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: `1.5px solid ${accionColor(c.accion)}`, background: "#fff", color: accionColor(c.accion), fontWeight: 600, cursor: "pointer", maxWidth: 160 }}>
+                    {ACCIONES_COT.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {c.accion === "Póliza Emitida" && (
+                      <button style={{ ...S.btn("success"), padding: "5px 10px", fontSize: 12 }}
+                        onClick={() => setEditModal(c)}>
+                        {c.numeroPolizaEmitida ? "Ver Póliza" : "Registrar Póliza"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <span style={S.chip(BLUE.primary)}>{c.ramo || "—"}</span>
-                <div style={{ fontSize: 13 }}>{c.aseguradora}</div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{fmt(c.prima || 0)}</div>
-                <div style={{ fontSize: 13 }}>{fmtDate(c.fechaCotizacion)}</div>
-                <span style={S.badge(estadoCotColor(yaEmitida ? "Emitida" : c.estado))}>{yaEmitida ? "Emitida" : c.estado}</span>
-                <div style={{ display: "flex", gap: 3 }}>
-                  {!yaEmitida && c.estado !== "Cancelada" && (
-                    <button title="Emitir Póliza" style={{ ...S.btn("success"), padding: "5px 10px", fontSize: 12 }}
-                      onClick={() => setShowEmision({ cotizacion: c, interesado })}>
-                      Emitir
-                    </button>
-                  )}
-                  <button style={S.btn("ghost")} onClick={() => setEditCotizacion(c)}><Icon name="edit" size={14} /></button>
-                </div>
+
+                {/* Panel póliza emitida */}
+                {c.accion === "Póliza Emitida" && c.numeroPolizaEmitida && (
+                  <div style={{ background: "#f0fdf4", borderLeft: "3px solid #16a34a", padding: "10px 18px 10px 24px", display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, fontSize: 12 }}>
+                    <div><span style={{ color: "#aaa", display: "block" }}>N° Póliza</span><strong>{c.numeroPolizaEmitida}</strong></div>
+                    <div><span style={{ color: "#aaa", display: "block" }}>Aseguradora</span>{c.aseguradoraEmitida}</div>
+                    <div><span style={{ color: "#aaa", display: "block" }}>Prima</span>{fmt(c.primaEmitida || 0)}</div>
+                    <div><span style={{ color: "#aaa", display: "block" }}>IVA</span>{fmt(c.ivaEmitida || 0)}</div>
+                    <div><span style={{ color: "#aaa", display: "block" }}>Gastos</span>{fmt(c.gastosEmitida || 0)}</div>
+                    <div><span style={{ color: "#aaa", display: "block" }}>Total Pago</span><strong style={{ color: "#16a34a" }}>{fmt(c.totalPagoEmitida || 0)}</strong></div>
+                  </div>
+                )}
               </div>
             );
           })}
       </div>
 
-      {showCotizacion && (
-        <CotizacionForm interesado={null} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setShowCotizacion(null)} />
-      )}
-      {editCotizacion && (
-        <CotizacionForm initial={editCotizacion} interesado={interesados.find(i => i.id === editCotizacion.interesadoId)} agentes={agentes} ramos={ramos} onSave={handleSaveCotizacion} onClose={() => setEditCotizacion(null)} />
-      )}
-      {showEmision && (
-        <EmisionForm cotizacion={showEmision.cotizacion} interesado={showEmision.interesado} ramos={ramos} onSave={handleEmitir} onClose={() => setShowEmision(null)} />
+      {/* Modal registrar póliza emitida */}
+      {editModal && (
+        <PolizaEmitidaModal cot={editModal} onSave={async (data) => {
+          await handleSave(editModal, data);
+          setEditModal(null);
+        }} onClose={() => setEditModal(null)} />
       )}
     </div>
+  );
+};
+
+const PolizaEmitidaModal = ({ cot, onSave, onClose }) => {
+  const [form, setForm] = useState({
+    numeroPolizaEmitida: cot.numeroPolizaEmitida || "",
+    aseguradoraEmitida: cot.aseguradoraEmitida || "",
+    primaEmitida: cot.primaEmitida || "",
+    ivaEmitida: cot.ivaEmitida || "",
+    gastosEmitida: cot.gastosEmitida || "",
+    totalPagoEmitida: cot.totalPagoEmitida || "",
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [saving, setSaving] = useState(false);
+
+  // Auto-calcular total
+  useEffect(() => {
+    const total = (parseFloat(form.primaEmitida) || 0) + (parseFloat(form.ivaEmitida) || 0) + (parseFloat(form.gastosEmitida) || 0);
+    setForm(f => ({ ...f, totalPagoEmitida: total || "" }));
+  }, [form.primaEmitida, form.ivaEmitida, form.gastosEmitida]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(form);
+    setSaving(false);
+  };
+
+  return (
+    <Modal title="Registrar Póliza Emitida" onClose={onClose}
+      footer={<>
+        <button style={S.btn("secondary")} onClick={onClose}>Cancelar</button>
+        <button style={{ ...S.btn("success"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
+          {saving ? "Guardando…" : "✓ Guardar Póliza"}
+        </button>
+      </>}>
+      <div style={{ background: BLUE.light, borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>
+        <strong>{cot.clienteNombre}</strong> · {cot.ramo}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+        <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
+          <label style={S.label}>N° Póliza *</label>
+          <input style={S.input} value={form.numeroPolizaEmitida} onChange={e => set("numeroPolizaEmitida", e.target.value)} placeholder="Número de póliza" />
+        </div>
+        <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
+          <label style={S.label}>Aseguradora *</label>
+          <input style={S.input} value={form.aseguradoraEmitida} onChange={e => set("aseguradoraEmitida", e.target.value)} placeholder="Nombre de la aseguradora" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Prima</label>
+          <input style={S.input} type="number" value={form.primaEmitida} onChange={e => set("primaEmitida", e.target.value)} placeholder="0" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>IVA</label>
+          <input style={S.input} type="number" value={form.ivaEmitida} onChange={e => set("ivaEmitida", e.target.value)} placeholder="0" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Gastos</label>
+          <input style={S.input} type="number" value={form.gastosEmitida} onChange={e => set("gastosEmitida", e.target.value)} placeholder="0" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Total Pago</label>
+          <input style={{ ...S.input, background: "#f0fdf4", fontWeight: 700, color: "#16a34a" }} type="number" value={form.totalPagoEmitida} readOnly />
+        </div>
+      </div>
+    </Modal>
   );
 };
 
@@ -1175,7 +1259,7 @@ const PolizasPage = ({ polizas, interesados, ramos, userRol, agenteActualId }) =
 };
 
 // ─── RENOVACIONES ─────────────────────────────────────────────────────────────
-const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas }) => {
+const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, onUpdatePoliza }) => {
   const [filtro, setFiltro] = useState("30");
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -1304,14 +1388,15 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas })
         ? <div style={{ ...S.tableWrap, padding: 48, textAlign: "center", color: "#aaa" }}>No hay pólizas en este rango.</div>
         : (
           <div style={S.tableWrap}>
-            <div style={{ ...S.tableHead, gridTemplateColumns: "1fr 1.2fr 1.4fr 0.9fr 0.9fr 0.9fr 1fr 1.1fr 0.8fr 80px" }}>
-              <span>Fecha</span><span>Póliza</span><span>Tomador</span><span>Prima</span><span>Iva</span><span>Gastos</span><span>Total Pago</span><span>Compañía</span><span>Ramo</span><span>Días</span>
+            <div style={{ ...S.tableHead, gridTemplateColumns: "1fr 1.2fr 1.4fr 0.9fr 0.9fr 0.9fr 1fr 1.1fr 0.8fr 150px" }}>
+              <span>Fecha</span><span>Póliza</span><span>Tomador</span><span>Prima</span><span>Iva</span><span>Gastos</span><span>Total Pago</span><span>Compañía</span><span>Ramo</span><span>Decisión</span>
             </div>
             {candidates.map(p => {
               const d = diasParaVencer(p.vigenciaFin);
               const urgColor = filtro === "vencidas" ? "#dc2626" : d <= 7 ? "#dc2626" : d <= 15 ? "#d97706" : BLUE.primary;
+              const decisionColor = { "Cliente renueva": "#16a34a", "Cliente no renueva": "#dc2626" }[p.decisionRenovacion] || "#6b7280";
               return (
-                <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1fr 1.2fr 1.4fr 0.9fr 0.9fr 0.9fr 1fr 1.1fr 0.8fr 80px", borderLeft: `3px solid ${urgColor}` }}
+                <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1fr 1.2fr 1.4fr 0.9fr 0.9fr 0.9fr 1fr 1.1fr 0.8fr 150px", borderLeft: `3px solid ${urgColor}` }}
                   onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
                   <div style={{ fontSize: 12.5 }}>{fmtDate(p.vigenciaFin)}</div>
@@ -1326,7 +1411,17 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas })
                   <div style={{ fontSize: 12.5, fontWeight: 600 }}>{fmt(p.totalPago || (Number(p.prima||0)+Number(p.iva||0)+Number(p.gastosExpedicion||0)))}</div>
                   <div style={{ fontSize: 12 }}>{p.aseguradora}</div>
                   <span style={S.chip(BLUE.primary)}>{p.ramo || "—"}</span>
-                  <span style={S.chip(urgColor)}>{filtro === "vencidas" ? "Vencida" : `${d}d`}</span>
+                  <select value={p.decisionRenovacion || ""}
+                    onChange={async e => {
+                      const val = e.target.value;
+                      await supabase.from('polizas').update({ decision_renovacion: val }).eq('id', p.id);
+                      onUpdatePoliza(p.id, { decisionRenovacion: val });
+                    }}
+                    style={{ fontSize: 11.5, padding: "5px 8px", borderRadius: 8, border: `1.5px solid ${decisionColor}`, color: decisionColor, fontWeight: 600, cursor: "pointer", background: "#fff", width: "100%" }}>
+                    <option value="">— Decisión —</option>
+                    <option value="Cliente renueva">✓ Cliente renueva</option>
+                    <option value="Cliente no renueva">✗ Cliente no renueva</option>
+                  </select>
                 </div>
               );
             })}
@@ -1928,6 +2023,7 @@ export default function App() {
   };
   const editInteresado = async (f) => {
     const clienteNombre = clientes.find(c => c.id === f.clienteId)?.nombre || "";
+    const cliente = clientes.find(c => c.id === f.clienteId);
     const { error } = await supabase.from('interesados').update({
       cliente_id: f.clienteId,
       nombre: clienteNombre,
@@ -1937,6 +2033,24 @@ export default function App() {
       notas: f.notas || "",
     }).eq('id', f.id);
     if (error) { console.error('editInteresado error:', error); return; }
+    // Si se marcó envioOficina y antes no estaba, crear cotización automáticamente
+    const anterior = interesados.find(x => x.id === f.id);
+    if (f.envioOficina && !anterior?.envioOficina) {
+      const yaExiste = cotizaciones.some(c => c.leadId === f.id);
+      if (!yaExiste) {
+        const { data: cot } = await supabase.from('cotizaciones').insert([{
+          lead_id: f.id,
+          interesado_id: f.id,
+          cliente_nombre: clienteNombre,
+          cliente_telefono: cliente?.celular || cliente?.telefono || "",
+          ramo: f.tipoSeguro,
+          estado: "Pendiente",
+          accion: "En Curso",
+          fecha_cotizacion: today(),
+        }]).select().single();
+        if (cot) setCotizaciones(prev => [mapCotizacion(cot), ...prev]);
+      }
+    }
     setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, clienteId: f.clienteId, nombre: clienteNombre, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
   };
   const deleteInteresado = async (id) => {
@@ -1946,12 +2060,28 @@ export default function App() {
 
   // CRUD Cotizaciones
   const addCotizacion = async (f) => {
-    const { data } = await supabase.from('cotizaciones').insert([{ interesado_id: f.interesadoId, agente_id: f.agenteId, ramo: f.ramo, aseguradora: f.aseguradora, suma_asegurada: f.sumaAsegurada, prima: f.prima, iva: f.iva, gastos_expedicion: f.gastosExpedicion, numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion, notas: f.notas, estado: f.estado }]).select().single();
+    const { data } = await supabase.from('cotizaciones').insert([{
+      interesado_id: f.interesadoId, lead_id: f.leadId, agente_id: f.agenteId,
+      cliente_nombre: f.clienteNombre, cliente_telefono: f.clienteTelefono,
+      ramo: f.ramo, aseguradora: f.aseguradora, suma_asegurada: f.sumaAsegurada,
+      prima: f.prima, iva: f.iva, gastos_expedicion: f.gastosExpedicion,
+      numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion,
+      notas: f.notas, estado: f.estado || "Pendiente", accion: f.accion || "En Curso",
+    }]).select().single();
     if (data) setCotizaciones(prev => [mapCotizacion(data), ...prev]);
   };
   const editCotizacion = async (f) => {
-    await supabase.from('cotizaciones').update({ ramo: f.ramo, aseguradora: f.aseguradora, suma_asegurada: f.sumaAsegurada, prima: f.prima, iva: f.iva, gastos_expedicion: f.gastosExpedicion, numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion, notas: f.notas, estado: f.estado }).eq('id', f.id);
-    setCotizaciones(prev => prev.map(x => x.id === f.id ? { ...x, ...mapCotizacion({ ...x, ...f, interesado_id: f.interesadoId, agente_id: f.agenteId, suma_asegurada: f.sumaAsegurada, numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion, gastos_expedicion: f.gastosExpedicion }) } : x));
+    await supabase.from('cotizaciones').update({
+      ramo: f.ramo, aseguradora: f.aseguradora, suma_asegurada: f.sumaAsegurada,
+      prima: f.prima, iva: f.iva, gastos_expedicion: f.gastosExpedicion,
+      numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion,
+      notas: f.notas, estado: f.estado, accion: f.accion,
+      numero_poliza_emitida: f.numeroPolizaEmitida,
+      aseguradora_emitida: f.aseguradoraEmitida,
+      prima_emitida: f.primaEmitida, iva_emitida: f.ivaEmitida,
+      gastos_emitida: f.gastosEmitida, total_pago_emitida: f.totalPagoEmitida,
+    }).eq('id', f.id);
+    setCotizaciones(prev => prev.map(x => x.id === f.id ? { ...x, ...f } : x));
   };
 
   // Emitir póliza desde cotización
@@ -2068,7 +2198,7 @@ export default function App() {
       case "polizas":
         return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
-        return <RenovacionesPage polizas={polizas} userRol={userRol} agenteActualId={agenteActualId} onImportPolizas={importPolizas} />;
+        return <RenovacionesPage polizas={polizas} userRol={userRol} agenteActualId={agenteActualId} onImportPolizas={importPolizas} onUpdatePoliza={(id, changes) => setPolizas(prev => prev.map(p => p.id === id ? { ...p, ...changes } : p))} />;
       case "reportes":
         return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
       case "configuracion":
