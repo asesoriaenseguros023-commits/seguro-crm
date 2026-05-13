@@ -1529,7 +1529,19 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
             <tr style={{ background: BLUE.light }}>
               <th style={{ ...thStyle, minWidth: 80 }}>ACCIONES</th>
               <th style={{ ...thStyle, textAlign: "left", minWidth: 180, position: "sticky", left: 0, background: BLUE.light, zIndex: 2 }}>RAMO</th>
-              {docsMostrar.map(doc => <th key={doc} style={thStyle}>{doc}</th>)}
+              {docsMostrar.map(doc => (
+                <th key={doc} style={thStyle}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <span>{doc}</span>
+                    <button title="Eliminar documento" onClick={() => {
+                      const key = tipoPersona === "Natural" ? doc : `J_${doc}`;
+                      const nuevos = docsGlobales.filter(d => d !== key);
+                      setDocsGlobales(nuevos);
+                      localStorage.setItem(DOCS_GLOBALES_KEY, JSON.stringify(nuevos));
+                    }} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 12, lineHeight: 1, padding: "0 2px", opacity: 0.6 }}>✕</button>
+                  </div>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
