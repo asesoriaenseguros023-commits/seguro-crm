@@ -647,7 +647,8 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, onImport, userRol }) 
                 {c.tipoPersona === "Jurídica" && c.nombreContacto && <div style={{ fontSize: 11.5, color: "#888" }}>Cto: {c.nombreContacto}</div>}
               </div>
               <div>
-                <div style={{ fontSize: 13 }}>{c.celular || "—"}</div>
+                <div style={{ fontSize: 13 }}>{c.celular || c.telefono || "—"}</div>
+                {c.tipoPersona === "Jurídica" && c.telefonoContacto && <div style={{ fontSize: 11.5, color: "#7c3aed" }}>Cto: {c.telefonoContacto}</div>}
                 <div style={{ fontSize: 11.5, color: "#888" }}>{c.email || ""}</div>
               </div>
               <div style={{ fontSize: 13 }}>{c.tipoDocumento}: {c.documento || "—"}</div>
@@ -1026,7 +1027,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
 
       {/* Tabla Leads */}
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "50px 1fr 1.2fr 1.2fr 1fr 1fr 110px" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 100px 1.4fr 1fr 130px 140px 200px" }}>
           <span>#</span><span>Fecha</span><span>Cliente</span><span>Tipo Seguro</span><span>Estado Docs</span><span>Enviado a Cotización</span><span>Acciones</span>
         </div>
         {interesadosFiltrados.length === 0
@@ -1044,7 +1045,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
             const estadoColor = todosCompletos ? "#16a34a" : "#f59e0b";
 
             return (
-              <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "50px 1fr 1.2fr 1.2fr 1fr 1fr 110px" }}
+              <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 100px 1.4fr 1fr 130px 140px 200px" }}
                 onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
                 <div style={{ fontWeight: 700, color: "#aaa", fontSize: 13 }}>{idx + 1}</div>
@@ -1419,6 +1420,7 @@ const ConfiguracionPage = ({ agentes, polizas, onAdd, onEdit, onDelete }) => {
 };
 
 // ─── RAMOS (Paramétrico Admin) ────────────────────────────────────────────────
+const DOCS_BASE = ["Cédula", "SARLAFT", "RUT", "Contrato", "Carta de Autorización", "Cámara de Comercio", "Estados Financieros", "Cédula Rep. Legal"];
 const DOCS_GLOBALES_KEY = "docs_globales";
 
 const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
