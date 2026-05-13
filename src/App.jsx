@@ -500,16 +500,28 @@ const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) 
           <textarea style={{ ...S.input, minHeight: 60, resize: "vertical" }} value={form.notas} onChange={e => set("notas", e.target.value)} />
         </div>
 
-        {/* Envío a oficina */}
-        <div style={{ gridColumn: "1/-1", display: "flex", alignItems: "center", gap: 12, background: form.envioOficina ? "#f0fdf4" : BLUE.light, border: `1px solid ${form.envioOficina ? "#bbf7d0" : BLUE.border}`, borderRadius: 10, padding: "12px 16px" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
-            <input type="checkbox" checked={form.envioOficina} onChange={e => set("envioOficina", e.target.checked)}
-              style={{ width: 18, height: 18, accentColor: "#16a34a", cursor: "pointer" }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: form.envioOficina ? "#16a34a" : BLUE.text }}>
-              {form.envioOficina ? "✓ Enviado a cotización" : "Enviado a cotización"}
-            </span>
-          </label>
-        </div>
+        {/* Envío a cotización — solo habilitado si todos los docs están completos */}
+        {(() => {
+          const ramoObj = ramos.find(r => r.nombre === form.tipoSeguro);
+          const docsDelRamo = ramoObj?.documentos ? Object.entries(ramoObj.documentos).filter(([,v]) => v).map(([k]) => k) : [];
+          const todosCompletos = docsDelRamo.length > 0 && docsDelRamo.every(d => form.documentosChecklist[d] === "Sí");
+          const bloqueado = docsDelRamo.length > 0 && !todosCompletos;
+          return (
+            <div style={{ gridColumn: "1/-1", display: "flex", alignItems: "center", gap: 12, background: form.envioOficina ? "#f0fdf4" : bloqueado ? "#fafafa" : BLUE.light, border: `1px solid ${form.envioOficina ? "#bbf7d0" : bloqueado ? "#e5e7eb" : BLUE.border}`, borderRadius: 10, padding: "12px 16px", opacity: bloqueado ? 0.6 : 1 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: bloqueado ? "not-allowed" : "pointer", flex: 1 }}>
+                <input type="checkbox" checked={form.envioOficina} onChange={e => !bloqueado && set("envioOficina", e.target.checked)}
+                  disabled={bloqueado}
+                  style={{ width: 18, height: 18, accentColor: "#16a34a", cursor: bloqueado ? "not-allowed" : "pointer" }} />
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: form.envioOficina ? "#16a34a" : bloqueado ? "#aaa" : BLUE.text }}>
+                    {form.envioOficina ? "✓ Enviado a cotización" : "Enviado a cotización"}
+                  </span>
+                  {bloqueado && <div style={{ fontSize: 11.5, color: "#f59e0b", marginTop: 2 }}>⚠ Completa todos los documentos primero</div>}
+                </div>
+              </label>
+            </div>
+          );
+        })()}
       </div>
     </Modal>
   );
@@ -1012,45 +1024,63 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
         <div style={S.searchBar}><Icon name="search" size={16} /><input style={S.searchInput} placeholder="Buscar…" value={q} onChange={e => setQ(e.target.value)} /></div>
       </div>
 
-      {/* Tabla Interesados */}
-        <div style={S.tableWrap}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr 110px" }}>
-            <span>Cliente</span><span>Tipo Seguro</span><span>Fecha</span><span>Cotizaciones</span><span>Oficina</span><span>Acciones</span>
-          </div>
-          {interesadosFiltrados.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay leads registrados</div>
-            : interesadosFiltrados.map(i => {
-              const nCots = cotizaciones.filter(c => c.interesadoId === i.id).length;
-              const cliente = clientes.find(c => c.id === i.clienteId);
-              return (
-                <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr 110px" }}
-                  onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
-                  onMouseLeave={e => e.currentTarget.style.background = ""}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{cliente?.nombre || i.nombre || "—"}</div>
-                    <div style={{ fontSize: 11.5, color: "#888" }}>{cliente?.email || ""}</div>
-                  </div>
-                  <div>
-                    <span style={S.chip(BLUE.primary)}>{i.tipoSeguro || "—"}</span>
-                    {RAMOS_CHECKLIST.includes(i.tipoSeguro) && (
-                      <div style={{ fontSize: 11, color: "#888", marginTop: 3 }}>{i.tipoPersona || ""}</div>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "#555" }}>{fmtDate(i.fechaRegistro)}</div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <span style={S.chip(nCots > 0 ? "#16a34a" : "#f59e0b")}>{nCots > 0 ? `${nCots} cot.` : "Sin cotizar"}</span>
-                  </div>
-                  <div>{i.envioOficina ? <span style={S.chip("#16a34a")}>✓ Enviado</span> : <span style={S.chip("#6b7280")}>Pendiente</span>}</div>
-                  <div style={{ display: "flex", gap: 3 }}>
-                    <button title="Nueva Cotización" style={{ ...S.btn("secondary"), padding: "5px 10px", fontSize: 12 }} onClick={() => setShowCotizacion(i)}>
-                      Cotizar
-                    </button>
-                    <button style={S.btn("ghost")} onClick={() => { setEditInteresado(i); }}><Icon name="edit" size={14} /></button>
-                    {esAdmin(userRol) && <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelInteresado(i)}><Icon name="trash" size={14} /></button>}
-                  </div>
-                </div>
-              );
-            })}
+      {/* Tabla Leads */}
+      <div style={S.tableWrap}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "50px 1fr 1.2fr 1.2fr 1fr 1fr 110px" }}>
+          <span>#</span><span>Fecha</span><span>Cliente</span><span>Tipo Seguro</span><span>Estado Docs</span><span>Enviado a Cotización</span><span>Acciones</span>
         </div>
+        {interesadosFiltrados.length === 0
+          ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No hay leads registrados</div>
+          : interesadosFiltrados.map((i, idx) => {
+            const cliente = clientes.find(c => c.id === i.clienteId);
+            const ramoObj = ramos.find(r => r.nombre === i.tipoSeguro);
+            const docsDelRamo = ramoObj?.documentos
+              ? Object.entries(ramoObj.documentos).filter(([, v]) => v).map(([k]) => k)
+              : [];
+            const checklist = i.documentosChecklist || {};
+            const todosCompletos = docsDelRamo.length > 0 && docsDelRamo.every(d => checklist[d] === "Sí");
+            const algunoMarcado = docsDelRamo.some(d => checklist[d] === "Sí");
+            const estadoDocs = docsDelRamo.length === 0 ? null : todosCompletos ? "Completos" : "Incompletos";
+            const estadoColor = todosCompletos ? "#16a34a" : "#f59e0b";
+
+            return (
+              <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "50px 1fr 1.2fr 1.2fr 1fr 1fr 110px" }}
+                onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
+                onMouseLeave={e => e.currentTarget.style.background = ""}>
+                <div style={{ fontWeight: 700, color: "#aaa", fontSize: 13 }}>{idx + 1}</div>
+                <div style={{ fontSize: 13, color: "#555" }}>{fmtDate(i.fechaRegistro)}</div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{cliente?.nombre || i.nombre || "—"}</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>{cliente?.email || ""}</div>
+                </div>
+                <span style={S.chip(BLUE.primary)}>{i.tipoSeguro || "—"}</span>
+                <div>
+                  {estadoDocs
+                    ? <span style={S.badge(estadoColor)}>{estadoDocs === "Completos" ? "✓ Completos" : "⚠ Incompletos"}</span>
+                    : <span style={{ fontSize: 12, color: "#ccc" }}>—</span>}
+                </div>
+                <div>
+                  {i.envioOficina
+                    ? <span style={S.badge("#16a34a")}>✓ Sí</span>
+                    : <span style={S.badge("#6b7280")}>No</span>}
+                </div>
+                <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                  {/* Estado dinámico */}
+                  {i.envioOficina
+                    ? <span style={{ ...S.badge("#16a34a"), fontSize: 11.5, whiteSpace: "nowrap" }}>En Cotización</span>
+                    : docsDelRamo.length === 0
+                      ? <span style={{ ...S.badge(BLUE.primary), fontSize: 11.5, whiteSpace: "nowrap" }}>Llamar al Cliente</span>
+                      : !todosCompletos
+                        ? <span style={{ ...S.badge("#f59e0b"), fontSize: 11.5, whiteSpace: "nowrap" }}>Pendiente Docs</span>
+                        : <span style={{ ...S.badge("#16a34a"), fontSize: 11.5, whiteSpace: "nowrap" }}>Listo</span>
+                  }
+                  <button style={S.btn("ghost")} onClick={() => setEditInteresado(i)}><Icon name="edit" size={14} /></button>
+                  {esAdmin(userRol) && <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelInteresado(i)}><Icon name="trash" size={14} /></button>}
+                </div>
+              </div>
+            );
+          })}
+      </div>
 
       {/* Modales */}
       {(showFormInteresado || editInteresado) && (
@@ -1580,8 +1610,10 @@ export default function App() {
 
   // CRUD Interesados
   const addInteresado = async (f) => {
+    const clienteNombre = clientes.find(c => c.id === f.clienteId)?.nombre || "";
     const { data, error } = await supabase.from('interesados').insert([{
       cliente_id: f.clienteId,
+      nombre: clienteNombre,
       tipo_seguro: f.tipoSeguro,
       documentos_checklist: f.documentosChecklist || {},
       envio_oficina: f.envioOficina || false,
@@ -1593,15 +1625,17 @@ export default function App() {
     if (data) setInteresados(prev => [mapInteresado(data), ...prev]);
   };
   const editInteresado = async (f) => {
+    const clienteNombre = clientes.find(c => c.id === f.clienteId)?.nombre || "";
     const { error } = await supabase.from('interesados').update({
       cliente_id: f.clienteId,
+      nombre: clienteNombre,
       tipo_seguro: f.tipoSeguro,
       documentos_checklist: f.documentosChecklist || {},
       envio_oficina: f.envioOficina || false,
       notas: f.notas || "",
     }).eq('id', f.id);
     if (error) { console.error('editInteresado error:', error); return; }
-    setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, clienteId: f.clienteId, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
+    setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, clienteId: f.clienteId, nombre: clienteNombre, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
   };
   const deleteInteresado = async (id) => {
     await supabase.from('interesados').delete().eq('id', id);
