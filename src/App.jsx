@@ -1997,12 +1997,26 @@ const SoatPage = () => {
   const [filtroAgente, setFiltroAgente] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [modal, setModal] = useState(null);
+  const [editModal, setEditModal] = useState(null);
   const [agentes, setAgentes] = useState(["Sin asignar","YELI","ENCARNACION","SANTIAGO","WEYMAR"]);
   const [nuevoAgente, setNuevoAgente] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [activeTab, setActiveTab] = useState("info");
   const [callLog, setCallLog] = useState({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""});
   const fileRef = useRef();
+
+  const descargarTemplate = async () => {
+    try {
+      const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+      const cols = ["Nombre","Telefono","Placa","Fecha Compra","Estado"];
+      const ejemplo = [["MARIA LOPEZ","3001234567","ABC123","16/01/2025",""],["JUAN PEREZ","3109876543","XYZ789","22/03/2025",""]];
+      const ws = XLSX.utils.aoa_to_sheet([cols,...ejemplo]);
+      ws["!cols"] = cols.map(()=>({wch:20}));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"Clientes SOAT");
+      XLSX.writeFile(wb,"template_soat.xlsx");
+    } catch(e) { alert("Error: "+e.message); }
+  };
 
   useEffect(() => { try { localStorage.setItem(SOAT_KEY, JSON.stringify(clientes)); } catch {} }, [clientes]);
 
@@ -2094,6 +2108,7 @@ const SoatPage = () => {
           <div style={S.pageSub}>{clientes.length} clientes registrados</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
+          <button onClick={descargarTemplate} style={{...S.btn("ghost"),border:`1px solid ${BLUE.border}`}}>📄 Descargar Template</button>
           <button onClick={()=>fileRef.current.click()} style={S.btn("secondary")}><Icon name="upload" size={16}/>Importar</button>
           <button onClick={exportXLSX_SOAT} style={S.btn("success")}><Icon name="download" size={16}/>Exportar Excel</button>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={importCSV} style={{display:"none"}}/>
@@ -2181,12 +2196,50 @@ const SoatPage = () => {
                   </select>
                   <div style={{fontSize:11.5,color:"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.proximaAccion||"—"}</div>
                   <div>{c.fechaProxima?<span style={{fontSize:11,color:urgente?"#dc2626":"#555",background:urgente?"#fee2e2":"transparent",padding:urgente?"2px 7px":"0",borderRadius:20}}>{urgente?"🔔 ":""}{c.fechaProxima}</span>:"—"}</div>
-                  <button onClick={()=>openModal(c)} style={{...S.btn("secondary"),padding:"4px 10px",fontSize:12}}>Ver</button>
+                  <div style={{display:"flex",gap:4}}>
+                    <button onClick={()=>openModal(c)} style={{...S.btn("secondary"),padding:"4px 8px",fontSize:11}}>Ver</button>
+                    <button onClick={()=>setEditModal({...c})} style={{...S.btn("ghost"),padding:"4px 8px",fontSize:11}}><Icon name="edit" size={13}/></button>
+                  </div>
                 </div>
               );
             })}
         </div>
       </div>
+
+      {/* Modal edición rápida */}
+      {editModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}} onClick={()=>setEditModal(null)}>
+          <div style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:480,padding:28,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div style={{fontWeight:700,fontSize:16,color:BLUE.text}}>Editar Cliente</div>
+              <button onClick={()=>setEditModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#aaa"}}>×</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+              {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de Compra","fechaCompra"],["Año-Mes (MM-AAAA)","anioMes"]].map(([l,f])=>(
+                <div key={f} style={{gridColumn:f==="nombre"?"1/-1":"auto"}}>
+                  <label style={{fontSize:11,color:"#6b87b0",textTransform:"uppercase",marginBottom:4,display:"block"}}>{l}</label>
+                  <input value={editModal[f]||""} onChange={e=>setEditModal(p=>({...p,[f]:e.target.value}))}
+                    style={{background:"#f8faff",border:`1px solid ${BLUE.border}`,borderRadius:8,padding:"8px 11px",color:BLUE.text,fontSize:13,width:"100%",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                </div>
+              ))}
+              <div>
+                <label style={{fontSize:11,color:"#6b87b0",textTransform:"uppercase",marginBottom:4,display:"block"}}>Fase</label>
+                <select value={editModal.fase} onChange={e=>setEditModal(p=>({...p,fase:e.target.value}))}
+                  style={{background:"#f8faff",border:`1px solid ${BLUE.border}`,borderRadius:8,padding:"8px 11px",fontSize:13,width:"100%",fontFamily:"inherit"}}>
+                  {FASES_SOAT.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setEditModal(null)} style={S.btn("secondary")}>Cancelar</button>
+              <button style={S.btn("primary")} onClick={()=>{
+                setClientes(p=>p.map(c=>c.id===editModal.id?{...c,...editModal}:c));
+                setEditModal(null);
+              }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Agentes */}
       <div style={{marginTop:20,background:"#fff",border:`1px solid ${BLUE.border}`,borderRadius:12,padding:"14px 18px"}}>
