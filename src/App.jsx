@@ -2044,9 +2044,9 @@ const SoatPage = () => {
     try {
       const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
       if (!rows.length) { setImportMsg("❌ El archivo está vacío"); return; }
       const keys = Object.keys(rows[0]);
       const col = (...names) => { for (const n of names) { const k = keys.find(k => k.toLowerCase().includes(n.toLowerCase())); if (k) return k; } return null; };
@@ -2054,15 +2054,44 @@ const SoatPage = () => {
       const kF=col("fecha","date","compra"), kE=col("estado","status","fase");
       if (!kN) { setImportMsg("❌ No se encontró columna 'Nombre'"); return; }
       const fm={"interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion","volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro","ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion","interesado":"interesado","compró":"compro","no interesado":"no_interes"};
+      
+      const parseAnioMes = (val) => {
+        if (!val) return "";
+        try {
+          // Si es Date object
+          if (val instanceof Date) {
+            const m = String(val.getMonth()+1).padStart(2,"0");
+            return `${m}-${val.getFullYear()}`;
+          }
+          const s = String(val).trim();
+          if (!s) return "";
+          // dd/mm/yyyy o d/m/yyyy
+          const parts = s.split(/[\/\-\.]/);
+          if (parts.length === 3) {
+            let d, m, y;
+            if (parts[2].length === 4) { // dd/mm/yyyy
+              [d, m, y] = parts;
+            } else if (parts[0].length === 4) { // yyyy-mm-dd
+              [y, m, d] = parts;
+            } else return "";
+            return `${m.padStart(2,"0")}-${y}`;
+          }
+        } catch(e) {}
+        return "";
+      };
+
       const nuevos = rows.map(r => {
-        const fechaVal = kF ? String(r[kF]||"").trim() : "";
-        const anioMesVal = (() => { try { const d=parseDateSoat(fechaVal); if(!d||isNaN(d))return""; const m=String(d.getMonth()+1).padStart(2,"0"); return `${m}-${d.getFullYear()}`; } catch{return"";} })();
+        const fechaRaw = kF ? r[kF] : "";
+        const fechaStr = fechaRaw instanceof Date
+          ? `${String(fechaRaw.getDate()).padStart(2,"0")}/${String(fechaRaw.getMonth()+1).padStart(2,"0")}/${fechaRaw.getFullYear()}`
+          : String(fechaRaw||"").trim();
+        const anioMesVal = parseAnioMes(fechaRaw);
         const er = kE ? String(r[kE]||"").toLowerCase().trim() : "";
         return { ...soatEmpty(), id: soatNewId(),
           nombre: String(r[kN]||"").trim(),
           telefono: kT ? String(r[kT]||"").trim() : "",
           placa: kP ? String(r[kP]||"").trim() : "",
-          fechaCompra: fechaVal, anioMes: anioMesVal,
+          fechaCompra: fechaStr, anioMes: anioMesVal,
           fase: fm[er] || "pendiente",
           agente: "Sin asignar",
         };
@@ -2071,7 +2100,7 @@ const SoatPage = () => {
       setImportMsg(`✅ ${nuevos.length} clientes importados`);
       setTimeout(()=>setImportMsg(""),4000);
     } catch(err) {
-      setImportMsg("❌ Error leyendo el archivo: " + err.message);
+      setImportMsg("❌ Error: " + err.message);
       console.error(err);
     }
     e.target.value="";
@@ -2242,12 +2271,19 @@ const SoatPage = () => {
                 </select>
               </div>
             </div>
-            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-              <button onClick={()=>setEditModal(null)} style={S.btn("secondary")}>Cancelar</button>
-              <button style={S.btn("primary")} onClick={()=>{
-                setClientes(p=>p.map(c=>c.id===editModal.id?{...c,...editModal}:c));
+            <div style={{display:"flex",gap:10,justifyContent:"space-between"}}>
+              <button style={{...S.btn("danger")}} onClick={()=>{
+                if(!confirm(`¿Eliminar a ${editModal.nombre}?`)) return;
+                setClientes(p=>p.filter(c=>c.id!==editModal.id));
                 setEditModal(null);
-              }}>Guardar</button>
+              }}>Eliminar</button>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setEditModal(null)} style={S.btn("secondary")}>Cancelar</button>
+                <button style={S.btn("primary")} onClick={()=>{
+                  setClientes(p=>p.map(c=>c.id===editModal.id?{...c,...editModal}:c));
+                  setEditModal(null);
+                }}>Guardar</button>
+              </div>
             </div>
           </div>
         </div>
