@@ -1991,8 +1991,26 @@ const soatEmpty = () => ({id: soatNewId(), nombre:"", telefono:"", placa:"", ani
 const parseDateSoat = (str) => { if(!str)return null; const s=str.trim(),p=s.split(/[-\/]/); if(p.length!==3)return null; try{return new Date(p[0].length===4?s:`${p[2]}-${p[1]}-${p[0]}`);}catch{return null;} };
 const diasRenSoat = (fc) => { const f=parseDateSoat(fc); if(!f)return null; const r=new Date(f); r.setFullYear(r.getFullYear()+1); return Math.ceil((r-new Date())/86400000); };
 
+
+const mapSoat = (r) => ({
+  id: r.id, nombre: r.nombre||"", telefono: r.telefono||"", placa: r.placa||"",
+  anioMes: r.anio_mes||"", fechaCompra: r.fecha_compra||"", fase: r.fase||"pendiente",
+  agente: r.agente||"Sin asignar", intentos: r.intentos||0,
+  proximaAccion: r.proxima_accion||"", fechaProxima: r.fecha_proxima||"",
+  motivoNoCompra: r.motivo_no_compra||"", notas: r.notas||"",
+  historial: r.historial||[],
+});
+const toSoatRow = (c) => ({
+  nombre: c.nombre, telefono: c.telefono, placa: c.placa,
+  anio_mes: c.anioMes, fecha_compra: c.fechaCompra, fase: c.fase,
+  agente: c.agente, intentos: c.intentos||0,
+  proxima_accion: c.proximaAccion, fecha_proxima: c.fechaProxima,
+  motivo_no_compra: c.motivoNoCompra, notas: c.notas,
+  historial: c.historial||[],
+});
 const SoatPage = () => {
-  const [clientes, setClientes] = useState(() => { try { const s=localStorage.getItem(SOAT_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [clientes, setClientes] = useState([]);
+  const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
   const [filtroAgente, setFiltroAgente] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
@@ -2004,6 +2022,13 @@ const SoatPage = () => {
   const [activeTab, setActiveTab] = useState("info");
   const [callLog, setCallLog] = useState({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""});
   const fileRef = useRef();
+
+  useEffect(() => {
+    supabase.from('soat_clientes').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      if (data) setClientes(data.map(mapSoat));
+      setLoadingSoat(false);
+    });
+  }, []);
 
   const descargarTemplate = async () => {
     try {
@@ -2018,24 +2043,33 @@ const SoatPage = () => {
     } catch(e) { alert("Error: "+e.message); }
   };
 
-  useEffect(() => { try { localStorage.setItem(SOAT_KEY, JSON.stringify(clientes)); } catch {} }, [clientes]);
-
-  const updateC = (id, field, value) => {
+  const updateC = async (id, field, value) => {
+    const dbField = {fase:'fase',agente:'agente',proximaAccion:'proxima_accion',fechaProxima:'fecha_proxima',motivoNoCompra:'motivo_no_compra',notas:'notas',nombre:'nombre',telefono:'telefono',placa:'placa',anioMes:'anio_mes',fechaCompra:'fecha_compra'}[field] || field;
     setClientes(p => p.map(c => c.id===id ? {...c,[field]:value} : c));
     if(modal?.id===id) setModal(p => ({...p,[field]:value}));
+    await supabase.from('soat_clientes').update({[dbField]:value}).eq('id',id);
   };
 
   const openModal = (c) => { setModal(c); setActiveTab("info"); setCallLog({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""}); };
 
-  const registrarLlamada = () => {
+  const registrarLlamada = async () => {
     if(!callLog.resultado) return;
     const entry = {fecha: new Date().toLocaleDateString("es-CO"), ...callLog, agente: modal.agente};
     const updated = {...modal, historial:[entry,...(modal.historial||[])], intentos:(modal.intentos||0)+1, fase:callLog.resultado, proximaAccion:callLog.proximaAccion||modal.proximaAccion, fechaProxima:callLog.fechaProxima||modal.fechaProxima, motivoNoCompra:callLog.motivo||modal.motivoNoCompra};
     setClientes(p => p.map(c => c.id===modal.id ? updated : c));
+    await supabase.from('soat_clientes').update({
+      historial: updated.historial, intentos: updated.intentos, fase: updated.fase,
+      proxima_accion: updated.proximaAccion, fecha_proxima: updated.fechaProxima,
+      motivo_no_compra: updated.motivoNoCompra,
+    }).eq('id', modal.id);
     setModal(updated); setCallLog({resultado:"",motivo:"",proximaAccion:"",fechaProxima:"",nota:""}); setActiveTab("historial");
   };
 
-  const deleteC = (id) => { if(!confirm("¿Eliminar cliente?")) return; setClientes(p => p.filter(c => c.id!==id)); setModal(null); };
+  const deleteC = async (id) => {
+    if(!confirm("¿Eliminar cliente?")) return;
+    await supabase.from('soat_clientes').delete().eq('id', id);
+    setClientes(p => p.filter(c => c.id!==id)); setModal(null);
+  };
   const addCliente = () => { const c=soatEmpty(); setClientes(p=>[c,...p]); openModal(c); };
 
   const importCSV = async (e) => {
@@ -2096,8 +2130,16 @@ const SoatPage = () => {
           agente: "Sin asignar",
         };
       }).filter(c => c.nombre);
-      setClientes(p=>[...p,...nuevos]);
-      setImportMsg(`✅ ${nuevos.length} clientes importados`);
+      // Insert in batches of 50
+      const BATCH = 50;
+      let insertados = [];
+      for (let i=0; i<nuevos.length; i+=BATCH) {
+        const { data, error } = await supabase.from('soat_clientes').insert(nuevos.slice(i,i+BATCH).map(toSoatRow)).select();
+        if (error) throw error;
+        if (data) insertados = insertados.concat(data.map(mapSoat));
+      }
+      setClientes(p=>[...insertados,...p]);
+      setImportMsg(`✅ ${insertados.length} clientes importados`);
       setTimeout(()=>setImportMsg(""),4000);
     } catch(err) {
       setImportMsg("❌ Error: " + err.message);
@@ -2156,6 +2198,7 @@ const SoatPage = () => {
         </div>
       </div>
 
+      {loadingSoat && <div style={{textAlign:"center",padding:40,color:"#6b87b0"}}>Cargando clientes SOAT…</div>}
       {/* Alertas */}
       {importMsg && <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#16a34a"}}>{importMsg}</div>}
       {alertaHoy.length>0 && <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#92400e"}}>🔔 <strong>{alertaHoy.length} cliente{alertaHoy.length>1?"s":""}</strong> con seguimiento pendiente para hoy o antes</div>}
@@ -2272,14 +2315,16 @@ const SoatPage = () => {
               </div>
             </div>
             <div style={{display:"flex",gap:10,justifyContent:"space-between"}}>
-              <button style={{...S.btn("danger")}} onClick={()=>{
+              <button style={{...S.btn("danger")}} onClick={async ()=>{
                 if(!confirm(`¿Eliminar a ${editModal.nombre}?`)) return;
+                await supabase.from('soat_clientes').delete().eq('id', editModal.id);
                 setClientes(p=>p.filter(c=>c.id!==editModal.id));
                 setEditModal(null);
               }}>Eliminar</button>
               <div style={{display:"flex",gap:10}}>
                 <button onClick={()=>setEditModal(null)} style={S.btn("secondary")}>Cancelar</button>
-                <button style={S.btn("primary")} onClick={()=>{
+                <button style={S.btn("primary")} onClick={async ()=>{
+                  await supabase.from('soat_clientes').update(toSoatRow(editModal)).eq('id', editModal.id);
                   setClientes(p=>p.map(c=>c.id===editModal.id?{...c,...editModal}:c));
                   setEditModal(null);
                 }}>Guardar</button>
