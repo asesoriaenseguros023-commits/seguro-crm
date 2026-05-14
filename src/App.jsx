@@ -2013,6 +2013,7 @@ const SoatPage = () => {
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
   const [filtroAgente, setFiltroAgente] = useState("Todos");
+  const [filtroFechaCompra, setFiltroFechaCompra] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
@@ -2160,11 +2161,14 @@ const SoatPage = () => {
     } catch(e) { console.error(e); alert("Error exportando: "+e.message); }
   };
 
+  const fechasCompra = useMemo(() => [...new Set(clientes.map(c => c.fechaCompra).filter(Boolean))].sort(), [clientes]);
+
   const filtrados = clientes.filter(c => {
     const mF=filtroFase==="Todos"||c.fase===filtroFase;
     const mA=filtroAgente==="Todos"||c.agente===filtroAgente;
+    const mFC=filtroFechaCompra==="Todos"||c.fechaCompra===filtroFechaCompra;
     const mB=!busqueda||c.nombre.toLowerCase().includes(busqueda.toLowerCase())||(c.telefono||"").includes(busqueda)||(c.placa||"").toLowerCase().includes(busqueda.toLowerCase());
-    return mF&&mA&&mB;
+    return mF&&mA&&mFC&&mB;
   });
 
   const stats = {
@@ -2233,11 +2237,15 @@ const SoatPage = () => {
       </div>
 
       {/* Filtros */}
-      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center"}}>
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
         <div style={S.searchBar}><Icon name="search" size={16}/><input style={S.searchInput} placeholder="Buscar nombre, teléfono o placa..." value={busqueda} onChange={e=>setBusqueda(e.target.value)}/></div>
         <select value={filtroAgente} onChange={e=>setFiltroAgente(e.target.value)} style={{...S.select,width:"auto",padding:"7px 12px"}}>
           <option value="Todos">Todos los agentes</option>
           {agentes.map(a=><option key={a}>{a}</option>)}
+        </select>
+        <select value={filtroFechaCompra} onChange={e=>setFiltroFechaCompra(e.target.value)} style={{...S.select,width:"auto",padding:"7px 12px"}}>
+          <option value="Todos">Todas las F. Compra</option>
+          {fechasCompra.map(f=><option key={f}>{f}</option>)}
         </select>
         <span style={{fontSize:12,color:"#6b87b0",whiteSpace:"nowrap"}}>{filtrados.length} registros</span>
       </div>
