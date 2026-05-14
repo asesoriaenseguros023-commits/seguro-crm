@@ -911,7 +911,7 @@ const ACCIONES_COT = ["En Curso", "Cliente Rechaza", "Póliza Emitida"];
 const accionColor = (a) => ({ "En Curso": "#f59e0b", "Cliente Rechaza": "#dc2626", "Póliza Emitida": "#16a34a" }[a] || "#6b7280");
 const estadoCotColor2 = (e) => ({ "Corrección SARLAFT": "#f59e0b", "Corrección Contrato": "#d97706", "Cotización Completada": "#16a34a", "Pendiente": "#6b7280" }[e] || "#6b7280");
 
-const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, aseguradoras, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
+const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, aseguradoras, onAddCotizacion, onEditCotizacion, onDeleteCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
   const [q, setQ] = useState("");
   const [editModal, setEditModal] = useState(null); // cotizacion being edited
   const [saving, setSaving] = useState(false);
@@ -983,8 +983,7 @@ const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, 
                     <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar"
                       onClick={async () => {
                         if (!confirm(`¿Eliminar esta cotización de ${c.clienteNombre || "este cliente"}?`)) return;
-                        await supabase.from('cotizaciones').delete().eq('id', c.id);
-                        setCotizaciones(prev => prev.filter(x => x.id !== c.id));
+                        await onDeleteCotizacion(c.id);
                       }}>
                       <Icon name="trash" size={14} />
                     </button>
@@ -2849,6 +2848,11 @@ export default function App() {
     setAseguradoras(prev => prev.filter(x => x.id !== id));
   };
 
+  const deleteCotizacion = async (id) => {
+    await supabase.from('cotizaciones').delete().eq('id', id);
+    setCotizaciones(prev => prev.filter(x => x.id !== id));
+  };
+
   const deletePoliza = async (id) => {
     await supabase.from('polizas').delete().eq('id', id);
     setPolizas(prev => prev.filter(x => x.id !== id));
@@ -2903,7 +2907,7 @@ export default function App() {
       case "interesados":
         return <InteresadosPage interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} clientes={clientes} onAddInteresado={addInteresado} onEditInteresado={editInteresado} onDeleteInteresado={deleteInteresado} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "cotizaciones":
-        return <CotizacionesPage cotizaciones={cotizaciones} interesados={interesados} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} aseguradoras={aseguradoras} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
+        return <CotizacionesPage cotizaciones={cotizaciones} interesados={interesados} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} aseguradoras={aseguradoras} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onDeleteCotizacion={deleteCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "polizas":
         return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} aseguradoras={aseguradoras} onDelete={deletePoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
