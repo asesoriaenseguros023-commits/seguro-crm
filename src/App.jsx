@@ -1129,7 +1129,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
 
       {/* Tabla Leads */}
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 100px 1.4fr 1fr 130px 140px 200px" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 100px 1.6fr 1fr 140px 150px 1fr" }}>
           <span>#</span><span>Fecha</span><span>Cliente</span><span>Tipo Seguro</span><span>Estado Docs</span><span>Enviado a Cotización</span><span>Acciones</span>
         </div>
         {interesadosFiltrados.length === 0
@@ -1147,7 +1147,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
             const estadoColor = todosCompletos ? "#16a34a" : "#f59e0b";
 
             return (
-              <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 100px 1.4fr 1fr 130px 140px 200px" }}
+              <div key={i.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 100px 1.6fr 1fr 140px 150px 1fr" }}
                 onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
                 <div style={{ fontWeight: 700, color: "#aaa", fontSize: 13 }}>{idx + 1}</div>
