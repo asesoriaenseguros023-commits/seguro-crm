@@ -64,10 +64,10 @@ const Icon = ({ name, size = 18 }) => {
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const S = {
   app: { display: "flex", minHeight: "100vh", background: `linear-gradient(135deg, ${BLUE.sidebarDark} 0%, #0a2255 100%)`, fontFamily: "'DM Sans', sans-serif", color: "#1a1a1a" },
-  sidebar: { width: 230, background: `linear-gradient(180deg, ${BLUE.sidebarDark} 0%, ${BLUE.sidebar} 100%)`, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" },
+  sidebar: { width: 210, background: `linear-gradient(180deg, ${BLUE.sidebarDark} 0%, ${BLUE.sidebar} 100%)`, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" },
   main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
   topbar: { background: "#fff", borderBottom: `1px solid ${BLUE.border}`, padding: "0 28px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 },
-  content: { flex: 1, padding: "28px 32px", overflowY: "auto", background: "#f0f4ff" },
+  content: { flex: 1, padding: "20px 16px", overflowY: "auto", background: "#f0f4ff" },
   sbLogo: { padding: "20px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.1)" },
   sbLogoText: { fontSize: 18, color: "#fff", fontWeight: 700, letterSpacing: -0.5 },
   sbLogoSub: { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 3 },
@@ -125,6 +125,12 @@ const FontLoader = () => {
     link.rel = "stylesheet";
     link.href = "https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap";
     document.head.appendChild(link);
+    // Reset body margins
+    document.body.style.margin = "0";
+    document.body.style.padding = "0";
+    document.documentElement.style.margin = "0";
+    document.documentElement.style.padding = "0";
+    document.body.style.overflowX = "hidden";
   }, []);
   return null;
 };
@@ -2136,8 +2142,8 @@ const SoatPage = () => {
       {/* Tabla */}
       <div style={{...S.tableWrap,overflowX:"auto"}}>
         <div style={{minWidth:900}}>
-          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"1.5fr 1fr 0.8fr 0.9fr 0.7fr 1.4fr 0.5fr 0.9fr 1.2fr 0.8fr 80px"}}>
-            <span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renovación</span><span>Fase</span><span>Intentos</span><span>Agente</span><span>Próxima acción</span><span>Fecha próx.</span><span></span>
+          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"1.4fr 0.9fr 0.7fr 0.8fr 0.6fr 1.3fr 0.5fr 0.8fr 1.1fr 0.7fr 70px"}}>
+            <span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renovación</span><span>Fase</span><span>Int.</span><span>Agente</span><span>Próxima acción</span><span>Fecha</span><span></span>
           </div>
           {filtrados.length===0
             ? <div style={{padding:40,textAlign:"center",color:"#aaa"}}>Sin registros. Importa un CSV o agrega clientes.</div>
@@ -2146,7 +2152,7 @@ const SoatPage = () => {
               const fase=FM_SOAT[c.fase]||FASES_SOAT[0];
               const urgente=c.fechaProxima&&parseDateSoat(c.fechaProxima)<=new Date();
               return (
-                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"1.5fr 1fr 0.8fr 0.9fr 0.7fr 1.4fr 0.5fr 0.9fr 1.2fr 0.8fr 80px"}}
+                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"1.4fr 0.9fr 0.7fr 0.8fr 0.6fr 1.3fr 0.5fr 0.8fr 1.1fr 0.7fr 70px"}}
                   onMouseEnter={e=>e.currentTarget.style.background=BLUE.light}
                   onMouseLeave={e=>e.currentTarget.style.background=""}>
                   <div style={{fontWeight:600,fontSize:13,cursor:"pointer",color:BLUE.primary}} onClick={()=>openModal(c)}>
