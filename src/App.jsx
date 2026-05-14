@@ -2510,30 +2510,27 @@ export default function App() {
       notas: f.notas || "",
     }).eq('id', f.id);
     if (error) { console.error('editInteresado error:', error); return; }
-    // Si se marcó envioOficina y antes no estaba, crear cotización automáticamente
-    const anterior = interesados.find(x => x.id === f.id);
-    if (f.envioOficina && !anterior?.envioOficina) {
+    // Si tiene envioOficina marcado, verificar y crear cotización si no existe
+    if (f.envioOficina) {
       try {
-        const { data: cot, error: cotError } = await supabase.from('cotizaciones').insert([{
-          lead_id: f.id,
-          cliente_nombre: clienteNombre,
-          cliente_telefono: cliente?.celular || cliente?.telefono || "",
-          ramo: f.tipoSeguro,
-          estado: "Pendiente",
-          accion: "En Curso",
-          fecha_cotizacion: today(),
-        }]).select().single();
-        if (cotError) {
-          // Si ya existe (409 conflict), cargar la existente
-          if (cotError.code === '23505') {
-            const { data: existing } = await supabase.from('cotizaciones').select('*').eq('lead_id', f.id).single();
-            if (existing) setCotizaciones(prev => prev.some(c => c.id === existing.id) ? prev : [mapCotizacion(existing), ...prev]);
-          } else {
-            console.error('Error creando cotización:', cotError);
-          }
+        const { data: existing } = await supabase.from('cotizaciones').select('*').eq('lead_id', f.id).limit(1);
+        if (!existing || existing.length === 0) {
+          const { data: cot, error: cotError } = await supabase.from('cotizaciones').insert([{
+            lead_id: f.id,
+            cliente_nombre: clienteNombre,
+            cliente_telefono: cliente?.celular || cliente?.telefono || "",
+            ramo: f.tipoSeguro,
+            estado: "Pendiente",
+            accion: "En Curso",
+            fecha_cotizacion: today(),
+          }]).select().single();
+          if (cotError) console.error('Error creando cotización:', cotError);
+          if (cot) setCotizaciones(prev => [mapCotizacion(cot), ...prev]);
+        } else {
+          // Ya existe — asegurarse que esté en el estado local
+          setCotizaciones(prev => prev.some(c => c.id === existing[0].id) ? prev : [mapCotizacion(existing[0]), ...prev]);
         }
-        if (cot) setCotizaciones(prev => [mapCotizacion(cot), ...prev]);
-      } catch(e) { console.error('Excepción creando cotización:', e); }
+      } catch(e) { console.error('Excepción cotización:', e); }
     }
     setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, clienteId: f.clienteId, nombre: clienteNombre, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
   };
