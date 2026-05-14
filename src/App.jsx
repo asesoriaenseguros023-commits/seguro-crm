@@ -2446,6 +2446,30 @@ export default function App() {
       if (ints) setInteresados(ints.map(mapInteresado));
       if (cots) setCotizaciones(cots.map(mapCotizacion));
       if (pols) setPolizas(pols.map(p => ({ ...mapPoliza(p), ramo: p.ramo, clienteNombre: p.cliente_nombre, clienteTelefono: p.cliente_telefono })));
+
+      // Auto-crear cotizaciones para leads con envio_oficina=true que no tengan cotización
+      if (ints && cots) {
+        const leadsConEnvio = ints.filter(i => i.envio_oficina);
+        const leadIdsConCot = new Set(cots.map(c => c.lead_id).filter(Boolean));
+        const leadsHuerfanos = leadsConEnvio.filter(i => !leadIdsConCot.has(i.id));
+        if (leadsHuerfanos.length > 0) {
+          const nuevasCots = leadsHuerfanos.map(i => {
+            const cliente = cls?.find(c => c.id === i.cliente_id);
+            return {
+              lead_id: i.id,
+              cliente_nombre: i.nombre,
+              cliente_telefono: cliente?.celular || cliente?.telefono || "",
+              ramo: i.tipo_seguro,
+              estado: "Pendiente",
+              accion: "En Curso",
+              fecha_cotizacion: today(),
+            };
+          });
+          const { data: creadas } = await supabase.from('cotizaciones').insert(nuevasCots).select();
+          if (creadas) setCotizaciones(prev => [...creadas.map(mapCotizacion), ...prev]);
+        }
+      }
+
       setLoading(false);
     };
     cargar();
