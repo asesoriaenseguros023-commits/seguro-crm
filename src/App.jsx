@@ -2038,31 +2038,43 @@ const SoatPage = () => {
   const deleteC = (id) => { if(!confirm("¿Eliminar cliente?")) return; setClientes(p => p.filter(c => c.id!==id)); setModal(null); };
   const addCliente = () => { const c=soatEmpty(); setClientes(p=>[c,...p]); openModal(c); };
 
-  const importCSV = (e) => {
+  const importCSV = async (e) => {
     const file=e.target.files[0]; if(!file)return;
-    const reader=new FileReader();
-    reader.onload = ev => {
-      const lines=ev.target.result.trim().split("\n");
-      const hdr=lines[0].toLowerCase().replace(/\r/g,"").split(/[,;]/);
-      const col=ks=>hdr.findIndex(h=>ks.some(p=>h.includes(p)));
-      const iN=col(["nombre","name"]),iT=col(["tel","cel","phone"]);
-      const iF=col(["ultima compra","fecha compra","fecha","date"]);
-      const iP=col(["placa","plate"]),iA=col(["asignado","agente","agent"]);
-      const iE=col(["estado","status"]),iV=col(["veces"]),iG=col(["grupo"]);
-      if(iN===-1){setImportMsg("❌ No se encontró columna 'nombre'");return;}
-      const fm={"interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion","volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro","ilocalizable":"ilocalizable"};
-      const nuevos=lines.slice(1).filter(l=>l.trim()).map(line=>{
-        const c=line.replace(/\r/g,"").split(/[,;]/);
-        const er=(iE>=0?c[iE]?.trim():"").toLowerCase();
-        const fechaVal = iF>=0?c[iF]?.trim():"";
+    setImportMsg("Leyendo archivo…");
+    try {
+      const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      if (!rows.length) { setImportMsg("❌ El archivo está vacío"); return; }
+      const keys = Object.keys(rows[0]);
+      const col = (...names) => { for (const n of names) { const k = keys.find(k => k.toLowerCase().includes(n.toLowerCase())); if (k) return k; } return null; };
+      const kN=col("nombre","name"), kT=col("tel","cel","phone"), kP=col("placa","plate");
+      const kF=col("fecha","date","compra"), kE=col("estado","status","fase");
+      if (!kN) { setImportMsg("❌ No se encontró columna 'Nombre'"); return; }
+      const fm={"interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion","volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro","ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion","interesado":"interesado","compró":"compro","no interesado":"no_interes"};
+      const nuevos = rows.map(r => {
+        const fechaVal = kF ? String(r[kF]||"").trim() : "";
         const anioMesVal = (() => { try { const d=parseDateSoat(fechaVal); if(!d||isNaN(d))return""; const m=String(d.getMonth()+1).padStart(2,"0"); return `${m}-${d.getFullYear()}`; } catch{return"";} })();
-        return{...soatEmpty(),id:soatNewId(),nombre:c[iN]?.trim()||"",telefono:iT>=0?c[iT]?.trim():"",fechaCompra:fechaVal,anioMes:anioMesVal,placa:iP>=0?c[iP]?.trim():"",agente:iA>=0&&c[iA]?.trim()?c[iA].trim():"Sin asignar",fase:fm[er]||"pendiente",intentos:iV>=0?parseInt(c[iV])||0:0};
-      }).filter(c=>c.nombre);
+        const er = kE ? String(r[kE]||"").toLowerCase().trim() : "";
+        return { ...soatEmpty(), id: soatNewId(),
+          nombre: String(r[kN]||"").trim(),
+          telefono: kT ? String(r[kT]||"").trim() : "",
+          placa: kP ? String(r[kP]||"").trim() : "",
+          fechaCompra: fechaVal, anioMes: anioMesVal,
+          fase: fm[er] || "pendiente",
+          agente: "Sin asignar",
+        };
+      }).filter(c => c.nombre);
       setClientes(p=>[...p,...nuevos]);
       setImportMsg(`✅ ${nuevos.length} clientes importados`);
       setTimeout(()=>setImportMsg(""),4000);
-    };
-    reader.readAsText(file); e.target.value="";
+    } catch(err) {
+      setImportMsg("❌ Error leyendo el archivo: " + err.message);
+      console.error(err);
+    }
+    e.target.value="";
   };
 
   const exportXLSX_SOAT = async () => {
