@@ -905,7 +905,7 @@ const ACCIONES_COT = ["En Curso", "Cliente Rechaza", "Póliza Emitida"];
 const accionColor = (a) => ({ "En Curso": "#f59e0b", "Cliente Rechaza": "#dc2626", "Póliza Emitida": "#16a34a" }[a] || "#6b7280");
 const estadoCotColor2 = (e) => ({ "Corrección SARLAFT": "#f59e0b", "Corrección Contrato": "#d97706", "Cotización Completada": "#16a34a", "Pendiente": "#6b7280" }[e] || "#6b7280");
 
-const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
+const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, aseguradoras, onAddCotizacion, onEditCotizacion, onEmitirPoliza, userRol, agenteActualId }) => {
   const [q, setQ] = useState("");
   const [editModal, setEditModal] = useState(null); // cotizacion being edited
   const [saving, setSaving] = useState(false);
@@ -1003,7 +1003,7 @@ const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, 
 
       {/* Modal registrar póliza emitida */}
       {editModal && (
-        <PolizaEmitidaModal cot={editModal} onSave={async (data) => {
+        <PolizaEmitidaModal cot={editModal} aseguradoras={aseguradoras} onSave={async (data) => {
           await handleSave(editModal, data);
           setEditModal(null);
         }} onClose={() => setEditModal(null)} />
@@ -1012,7 +1012,7 @@ const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, 
   );
 };
 
-const PolizaEmitidaModal = ({ cot, onSave, onClose }) => {
+const PolizaEmitidaModal = ({ cot, aseguradoras, onSave, onClose }) => {
   const [form, setForm] = useState({
     numeroPolizaEmitida: cot.numeroPolizaEmitida || "",
     aseguradoraEmitida: cot.aseguradoraEmitida || "",
@@ -1054,7 +1054,10 @@ const PolizaEmitidaModal = ({ cot, onSave, onClose }) => {
         </div>
         <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
           <label style={S.label}>Aseguradora *</label>
-          <input style={S.input} value={form.aseguradoraEmitida} onChange={e => set("aseguradoraEmitida", e.target.value)} placeholder="Nombre de la aseguradora" />
+          <select style={S.select} value={form.aseguradoraEmitida} onChange={e => set("aseguradoraEmitida", e.target.value)}>
+            <option value="">— Selecciona aseguradora —</option>
+            {(aseguradoras || []).filter(a => a.activo !== false).map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+          </select>
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Prima</label>
@@ -2510,9 +2513,7 @@ export default function App() {
     // Si se marcó envioOficina y antes no estaba, crear cotización automáticamente
     const anterior = interesados.find(x => x.id === f.id);
     if (f.envioOficina && !anterior?.envioOficina) {
-      // Verificar si ya existe cotización para este lead en Supabase
-      const { data: existing } = await supabase.from('cotizaciones').select('id').eq('lead_id', f.id).limit(1);
-      if (!existing || existing.length === 0) {
+      try {
         const { data: cot, error: cotError } = await supabase.from('cotizaciones').insert([{
           lead_id: f.id,
           cliente_nombre: clienteNombre,
@@ -2522,9 +2523,17 @@ export default function App() {
           accion: "En Curso",
           fecha_cotizacion: today(),
         }]).select().single();
-        if (cotError) console.error('Error creando cotización desde lead:', cotError);
+        if (cotError) {
+          // Si ya existe (409 conflict), cargar la existente
+          if (cotError.code === '23505') {
+            const { data: existing } = await supabase.from('cotizaciones').select('*').eq('lead_id', f.id).single();
+            if (existing) setCotizaciones(prev => prev.some(c => c.id === existing.id) ? prev : [mapCotizacion(existing), ...prev]);
+          } else {
+            console.error('Error creando cotización:', cotError);
+          }
+        }
         if (cot) setCotizaciones(prev => [mapCotizacion(cot), ...prev]);
-      }
+      } catch(e) { console.error('Excepción creando cotización:', e); }
     }
     setInteresados(prev => prev.map(x => x.id === f.id ? { ...x, clienteId: f.clienteId, nombre: clienteNombre, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
   };
@@ -2714,7 +2723,7 @@ export default function App() {
       case "interesados":
         return <InteresadosPage interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} clientes={clientes} onAddInteresado={addInteresado} onEditInteresado={editInteresado} onDeleteInteresado={deleteInteresado} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "cotizaciones":
-        return <CotizacionesPage cotizaciones={cotizaciones} interesados={interesados} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
+        return <CotizacionesPage cotizaciones={cotizaciones} interesados={interesados} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} aseguradoras={aseguradoras} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "polizas":
         return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} aseguradoras={aseguradoras} onDelete={deletePoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
