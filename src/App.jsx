@@ -266,6 +266,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
           <div style={S.sbSection}>Administración</div>
           {[
             { id: "ramos", label: "Ramos de Seguros", icon: "tag" },
+            { id: "aseguradoras", label: "Aseguradoras", icon: "shield" },
           ].map(i => (
             <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => onNav(i.id)}>
               <Icon name={i.icon} size={16} />{i.label}
@@ -293,7 +294,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ page, userRol }) => {
-  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", soat: "Seguimiento Clientes SOAT", ramos: "Ramos de Seguros", reportes: "Reportes" };
+  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", soat: "Seguimiento Clientes SOAT", ramos: "Ramos de Seguros", aseguradoras: "Aseguradoras", reportes: "Reportes" };
   const [ahora, setAhora] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setAhora(new Date()), 1000);
@@ -1207,7 +1208,7 @@ const InteresadosPage = ({ interesados, cotizaciones, polizas, agentes, ramos, c
 };
 
 // ─── PÓLIZAS ─────────────────────────────────────────────────────────────────
-const PolizasPage = ({ polizas, interesados, ramos, userRol, agenteActualId }) => {
+const PolizasPage = ({ polizas, interesados, ramos, aseguradoras, onDelete, userRol, agenteActualId }) => {
   const [q, setQ] = useState("");
   const [filtroRamo, setFiltroRamo] = useState("Todos");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
@@ -1260,14 +1261,14 @@ const PolizasPage = ({ polizas, interesados, ramos, userRol, agenteActualId }) =
         </select>
       </div>
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr" }}>
-          <span>N° Póliza</span><span>Cliente</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Emitida</span><span>Vence</span><span>Estado</span>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 50px" }}>
+          <span>N° Póliza</span><span>Cliente</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Emitida</span><span>Vence</span><span>Estado</span><span></span>
         </div>
         {filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>No se encontraron pólizas</div>
           : filtered.map(p => {
             const dias = diasParaVencer(p.vigenciaFin);
             return (
-              <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr" }}
+              <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 50px" }}
                 onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{p.numero || "—"}</div>
@@ -1281,6 +1282,10 @@ const PolizasPage = ({ polizas, interesados, ramos, userRol, agenteActualId }) =
                   {p.estado === "Activa" && dias <= 30 && dias >= 0 && <div style={{ fontSize: 11, color: dias <= 7 ? "#dc2626" : "#d97706", fontWeight: 600 }}>{dias}d</div>}
                 </div>
                 <span style={S.badge(estadoColor(p.estado))}>{p.estado}</span>
+                <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar póliza"
+                  onClick={async () => { if (!confirm(`¿Eliminar póliza ${p.numero || ""}?`)) return; await onDelete(p.id); }}>
+                  <Icon name="trash" size={14} />
+                </button>
               </div>
             );
           })}
@@ -2321,6 +2326,76 @@ const SoatPage = () => {
   );
 };
 
+// ─── ASEGURADORAS ─────────────────────────────────────────────────────────────
+const AseguradorasPage = ({ aseguradoras, onAdd, onEdit, onDelete }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [delItem, setDelItem] = useState(null);
+  const [form, setForm] = useState({ nombre: "", activo: true });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    if (editItem) { await onEdit({ ...editItem, ...form }); setEditItem(null); setShowForm(false); }
+    else { await onAdd(form); setShowForm(false); setForm({ nombre: "", activo: true }); }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div><div style={S.pageTitle}>Aseguradoras</div><div style={S.pageSub}>{aseguradoras.length} aseguradoras configuradas</div></div>
+        <button style={S.btn("primary")} onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", activo: true }); }}>
+          <Icon name="plus" size={16} />Nueva Aseguradora
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+        {aseguradoras.map(a => (
+          <div key={a.id} style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text }}>{a.nombre}</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button style={S.btn("ghost")} onClick={() => { setEditItem(a); setForm({ nombre: a.nombre, activo: a.activo !== false }); setShowForm(true); }}><Icon name="edit" size={14} /></button>
+                <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <span style={S.chip(a.activo !== false ? "#16a34a" : "#6b7280")}>{a.activo !== false ? "Activa" : "Inactiva"}</span>
+            </div>
+          </div>
+        ))}
+        {aseguradoras.length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay aseguradoras. Agrega la primera.</div>}
+      </div>
+
+      {showForm && (
+        <Modal title={editItem ? "Editar Aseguradora" : "Nueva Aseguradora"} onClose={() => { setShowForm(false); setEditItem(null); }}
+          footer={<>
+            <button style={S.btn("secondary")} onClick={() => { setShowForm(false); setEditItem(null); }}>Cancelar</button>
+            <button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</button>
+          </>}>
+          <div style={S.formGroup}><label style={S.label}>Nombre *</label><input style={S.input} value={form.nombre} onChange={e => set("nombre", e.target.value)} placeholder="Ej. Seguros del Estado" autoFocus /></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.activo} onChange={e => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Aseguradora activa</span>
+          </div>
+        </Modal>
+      )}
+
+      {delItem && (
+        <Modal title="Eliminar Aseguradora" onClose={() => setDelItem(null)}
+          footer={<>
+            <button style={S.btn("secondary")} onClick={() => setDelItem(null)}>Cancelar</button>
+            <button style={S.btn("danger")} onClick={async () => { await onDelete(delItem.id); setDelItem(null); }}>Eliminar</button>
+          </>}>
+          <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar <strong>{delItem.nombre}</strong>?</p>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -2332,6 +2407,7 @@ export default function App() {
 
   const [agentes, setAgentes] = useState([]);
   const [ramos, setRamos] = useState([]);
+  const [aseguradoras, setAseguradoras] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [interesados, setInteresados] = useState([]);
   const [cotizaciones, setCotizaciones] = useState([]);
@@ -2353,14 +2429,16 @@ export default function App() {
     if (!loggedIn) return;
     const cargar = async () => {
       setLoading(true);
-      const [{ data: rms }, { data: cls }, { data: ints }, { data: cots }, { data: pols }] = await Promise.all([
+      const [{ data: rms }, { data: asgs }, { data: cls }, { data: ints }, { data: cots }, { data: pols }] = await Promise.all([
         supabase.from('ramos').select('*').order('nombre'),
+        supabase.from('aseguradoras').select('*').order('nombre'),
         supabase.from('clientes').select('*').order('nombre'),
         supabase.from('interesados').select('*').order('created_at', { ascending: false }),
         supabase.from('cotizaciones').select('*').order('created_at', { ascending: false }),
         supabase.from('polizas').select('*').order('created_at', { ascending: false }),
       ]);
       if (rms) setRamos(rms);
+      if (asgs) setAseguradoras(asgs);
       if (cls) setClientes(cls.map(c => ({ ...c, tipoDocumento: c.tipo_documento, tipoPersona: c.tipo_persona, nombreContacto: c.nombre_contacto, telefonoContacto: c.telefono_contacto })));
       if (ints) setInteresados(ints.map(mapInteresado));
       if (cots) setCotizaciones(cots.map(mapCotizacion));
@@ -2569,6 +2647,24 @@ export default function App() {
     setRamos(prev => prev.filter(x => x.id !== id));
   };
 
+  const addAseguradora = async (a) => {
+    const { data } = await supabase.from('aseguradoras').insert([{ nombre: a.nombre, activo: a.activo }]).select().single();
+    if (data) setAseguradoras(prev => [...prev, data].sort((a,b) => a.nombre.localeCompare(b.nombre)));
+  };
+  const editAseguradora = async (a) => {
+    await supabase.from('aseguradoras').update({ nombre: a.nombre, activo: a.activo }).eq('id', a.id);
+    setAseguradoras(prev => prev.map(x => x.id === a.id ? { ...x, ...a } : x));
+  };
+  const deleteAseguradora = async (id) => {
+    await supabase.from('aseguradoras').delete().eq('id', id);
+    setAseguradoras(prev => prev.filter(x => x.id !== id));
+  };
+
+  const deletePoliza = async (id) => {
+    await supabase.from('polizas').delete().eq('id', id);
+    setPolizas(prev => prev.filter(x => x.id !== id));
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setLoggedIn(false); setAgentes([]); setRamos([]); setClientes([]); setInteresados([]); setCotizaciones([]); setPolizas([]);
@@ -2620,7 +2716,7 @@ export default function App() {
       case "cotizaciones":
         return <CotizacionesPage cotizaciones={cotizaciones} interesados={interesados} polizas={polizas} agentes={agentes} ramos={ramos.filter(r => r.activo !== false)} onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "polizas":
-        return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} userRol={userRol} agenteActualId={agenteActualId} />;
+        return <PolizasPage polizas={polizas} interesados={interesados} ramos={ramos} aseguradoras={aseguradoras} onDelete={deletePoliza} userRol={userRol} agenteActualId={agenteActualId} />;
       case "renovaciones":
         return <RenovacionesPage polizas={polizas} userRol={userRol} agenteActualId={agenteActualId} onImportPolizas={importPolizas} onUpdatePoliza={(id, changes) => setPolizas(prev => prev.map(p => p.id === id ? { ...p, ...changes } : p))} />;
       case "soat":
@@ -2629,6 +2725,8 @@ export default function App() {
         return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
       case "ramos":
         return esAdmin(userRol) ? <RamosPage ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo} /> : null;
+      case "aseguradoras":
+        return esAdmin(userRol) ? <AseguradorasPage aseguradoras={aseguradoras} onAdd={addAseguradora} onEdit={editAseguradora} onDelete={deleteAseguradora} /> : null;
       default: return null;
     }
   };
