@@ -2096,7 +2096,6 @@ const SoatPage = () => {
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={()=>fileRef.current.click()} style={S.btn("secondary")}><Icon name="upload" size={16}/>Importar</button>
           <button onClick={exportXLSX_SOAT} style={S.btn("success")}><Icon name="download" size={16}/>Exportar Excel</button>
-          <button onClick={addCliente} style={S.btn("primary")}><Icon name="plus" size={16}/>Nuevo Cliente</button>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={importCSV} style={{display:"none"}}/>
         </div>
       </div>
