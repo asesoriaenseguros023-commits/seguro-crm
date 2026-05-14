@@ -2085,7 +2085,7 @@ const SoatPage = () => {
       const keys = Object.keys(rows[0]);
       const col = (...names) => { for (const n of names) { const k = keys.find(k => k.toLowerCase().includes(n.toLowerCase())); if (k) return k; } return null; };
       const kN=col("nombre","name"), kT=col("tel","cel","phone"), kP=col("placa","plate");
-      const kF=col("fecha","date","compra"), kE=col("estado","status","fase"), kM=col("mes","año","anio","campaign","grupo");
+      const kF=col("fecha compra","fecha","date","compra"), kE=col("estado","status","fase"), kM=col("fecha base","base","mes","año","anio");
       if (!kN) { setImportMsg("❌ No se encontró columna 'Nombre'"); return; }
       const fm={"interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion","volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro","ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion","interesado":"interesado","compró":"compro","no interesado":"no_interes"};
       
