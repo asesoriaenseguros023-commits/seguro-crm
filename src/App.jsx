@@ -973,6 +973,14 @@ const CotizacionesPage = ({ cotizaciones, interesados, polizas, agentes, ramos, 
                         {c.numeroPolizaEmitida ? "Ver Póliza" : "Registrar Póliza"}
                       </button>
                     )}
+                    <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar"
+                      onClick={async () => {
+                        if (!confirm(`¿Eliminar esta cotización de ${c.clienteNombre || "este cliente"}?`)) return;
+                        await supabase.from('cotizaciones').delete().eq('id', c.id);
+                        setCotizaciones(prev => prev.filter(x => x.id !== c.id));
+                      }}>
+                      <Icon name="trash" size={14} />
+                    </button>
                   </div>
                 </div>
 
