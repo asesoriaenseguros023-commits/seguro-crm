@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from './supabase.js';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -265,7 +265,6 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
         {esAdmin(userRol) && <>
           <div style={S.sbSection}>Administración</div>
           {[
-            { id: "configuracion", label: "Usuarios", icon: "shield" },
             { id: "ramos", label: "Ramos de Seguros", icon: "tag" },
           ].map(i => (
             <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => onNav(i.id)}>
@@ -294,7 +293,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ page, userRol }) => {
-  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", soat: "Seguimiento Clientes SOAT", configuracion: "Usuarios", ramos: "Ramos de Seguros", reportes: "Reportes" };
+  const labels = { dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads", cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones", soat: "Seguimiento Clientes SOAT", ramos: "Ramos de Seguros", reportes: "Reportes" };
   const [ahora, setAhora] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setAhora(new Date()), 1000);
@@ -2472,6 +2471,33 @@ export default function App() {
       gastos_emitida: f.gastosEmitida, total_pago_emitida: f.totalPagoEmitida,
     }).eq('id', f.id);
     setCotizaciones(prev => prev.map(x => x.id === f.id ? { ...x, ...f } : x));
+
+    // Si se marcó como Póliza Emitida y tiene número de póliza, crear en tabla polizas
+    if (f.accion === "Póliza Emitida" && f.numeroPolizaEmitida) {
+      const yaExiste = polizas.some(p => p.cotizacionId === f.id);
+      if (!yaExiste) {
+        const vigenciaInicio = today();
+        const vigenciaFin = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split("T")[0]; })();
+        const { data: pol, error } = await supabase.from('polizas').insert([{
+          cotizacion_id: f.id,
+          cliente_nombre: f.clienteNombre,
+          cliente_telefono: f.clienteTelefono,
+          numero: f.numeroPolizaEmitida,
+          ramo: f.ramo,
+          aseguradora: f.aseguradoraEmitida,
+          prima: f.primaEmitida,
+          iva: f.ivaEmitida,
+          gastos_expedicion: f.gastosEmitida,
+          total_pago: f.totalPagoEmitida,
+          fecha_emision: today(),
+          vigencia_inicio: vigenciaInicio,
+          vigencia_fin: vigenciaFin,
+          estado: "Activa",
+        }]).select().single();
+        if (error) console.error('Error creando póliza:', error);
+        if (pol) setPolizas(prev => [{ ...mapPoliza(pol), clienteNombre: pol.cliente_nombre, clienteTelefono: pol.cliente_telefono }, ...prev]);
+      }
+    }
   };
 
   // Emitir póliza desde cotización
@@ -2545,7 +2571,7 @@ export default function App() {
   if (loading) return <><FontLoader /><LoadingScreen /></>;
 
   const handleNav = (p) => {
-    if ((p === "configuracion" || p === "ramos") && !esAdmin(userRol)) return;
+    if (p === "ramos" && !esAdmin(userRol)) return;
     setPage(p);
   };
 
@@ -2593,8 +2619,6 @@ export default function App() {
         return <SoatPage />;
       case "reportes":
         return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
-      case "configuracion":
-        return esAdmin(userRol) ? <ConfiguracionPage agentes={agentes} polizas={polizas} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} /> : null;
       case "ramos":
         return esAdmin(userRol) ? <RamosPage ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo} /> : null;
       default: return null;
