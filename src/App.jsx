@@ -1982,7 +1982,7 @@ const FASES_SOAT = [
 ];
 const FM_SOAT = Object.fromEntries(FASES_SOAT.map(f=>[f.id,f]));
 const MOTIVOS_SOAT = ["Ya compró con otra aseguradora","No tiene vehículo activo","No le interesa renovar aún","No contestó / Buzón","Número equivocado"];
-const ACCIONES_SOAT = ["Llamar en fecha acordada","Enviar cotización por WhatsApp","Esperar decisión del cliente","Llamar en 3 días","Llamar en 1 semana","No volver a contactar","Hacer seguimiento post-venta"];
+const ACCIONES_SOAT = ["Volver a llamar","Escribir por WhatsApp"];
 
 let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
@@ -2033,7 +2033,7 @@ const SoatPage = () => {
   const descargarTemplate = async () => {
     try {
       const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
-      const cols = ["Nombre","Telefono","Placa","Fecha Compra","Estado"];
+      const cols = ["Nombre","Telefono","Placa","Fecha Compra","Fecha Base","Estado"];
       const ejemplo = [["MARIA LOPEZ","3001234567","ABC123","16/01/2025",""],["JUAN PEREZ","3109876543","XYZ789","22/03/2025",""]];
       const ws = XLSX.utils.aoa_to_sheet([cols,...ejemplo]);
       ws["!cols"] = cols.map(()=>({wch:20}));
@@ -2085,7 +2085,7 @@ const SoatPage = () => {
       const keys = Object.keys(rows[0]);
       const col = (...names) => { for (const n of names) { const k = keys.find(k => k.toLowerCase().includes(n.toLowerCase())); if (k) return k; } return null; };
       const kN=col("nombre","name"), kT=col("tel","cel","phone"), kP=col("placa","plate");
-      const kF=col("fecha","date","compra"), kE=col("estado","status","fase");
+      const kF=col("fecha","date","compra"), kE=col("estado","status","fase"), kM=col("mes","año","anio","campaign","grupo");
       if (!kN) { setImportMsg("❌ No se encontró columna 'Nombre'"); return; }
       const fm={"interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion","volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro","ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion","interesado":"interesado","compró":"compro","no interesado":"no_interes"};
       
@@ -2119,7 +2119,7 @@ const SoatPage = () => {
         const fechaStr = fechaRaw instanceof Date
           ? `${String(fechaRaw.getDate()).padStart(2,"0")}/${String(fechaRaw.getMonth()+1).padStart(2,"0")}/${fechaRaw.getFullYear()}`
           : String(fechaRaw||"").trim();
-        const anioMesVal = parseAnioMes(fechaRaw);
+        const anioMesVal = kM ? String(r[kM]||"").trim() : parseAnioMes(fechaRaw);
         const er = kE ? String(r[kE]||"").toLowerCase().trim() : "";
         return { ...soatEmpty(), id: soatNewId(),
           nombre: String(r[kN]||"").trim(),
@@ -2151,7 +2151,7 @@ const SoatPage = () => {
   const exportXLSX_SOAT = async () => {
     try {
       const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
-      const cols=["#","Año-Mes","Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Notas"];
+      const cols=["#","Fecha Base","Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Notas"];
       const rows=filtrados.map((c,i)=>[i+1,c.anioMes||"",c.nombre,c.telefono,c.placa,c.fechaCompra,FM_SOAT[c.fase]?.label||c.fase,c.agente,c.intentos,c.proximaAccion,c.fechaProxima,c.motivoNoCompra,c.notas]);
       const ws=XLSX.utils.aoa_to_sheet([cols,...rows]);
       const wb=XLSX.utils.book_new();
@@ -2245,8 +2245,8 @@ const SoatPage = () => {
       {/* Tabla */}
       <div style={{...S.tableWrap,overflowX:"auto"}}>
         <div style={{minWidth:900}}>
-          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"35px 70px 1.3fr 0.9fr 0.6fr 0.7fr 0.6fr 1.2fr 0.4fr 0.8fr 1fr 0.6fr 60px"}}>
-            <span>#</span><span>Año-Mes</span><span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renov.</span><span>Fase</span><span>Int.</span><span>Agente</span><span>Próxima acción</span><span>Fecha</span><span></span>
+          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"35px 70px 1.3fr 0.9fr 0.6fr 0.8fr 1.2fr 0.4fr 0.8fr 1fr 0.6fr 60px"}}>
+            <span>#</span><span>Fecha Base</span><span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renov.</span><span>Fase</span><span>Int.</span><span>Agente</span><span>Próxima acción</span><span>Fecha</span><span></span>
           </div>
           {filtrados.length===0
             ? <div style={{padding:40,textAlign:"center",color:"#aaa"}}>Sin registros. Importa un CSV o agrega clientes.</div>
@@ -2255,7 +2255,7 @@ const SoatPage = () => {
               const fase=FM_SOAT[c.fase]||FASES_SOAT[0];
               const urgente=c.fechaProxima&&parseDateSoat(c.fechaProxima)<=new Date();
               return (
-                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"35px 70px 1.3fr 0.9fr 0.6fr 0.7fr 0.6fr 1.2fr 0.4fr 0.8fr 1fr 0.6fr 60px"}}
+                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"35px 70px 1.3fr 0.9fr 0.6fr 0.8fr 1.2fr 0.4fr 0.8fr 1fr 0.6fr 60px"}}
                   onMouseEnter={e=>e.currentTarget.style.background=BLUE.light}
                   onMouseLeave={e=>e.currentTarget.style.background=""}>
                   <div style={{fontWeight:700,color:"#aaa",fontSize:12}}>{idx+1}</div>
@@ -2266,7 +2266,6 @@ const SoatPage = () => {
                   <div style={{fontSize:12.5,color:"#555"}}>{c.telefono||"—"}</div>
                   <div style={{fontSize:12.5,color:"#555"}}>{c.placa||"—"}</div>
                   <div style={{fontSize:12,color:"#555"}}>{c.fechaCompra||"—"}</div>
-                  <div>{dias!==null?<span style={{fontSize:11,color:dias<0?"#dc2626":dias<=30?"#f97316":"#16a34a",background:dias<0?"#fee2e2":dias<=30?"#ffedd5":"#dcfce7",padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap"}}>{dias<0?"Venció":dias===0?"Hoy":`${dias}d`}</span>:"—"}</div>
                   <select value={c.fase} onChange={e=>updateC(c.id,"fase",e.target.value)}
                     style={{fontSize:11,padding:"3px 7px",borderRadius:6,border:`1.5px solid ${fase.color}`,background:fase.bg,color:fase.text,cursor:"pointer",outline:"none",fontWeight:600,width:"100%"}}>
                     {FASES_SOAT.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
@@ -2299,7 +2298,7 @@ const SoatPage = () => {
               <button onClick={()=>setEditModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#aaa"}}>×</button>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-              {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de Compra","fechaCompra"],["Año-Mes (MM-AAAA)","anioMes"]].map(([l,f])=>(
+              {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de Compra","fechaCompra"],["Fecha Base","anioMes"]].map(([l,f])=>(
                 <div key={f} style={{gridColumn:f==="nombre"?"1/-1":"auto"}}>
                   <label style={{fontSize:11,color:"#6b87b0",textTransform:"uppercase",marginBottom:4,display:"block"}}>{l}</label>
                   <input value={editModal[f]||""} onChange={e=>setEditModal(p=>({...p,[f]:e.target.value}))}
@@ -2374,7 +2373,7 @@ const SoatPage = () => {
               {activeTab==="info" && (
                 <div style={{display:"flex",flexDirection:"column",gap:14}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de compra","fechaCompra"],["Año-Mes","anioMes"]].map(([l,f])=>(
+                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de compra","fechaCompra"],["Fecha Base","anioMes"]].map(([l,f])=>(
                       <div key={f}>
                         <label style={lblS}>{l}</label>
                         <input value={modal[f]||""} onChange={e=>{updateC(modal.id,f,e.target.value);setModal(p=>({...p,[f]:e.target.value}));}} style={inpS}/>
