@@ -1973,22 +1973,20 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
 // ─── SEGUIMIENTO CLIENTES SOAT ────────────────────────────────────────────────
 const SOAT_KEY = "soat-crm-v2";
 const FASES_SOAT = [
-  {id:"pendiente",   label:"📋 Pendiente",         color:"#3b82f6", bg:"#dbeafe", text:"#1d4ed8"},
-  {id:"en_gestion",  label:"📞 En gestión",         color:"#f59e0b", bg:"#fef3c7", text:"#92400e"},
-  {id:"interesado",  label:"🟢 Interesado",         color:"#22c55e", bg:"#dcfce7", text:"#166534"},
-  {id:"cotizado",    label:"💰 Cotización enviada", color:"#06b6d4", bg:"#cffafe", text:"#155e75"},
-  {id:"compro",      label:"🏆 Compró",             color:"#8b5cf6", bg:"#ede9fe", text:"#5b21b6"},
-  {id:"no_interes",  label:"🔴 No interesado",      color:"#ef4444", bg:"#fee2e2", text:"#991b1b"},
-  {id:"competencia", label:"⚔️ Competencia",        color:"#f97316", bg:"#ffedd5", text:"#9a3412"},
-  {id:"ilocalizable",label:"⚫ Ilocalizable",        color:"#6b7280", bg:"#f3f4f6", text:"#374151"},
+  {id:"pendiente",    label:"Pendiente",      color:"#3b82f6", bg:"#dbeafe", text:"#1d4ed8"},
+  {id:"en_gestion",   label:"En gestión",     color:"#f59e0b", bg:"#fef3c7", text:"#92400e"},
+  {id:"interesado",   label:"Interesado",     color:"#22c55e", bg:"#dcfce7", text:"#166534"},
+  {id:"compro",       label:"Compró",         color:"#8b5cf6", bg:"#ede9fe", text:"#5b21b6"},
+  {id:"no_interes",   label:"No interesado",  color:"#ef4444", bg:"#fee2e2", text:"#991b1b"},
+  {id:"ilocalizable", label:"Ilocalizable",   color:"#6b7280", bg:"#f3f4f6", text:"#374151"},
 ];
 const FM_SOAT = Object.fromEntries(FASES_SOAT.map(f=>[f.id,f]));
-const MOTIVOS_SOAT = ["Precio muy alto","Ya compró con otra aseguradora","No tiene vehículo activo","No le interesa renovar aún","Prefiere pagar en oficina","Problemas económicos","No contestó / Buzón","Número equivocado","Otro"];
+const MOTIVOS_SOAT = ["Ya compró con otra aseguradora","No tiene vehículo activo","No le interesa renovar aún","No contestó / Buzón","Número equivocado"];
 const ACCIONES_SOAT = ["Llamar en fecha acordada","Enviar cotización por WhatsApp","Esperar decisión del cliente","Llamar en 3 días","Llamar en 1 semana","No volver a contactar","Hacer seguimiento post-venta"];
 
 let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
-const soatEmpty = () => ({id: soatNewId(), nombre:"", telefono:"", placa:"", fechaCompra:"", fase:"pendiente", agente:"Sin asignar", intentos:0, proximaAccion:"", fechaProxima:"", motivoNoCompra:"", valorCotizado:"", grupoEnvio:"", historial:[], notas:""});
+const soatEmpty = () => ({id: soatNewId(), nombre:"", telefono:"", placa:"", anioMes:"", fechaCompra:"", fase:"pendiente", agente:"Sin asignar", intentos:0, proximaAccion:"", fechaProxima:"", motivoNoCompra:"", historial:[], notas:""});
 
 const parseDateSoat = (str) => { if(!str)return null; const s=str.trim(),p=s.split(/[-\/]/); if(p.length!==3)return null; try{return new Date(p[0].length===4?s:`${p[2]}-${p[1]}-${p[0]}`);}catch{return null;} };
 const diasRenSoat = (fc) => { const f=parseDateSoat(fc); if(!f)return null; const r=new Date(f); r.setFullYear(r.getFullYear()+1); return Math.ceil((r-new Date())/86400000); };
@@ -2042,7 +2040,9 @@ const SoatPage = () => {
       const nuevos=lines.slice(1).filter(l=>l.trim()).map(line=>{
         const c=line.replace(/\r/g,"").split(/[,;]/);
         const er=(iE>=0?c[iE]?.trim():"").toLowerCase();
-        return{...soatEmpty(),id:soatNewId(),nombre:c[iN]?.trim()||"",telefono:iT>=0?c[iT]?.trim():"",fechaCompra:iF>=0?c[iF]?.trim():"",placa:iP>=0?c[iP]?.trim():"",agente:iA>=0&&c[iA]?.trim()?c[iA].trim():"Sin asignar",fase:fm[er]||"pendiente",intentos:iV>=0?parseInt(c[iV])||0:0,grupoEnvio:iG>=0?c[iG]?.trim():""};
+        const fechaVal = iF>=0?c[iF]?.trim():"";
+        const anioMesVal = (() => { try { const d=parseDateSoat(fechaVal); if(!d||isNaN(d))return""; const m=String(d.getMonth()+1).padStart(2,"0"); return `${m}-${d.getFullYear()}`; } catch{return"";} })();
+        return{...soatEmpty(),id:soatNewId(),nombre:c[iN]?.trim()||"",telefono:iT>=0?c[iT]?.trim():"",fechaCompra:fechaVal,anioMes:anioMesVal,placa:iP>=0?c[iP]?.trim():"",agente:iA>=0&&c[iA]?.trim()?c[iA].trim():"Sin asignar",fase:fm[er]||"pendiente",intentos:iV>=0?parseInt(c[iV])||0:0};
       }).filter(c=>c.nombre);
       setClientes(p=>[...p,...nuevos]);
       setImportMsg(`✅ ${nuevos.length} clientes importados`);
@@ -2051,11 +2051,16 @@ const SoatPage = () => {
     reader.readAsText(file); e.target.value="";
   };
 
-  const exportCSV = () => {
-    const cols=["Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Grupo Envío","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Valor Cotizado","Notas"];
-    const rows=filtrados.map(c=>[c.nombre,c.telefono,c.placa,c.fechaCompra,FM_SOAT[c.fase]?.label||c.fase,c.agente,c.grupoEnvio||"",c.intentos,c.proximaAccion,c.fechaProxima,c.motivoNoCompra,c.valorCotizado,c.notas]);
-    const csv=[cols,...rows].map(r=>r.map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`).join(",")).join("\n");
-    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"})); a.download="soat-seguimiento.csv"; a.click();
+  const exportXLSX_SOAT = async () => {
+    try {
+      const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+      const cols=["#","Año-Mes","Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Notas"];
+      const rows=filtrados.map((c,i)=>[i+1,c.anioMes||"",c.nombre,c.telefono,c.placa,c.fechaCompra,FM_SOAT[c.fase]?.label||c.fase,c.agente,c.intentos,c.proximaAccion,c.fechaProxima,c.motivoNoCompra,c.notas]);
+      const ws=XLSX.utils.aoa_to_sheet([cols,...rows]);
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"SOAT");
+      XLSX.writeFile(wb,"soat-seguimiento.xlsx");
+    } catch(e) { console.error(e); alert("Error exportando: "+e.message); }
   };
 
   const filtrados = clientes.filter(c => {
@@ -2089,10 +2094,10 @@ const SoatPage = () => {
           <div style={S.pageSub}>{clientes.length} clientes registrados</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
-          <button onClick={()=>fileRef.current.click()} style={S.btn("secondary")}><Icon name="upload" size={16}/>Importar CSV</button>
-          <button onClick={exportCSV} style={S.btn("success")}><Icon name="download" size={16}/>Exportar CSV</button>
+          <button onClick={()=>fileRef.current.click()} style={S.btn("secondary")}><Icon name="upload" size={16}/>Importar</button>
+          <button onClick={exportXLSX_SOAT} style={S.btn("success")}><Icon name="download" size={16}/>Exportar Excel</button>
           <button onClick={addCliente} style={S.btn("primary")}><Icon name="plus" size={16}/>Nuevo Cliente</button>
-          <input ref={fileRef} type="file" accept=".csv" onChange={importCSV} style={{display:"none"}}/>
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={importCSV} style={{display:"none"}}/>
         </div>
       </div>
 
@@ -2142,19 +2147,21 @@ const SoatPage = () => {
       {/* Tabla */}
       <div style={{...S.tableWrap,overflowX:"auto"}}>
         <div style={{minWidth:900}}>
-          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"1.4fr 0.9fr 0.7fr 0.8fr 0.6fr 1.3fr 0.5fr 0.8fr 1.1fr 0.7fr 70px"}}>
-            <span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renovación</span><span>Fase</span><span>Int.</span><span>Agente</span><span>Próxima acción</span><span>Fecha</span><span></span>
+          <div style={{...S.tableHead,display:"grid",gridTemplateColumns:"35px 70px 1.3fr 0.9fr 0.6fr 0.7fr 0.6fr 1.2fr 0.4fr 0.8fr 1fr 0.6fr 60px"}}>
+            <span>#</span><span>Año-Mes</span><span>Cliente</span><span>Teléfono</span><span>Placa</span><span>F. Compra</span><span>Renov.</span><span>Fase</span><span>Int.</span><span>Agente</span><span>Próxima acción</span><span>Fecha</span><span></span>
           </div>
           {filtrados.length===0
             ? <div style={{padding:40,textAlign:"center",color:"#aaa"}}>Sin registros. Importa un CSV o agrega clientes.</div>
-            : filtrados.map(c => {
+            : filtrados.map((c, idx) => {
               const dias=diasRenSoat(c.fechaCompra);
               const fase=FM_SOAT[c.fase]||FASES_SOAT[0];
               const urgente=c.fechaProxima&&parseDateSoat(c.fechaProxima)<=new Date();
               return (
-                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"1.4fr 0.9fr 0.7fr 0.8fr 0.6fr 1.3fr 0.5fr 0.8fr 1.1fr 0.7fr 70px"}}
+                <div key={c.id} style={{...S.tableRow,display:"grid",gridTemplateColumns:"35px 70px 1.3fr 0.9fr 0.6fr 0.7fr 0.6fr 1.2fr 0.4fr 0.8fr 1fr 0.6fr 60px"}}
                   onMouseEnter={e=>e.currentTarget.style.background=BLUE.light}
                   onMouseLeave={e=>e.currentTarget.style.background=""}>
+                  <div style={{fontWeight:700,color:"#aaa",fontSize:12}}>{idx+1}</div>
+                  <div style={{fontSize:12,color:"#555",fontWeight:600}}>{c.anioMes||"—"}</div>
                   <div style={{fontWeight:600,fontSize:13,cursor:"pointer",color:BLUE.primary}} onClick={()=>openModal(c)}>
                     {c.nombre||"—"}{c.historial?.length>0&&<span style={{marginLeft:6,fontSize:10,color:"#aaa"}}>💬{c.historial.length}</span>}
                   </div>
@@ -2222,7 +2229,7 @@ const SoatPage = () => {
               {activeTab==="info" && (
                 <div style={{display:"flex",flexDirection:"column",gap:14}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de compra","fechaCompra"],["Valor cotizado ($)","valorCotizado"],["Grupo de envío","grupoEnvio"]].map(([l,f])=>(
+                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de compra","fechaCompra"],["Año-Mes","anioMes"]].map(([l,f])=>(
                       <div key={f}>
                         <label style={lblS}>{l}</label>
                         <input value={modal[f]||""} onChange={e=>{updateC(modal.id,f,e.target.value);setModal(p=>({...p,[f]:e.target.value}));}} style={inpS}/>
@@ -2232,12 +2239,6 @@ const SoatPage = () => {
                       <label style={lblS}>Fase actual</label>
                       <select value={modal.fase} onChange={e=>{updateC(modal.id,"fase",e.target.value);setModal(p=>({...p,fase:e.target.value}));}} style={selS}>
                         {FASES_SOAT.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={lblS}>Agente</label>
-                      <select value={modal.agente} onChange={e=>{updateC(modal.id,"agente",e.target.value);setModal(p=>({...p,agente:e.target.value}));}} style={selS}>
-                        {agentes.map(a=><option key={a}>{a}</option>)}
                       </select>
                     </div>
                     <div>
