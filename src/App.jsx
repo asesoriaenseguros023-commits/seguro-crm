@@ -2631,6 +2631,32 @@ export default function App() {
       setLoading(false);
     };
     cargar();
+
+    // ─── REALTIME ─────────────────────────────────────────────────────────────
+    const channel = supabase.channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, payload => {
+        if (payload.eventType === 'INSERT') setClientes(prev => prev.some(x => x.id === payload.new.id) ? prev : [{ ...payload.new, tipoPersona: payload.new.tipo_persona, nombreContacto: payload.new.nombre_contacto, telefonoContacto: payload.new.telefono_contacto, tipoDocumento: payload.new.tipo_documento }, ...prev]);
+        if (payload.eventType === 'UPDATE') setClientes(prev => prev.map(x => x.id === payload.new.id ? { ...x, ...payload.new, tipoPersona: payload.new.tipo_persona, nombreContacto: payload.new.nombre_contacto, telefonoContacto: payload.new.telefono_contacto } : x));
+        if (payload.eventType === 'DELETE') setClientes(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interesados' }, payload => {
+        if (payload.eventType === 'INSERT') setInteresados(prev => prev.some(x => x.id === payload.new.id) ? prev : [mapInteresado(payload.new), ...prev]);
+        if (payload.eventType === 'UPDATE') setInteresados(prev => prev.map(x => x.id === payload.new.id ? mapInteresado(payload.new) : x));
+        if (payload.eventType === 'DELETE') setInteresados(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizaciones' }, payload => {
+        if (payload.eventType === 'INSERT') setCotizaciones(prev => prev.some(x => x.id === payload.new.id) ? prev : [mapCotizacion(payload.new), ...prev]);
+        if (payload.eventType === 'UPDATE') setCotizaciones(prev => prev.map(x => x.id === payload.new.id ? mapCotizacion(payload.new) : x));
+        if (payload.eventType === 'DELETE') setCotizaciones(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'polizas' }, payload => {
+        if (payload.eventType === 'INSERT') setPolizas(prev => prev.some(x => x.id === payload.new.id) ? prev : [{ ...mapPoliza(payload.new), clienteNombre: payload.new.cliente_nombre, clienteTelefono: payload.new.cliente_telefono }, ...prev]);
+        if (payload.eventType === 'UPDATE') setPolizas(prev => prev.map(x => x.id === payload.new.id ? { ...mapPoliza(payload.new), clienteNombre: payload.new.cliente_nombre, clienteTelefono: payload.new.cliente_telefono } : x));
+        if (payload.eventType === 'DELETE') setPolizas(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, [loggedIn]);
 
   const handleLogin = async () => {
