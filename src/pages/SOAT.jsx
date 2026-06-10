@@ -5,16 +5,7 @@ import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, ACCIONES_SOAT } from "../co
 import { parseDateSoat, diasRenSoat, mapSoat, toSoatRow } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
-// ─── Agentes persistidos en localStorage ─────────────────────────────────────
-const AGENTES_KEY = "soat-agentes-v1";
-const AGENTES_DEFAULT = ["Sin asignar", "YELI", "ENCARNACION", "SANTIAGO", "WEYMAR"];
-const loadAgentes = () => {
-  try { const s = localStorage.getItem(AGENTES_KEY); return s ? JSON.parse(s) : AGENTES_DEFAULT; }
-  catch { return AGENTES_DEFAULT; }
-};
-const saveAgentes = (list) => {
-  try { localStorage.setItem(AGENTES_KEY, JSON.stringify(list)); } catch {}
-};
+// Agentes ahora viven en Supabase (tabla soat_agentes) con realtime
 
 // ─── Helpers locales ──────────────────────────────────────────────────────────
 let soatNid = Date.now();
@@ -45,7 +36,7 @@ const SoatPage = ({ showConfirm }) => {
   const [busqueda, setBusqueda] = useState("");
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
-  const [agentes, setAgentes] = useState(loadAgentes);
+  const [agentes, setAgentes] = useState(["Sin asignar"]);
   const [nuevoAgente, setNuevoAgente] = useState("");
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
   const [importDups, setImportDups] = useState(null); // {nuevos, duplicados}
@@ -55,8 +46,18 @@ const SoatPage = ({ showConfirm }) => {
 
   // ─── Carga inicial + realtime ────────────────────────────────────────────
   useEffect(() => {
+    // Clientes
     supabase.from("soat_clientes").select("*").order("created_at", { ascending: false })
       .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
+
+    // Agentes desde Supabase
+    supabase.from("soat_agentes").select("nombre").order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const nombres = data.map(r => r.nombre);
+          setAgentes(nombres.includes("Sin asignar") ? nombres : ["Sin asignar", ...nombres]);
+        }
+      });
 
     const channel = supabase.channel("soat-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "soat_clientes" }, (payload) => {
@@ -66,21 +67,33 @@ const SoatPage = ({ showConfirm }) => {
           setClientes(p => p.map(x => x.id === payload.new.id ? mapSoat(payload.new) : x));
         if (payload.eventType === "DELETE")
           setClientes(p => p.filter(x => x.id !== payload.old.id));
-      }).subscribe();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "soat_agentes" }, () => {
+        // Recarga la lista completa en cualquier cambio (INSERT o DELETE)
+        supabase.from("soat_agentes").select("nombre").order("created_at", { ascending: true })
+          .then(({ data }) => {
+            if (data) {
+              const nombres = data.map(r => r.nombre);
+              setAgentes(nombres.includes("Sin asignar") ? nombres : ["Sin asignar", ...nombres]);
+            }
+          });
+      })
+      .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ─── Persistir agentes ───────────────────────────────────────────────────
-  const addAgente = () => {
+  // ─── Agentes en Supabase (realtime sincroniza a todos los dispositivos) ──
+  const addAgente = async () => {
     const nombre = nuevoAgente.trim();
     if (!nombre || agentes.includes(nombre)) return;
-    const updated = [...agentes, nombre];
-    setAgentes(updated); saveAgentes(updated); setNuevoAgente("");
+    setNuevoAgente("");
+    await supabase.from("soat_agentes").insert({ nombre });
+    // El canal realtime actualizará la lista en todos los dispositivos
   };
-  const removeAgente = (nombre) => {
-    const updated = agentes.filter(a => a !== nombre);
-    setAgentes(updated); saveAgentes(updated);
+  const removeAgente = async (nombre) => {
+    if (nombre === "Sin asignar") return;
+    await supabase.from("soat_agentes").delete().eq("nombre", nombre);
   };
 
   // ─── Update campo con limpieza de acción cuando fase lo requiere ─────────
