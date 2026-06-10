@@ -266,7 +266,7 @@ const SoatPage = ({ showConfirm }) => {
       || (c.telefono||"").includes(busqueda)
       || (c.placa||"").toLowerCase().includes(busqueda.toLowerCase());
     return mF && mA && mFecha && mB;
-  }), [clientes, filtroFase, filtroAgente, filtroFechaCompra, filtroFechaProxima, busqueda]);
+  }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda]);
 
   const stats = {
     total: clientes.length,
