@@ -19,79 +19,91 @@ import AseguradorasPage from "./pages/Aseguradoras.jsx";
 import ConfiguracionPage from "./pages/Configuracion.jsx";
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
-const Sidebar = ({ current, onNav, onLogout, userName, userRol }) => {
+const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile, onClose }) => {
   const initials = userName
     ? userName.split(" ").slice(0, 2).map((w) => w[0]).join("")
     : "U";
+
+  const sidebarStyle = isMobile
+    ? { ...S.sidebar, position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 300, width: 240, transform: isOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.25s ease", boxShadow: isOpen ? "4px 0 24px rgba(0,0,0,0.45)" : "none" }
+    : S.sidebar;
+
+  const handleNav = (id) => { onNav(id); if (isMobile) onClose(); };
+
   return (
-    <div style={S.sidebar}>
-      <div style={S.sbLogo}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover" }} />
-          <div>
-            <div style={S.sbLogoText}>Asesoría en Seguros</div>
-            <div style={S.sbLogoSub}>Tocancipá · NIT 46.662.968</div>
-          </div>
-        </div>
-      </div>
-      <div style={S.sbNav}>
-        <div style={S.sbSection}>Principal</div>
-        {[
-          { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-          { id: "clientes", label: "Clientes", icon: "users" },
-          { id: "interesados", label: "Leads", icon: "document" },
-          { id: "cotizaciones", label: "Cotizaciones", icon: "tag" },
-          { id: "polizas", label: "Pólizas", icon: "shield" },
-          { id: "renovaciones", label: "Renovaciones", icon: "bell" },
-          { id: "soat", label: "Seguimiento SOAT", icon: "shield" },
-          { id: "reportes", label: "Reportes", icon: "chart" },
-        ].map((i) => (
-          <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => onNav(i.id)}>
-            <Icon name={i.icon} size={16} />{i.label}
-          </div>
-        ))}
-        {esAdmin(userRol) && (
-          <>
-            <div style={S.sbSection}>Administración</div>
-            {[
-              { id: "ramos", label: "Ramos de Seguros", icon: "tag" },
-              { id: "aseguradoras", label: "Aseguradoras", icon: "shield" },
-            ].map((i) => (
-              <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => onNav(i.id)}>
-                <Icon name={i.icon} size={16} />{i.label}
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-      <div style={S.sbBottom}>
-        <div style={{ padding: "4px 12px 8px" }}>
-          <span style={{ ...S.chip(esAdmin(userRol) ? "#7c3aed" : BLUE.primary), fontSize: 11 }}>
-            {userRol || "Agente"}
-          </span>
-        </div>
-        <div style={S.sbUser}>
-          <div style={S.sbAvatar}>{initials}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {userName || "Usuario"}
+    <>
+      {isMobile && isOpen && (
+        <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 299 }} />
+      )}
+      <div style={sidebarStyle}>
+        <div style={S.sbLogo}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover" }} />
+            <div>
+              <div style={S.sbLogoText}>Asesoría en Seguros</div>
+              <div style={S.sbLogoSub}>Tocancipá · NIT 46.662.968</div>
             </div>
           </div>
         </div>
-        <div style={{ ...S.sbItem(false), marginTop: 4 }} onClick={onLogout}>
-          <Icon name="logout" size={16} />Salir
+        <div style={S.sbNav}>
+          <div style={S.sbSection}>Principal</div>
+          {[
+            { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+            { id: "clientes", label: "Clientes", icon: "users" },
+            { id: "interesados", label: "Leads", icon: "document" },
+            { id: "cotizaciones", label: "Cotizaciones", icon: "tag" },
+            { id: "polizas", label: "Pólizas", icon: "shield" },
+            { id: "renovaciones", label: "Renovaciones", icon: "bell" },
+            { id: "soat", label: "Seguimiento SOAT", icon: "shield" },
+            { id: "reportes", label: "Reportes", icon: "chart" },
+          ].map((i) => (
+            <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
+              <Icon name={i.icon} size={16} />{i.label}
+            </div>
+          ))}
+          {esAdmin(userRol) && (
+            <>
+              <div style={S.sbSection}>Administración</div>
+              {[
+                { id: "ramos", label: "Ramos de Seguros", icon: "tag" },
+                { id: "aseguradoras", label: "Aseguradoras", icon: "shield" },
+              ].map((i) => (
+                <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
+                  <Icon name={i.icon} size={16} />{i.label}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+        <div style={S.sbBottom}>
+          <div style={{ padding: "4px 12px 8px" }}>
+            <span style={{ ...S.chip(esAdmin(userRol) ? "#7c3aed" : BLUE.primary), fontSize: 11 }}>
+              {userRol || "Agente"}
+            </span>
+          </div>
+          <div style={S.sbUser}>
+            <div style={S.sbAvatar}>{initials}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {userName || "Usuario"}
+              </div>
+            </div>
+          </div>
+          <div style={{ ...S.sbItem(false), marginTop: 4 }} onClick={onLogout}>
+            <Icon name="logout" size={16} />Salir
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
-const Topbar = ({ page, userRol }) => {
+const Topbar = ({ page, userRol, isMobile, onToggleSidebar }) => {
   const labels = {
     dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads",
     cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones",
-    soat: "Seguimiento Clientes SOAT", ramos: "Ramos de Seguros",
+    soat: "Seguimiento SOAT", ramos: "Ramos de Seguros",
     aseguradoras: "Aseguradoras", reportes: "Reportes",
   };
   const [ahora, setAhora] = useState(new Date());
@@ -104,20 +116,32 @@ const Topbar = ({ page, userRol }) => {
   const fmtHora = (d) =>
     d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   return (
-    <div style={S.topbar}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: BLUE.text }}>{labels[page] || page}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 12, color: "#6b87b0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, borderRight: `1px solid ${BLUE.border}`, paddingRight: 20 }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: BLUE.primary, fontVariantNumeric: "tabular-nums" }}>{fmtHora(ahora)}</div>
-            <div style={{ fontSize: 11, color: "#6b87b0", textTransform: "capitalize" }}>{fmtFechaCorta(ahora)}</div>
+    <div style={{ ...S.topbar, padding: isMobile ? "0 14px" : "0 28px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 0 }}>
+        {isMobile && (
+          <button onClick={onToggleSidebar}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: 6, display: "flex", alignItems: "center", color: BLUE.primary }}>
+            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="19" y2="6" /><line x1="3" y1="12" x2="19" y2="12" /><line x1="3" y1="18" x2="19" y2="18" />
+            </svg>
+          </button>
+        )}
+        <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{labels[page] || page}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, fontSize: 12, color: "#6b87b0" }}>
+        {!isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, borderRight: `1px solid ${BLUE.border}`, paddingRight: 20 }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: BLUE.primary, fontVariantNumeric: "tabular-nums" }}>{fmtHora(ahora)}</div>
+              <div style={{ fontSize: 11, color: "#6b87b0", textTransform: "capitalize" }}>{fmtFechaCorta(ahora)}</div>
+            </div>
           </div>
-        </div>
+        )}
         <span style={S.chip(esAdmin(userRol) ? "#7c3aed" : BLUE.primary)}>{userRol}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {!isMobile && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a" }} />
           Sistema en línea
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -131,6 +155,13 @@ export default function App() {
   const [userName, setUserName] = useState("");
   const [userRol, setUserRol] = useState(ROL_AGENTE);
   const [agenteActualId, setAgenteActualId] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const [agentes, setAgentes] = useState([]);
   const [ramos, setRamos] = useState([]);
@@ -566,10 +597,15 @@ export default function App() {
       <FontLoader />
       <ConfirmDialog confirmState={confirmState} onConfirm={handleConfirm} />
       <div style={S.app}>
-        <Sidebar current={page} onNav={handleNav} onLogout={handleLogout} userName={userName} userRol={userRol} />
-        <div style={S.main}>
-          <Topbar page={page} userRol={userRol} />
-          <div style={S.content}>{renderPage()}</div>
+        <Sidebar
+          current={page} onNav={handleNav} onLogout={handleLogout}
+          userName={userName} userRol={userRol}
+          isOpen={sidebarOpen} isMobile={isMobile}
+          onClose={() => setSidebarOpen(false)}
+        />
+        <div style={{ ...S.main, marginLeft: isMobile ? 0 : undefined }}>
+          <Topbar page={page} userRol={userRol} isMobile={isMobile} onToggleSidebar={() => setSidebarOpen(o => !o)} />
+          <div style={{ ...S.content, padding: isMobile ? "14px 12px" : "20px 16px" }}>{renderPage()}</div>
         </div>
       </div>
     </>
