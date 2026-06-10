@@ -41,8 +41,7 @@ const SoatPage = ({ showConfirm }) => {
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
   const [filtroAgente, setFiltroAgente] = useState("Todos");
-  const [filtroFechaCompra, setFiltroFechaCompra] = useState("");
-  const [filtroFechaProxima, setFiltroFechaProxima] = useState("");
+  const [filtroFecha, setFiltroFecha] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
@@ -261,13 +260,12 @@ const SoatPage = ({ showConfirm }) => {
   const filtrados = useMemo(() => clientes.filter(c => {
     const mF = filtroFase === "Todos" || c.fase === filtroFase;
     const mA = filtroAgente === "Todos" || c.agente === filtroAgente;
-    const mFC = !filtroFechaCompra || c.fechaCompra === toFechaStr(filtroFechaCompra);
-    const mFP = !filtroFechaProxima || c.fechaProxima === filtroFechaProxima;
+    const mFecha = !filtroFecha || c.fechaCompra === toFechaStr(filtroFecha) || c.fechaProxima === filtroFecha;
     const mB = !busqueda
       || c.nombre.toLowerCase().includes(busqueda.toLowerCase())
       || (c.telefono||"").includes(busqueda)
       || (c.placa||"").toLowerCase().includes(busqueda.toLowerCase());
-    return mF && mA && mFC && mFP && mB;
+    return mF && mA && mFecha && mB;
   }), [clientes, filtroFase, filtroAgente, filtroFechaCompra, filtroFechaProxima, busqueda]);
 
   const stats = {
@@ -390,27 +388,15 @@ const SoatPage = ({ showConfirm }) => {
           {agentes.map(a => <option key={a}>{a}</option>)}
         </select>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>F. Compra:</label>
+          <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Filtro fecha:</label>
           <input
             type="date"
-            value={filtroFechaCompra}
-            onChange={e => setFiltroFechaCompra(e.target.value)}
+            value={filtroFecha}
+            onChange={e => setFiltroFecha(e.target.value)}
             style={{ ...filterSel, width: 150, padding: "7px 10px" }}
           />
-          {filtroFechaCompra && (
-            <button onClick={() => setFiltroFechaCompra("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Próx. acción:</label>
-          <input
-            type="date"
-            value={filtroFechaProxima}
-            onChange={e => setFiltroFechaProxima(e.target.value)}
-            style={{ ...filterSel, width: 150, padding: "7px 10px" }}
-          />
-          {filtroFechaProxima && (
-            <button onClick={() => setFiltroFechaProxima("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
+          {filtroFecha && (
+            <button onClick={() => setFiltroFecha("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
           )}
         </div>
         <span style={{ fontSize: 12, color: "#6b87b0", whiteSpace: "nowrap", fontWeight: 600 }}>
