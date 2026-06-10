@@ -41,7 +41,7 @@ const SoatPage = ({ showConfirm }) => {
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
   const [filtroAgente, setFiltroAgente] = useState("Todos");
-  const [filtroFechaCompra, setFiltroFechaCompra] = useState("Todos");
+  const [filtroFechaCompra, setFiltroFechaCompra] = useState("");
   const [filtroFechaProxima, setFiltroFechaProxima] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [modal, setModal] = useState(null);
@@ -250,17 +250,18 @@ const SoatPage = ({ showConfirm }) => {
     XLSX.writeFile(wb, "soat-seguimiento.xlsx");
   };
 
-  // ─── Datos derivados ──────────────────────────────────────────────────────
-  const fechasCompra = useMemo(() =>
-    [...new Set(clientes.map(c => c.fechaCompra).filter(Boolean))]
-      .sort((a, b) => parseFechaCompra(a) - parseFechaCompra(b)),
-    [clientes]
-  );
+  // Convierte YYYY-MM-DD (date picker) → dd/mm/yyyy (formato guardado en DB)
+  const toFechaStr = (yyyymmdd) => {
+    if (!yyyymmdd) return "";
+    const [y, m, d] = yyyymmdd.split("-");
+    return `${d}/${m}/${y}`;
+  };
 
+  // ─── Datos derivados ──────────────────────────────────────────────────────
   const filtrados = useMemo(() => clientes.filter(c => {
     const mF = filtroFase === "Todos" || c.fase === filtroFase;
     const mA = filtroAgente === "Todos" || c.agente === filtroAgente;
-    const mFC = filtroFechaCompra === "Todos" || c.fechaCompra === filtroFechaCompra;
+    const mFC = !filtroFechaCompra || c.fechaCompra === toFechaStr(filtroFechaCompra);
     const mFP = !filtroFechaProxima || c.fechaProxima === filtroFechaProxima;
     const mB = !busqueda
       || c.nombre.toLowerCase().includes(busqueda.toLowerCase())
@@ -388,17 +389,25 @@ const SoatPage = ({ showConfirm }) => {
           <option value="Todos">Todos los agentes</option>
           {agentes.map(a => <option key={a}>{a}</option>)}
         </select>
-        <select value={filtroFechaCompra} onChange={e => setFiltroFechaCompra(e.target.value)} style={filterSel}>
-          <option value="Todos">Todas las F. Compra</option>
-          {fechasCompra.map(f => <option key={f}>{f}</option>)}
-        </select>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>F. Compra:</label>
+          <input
+            type="date"
+            value={filtroFechaCompra}
+            onChange={e => setFiltroFechaCompra(e.target.value)}
+            style={{ ...filterSel, width: 150, padding: "7px 10px" }}
+          />
+          {filtroFechaCompra && (
+            <button onClick={() => setFiltroFechaCompra("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Próx. acción:</label>
           <input
             type="date"
             value={filtroFechaProxima}
             onChange={e => setFiltroFechaProxima(e.target.value)}
-            style={{ ...filterSel, width: 160, padding: "7px 10px" }}
+            style={{ ...filterSel, width: 150, padding: "7px 10px" }}
           />
           {filtroFechaProxima && (
             <button onClick={() => setFiltroFechaProxima("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
@@ -450,9 +459,14 @@ const SoatPage = ({ showConfirm }) => {
                   style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1.5px solid ${fase.color}`, background: fase.bg, color: fase.text, cursor: "pointer", outline: "none", fontWeight: 700, width: "100%" }}>
                   {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
                 </select>
-                <div style={{ fontSize: 12, color: "#555" }}>{c.agente}</div>
+                <select value={c.agente} onChange={e => updateC(c.id, "agente", e.target.value)}
+                  style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1px solid ${BLUE.border}`, background: "#fff", color: "#333", cursor: "pointer", outline: "none", width: "100%" }}>
+                  {agentes.map(a => <option key={a}>{a}</option>)}
+                </select>
                 <div>
-                  {c.proximaAccion ? (
+                  {FASES_SIN_ACCION.includes(c.fase) ? (
+                    <span style={{ color: "#ccc", fontSize: 12 }}>—</span>
+                  ) : c.proximaAccion ? (
                     <div>
                       <div style={{ fontSize: 11.5, color: "#555", fontWeight: 600 }}>{c.proximaAccion}</div>
                       {c.fechaProxima && (
