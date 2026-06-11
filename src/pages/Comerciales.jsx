@@ -12,7 +12,7 @@ const ComercialPage = ({ showConfirm }) => {
     const { data } = await supabase
       .from("agentes")
       .select("id, nombre, created_at")
-      .eq("es_comercial", true)
+      .eq("rol", "Comercial")
       .order("nombre");
     if (data) setAgentes(data);
     setLoading(false);
@@ -30,7 +30,7 @@ const ComercialPage = ({ showConfirm }) => {
     const nombre = nuevo.trim().toUpperCase();
     if (!nombre || agentes.some(a => a.nombre.toUpperCase() === nombre)) return;
     setSaving(true);
-    const { error } = await supabase.from("agentes").insert({ nombre, es_comercial: true });
+    const { error } = await supabase.from("agentes").insert({ nombre, rol: "Comercial" });
     if (error) console.error(error);
     await cargar();
     setNuevo(""); setSaving(false);
