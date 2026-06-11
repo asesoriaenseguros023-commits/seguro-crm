@@ -79,7 +79,7 @@ const SoatPage = ({ showConfirm }) => {
       .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
 
     const cargarAgentes = () =>
-      supabase.from("comerciales").select("nombre").order("nombre")
+      supabase.from("agentes").select("nombre").eq("rol", "Comercial").order("nombre")
         .then(({ data }) => {
           if (data && data.length > 0)
             setAgentes(["Sin asignar", ...data.map(r => r.nombre)]);
@@ -95,7 +95,7 @@ const SoatPage = ({ showConfirm }) => {
         if (payload.eventType === "DELETE")
           setClientes(p => p.filter(x => x.id !== payload.old.id));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "comerciales" }, cargarAgentes)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agentes" }, cargarAgentes)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
