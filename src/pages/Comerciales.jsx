@@ -10,7 +10,8 @@ const ComercialPage = ({ showConfirm }) => {
 
   const cargar = async () => {
     const { data } = await supabase
-      .from("comerciales").select("id, nombre, created_at").order("nombre");
+      .from("agentes").select("id, nombre, created_at")
+      .eq("rol", "Comercial").order("nombre");
     if (data) setAgentes(data);
     setLoading(false);
   };
@@ -18,7 +19,7 @@ const ComercialPage = ({ showConfirm }) => {
   useEffect(() => {
     cargar();
     const ch = supabase.channel("comerciales-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "comerciales" }, cargar)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agentes" }, cargar)
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, []);
@@ -27,7 +28,7 @@ const ComercialPage = ({ showConfirm }) => {
     const nombre = nuevo.trim().toUpperCase();
     if (!nombre || agentes.some(a => a.nombre.toUpperCase() === nombre)) return;
     setSaving(true);
-    const { error } = await supabase.from("comerciales").insert({ nombre });
+    const { error } = await supabase.from("agentes").insert({ nombre, rol: "Comercial" });
     if (error) console.error(error);
     await cargar();
     setNuevo(""); setSaving(false);
@@ -36,7 +37,7 @@ const ComercialPage = ({ showConfirm }) => {
   const remove = async (id, nombre) => {
     const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
-    await supabase.from("comerciales").delete().eq("id", id);
+    await supabase.from("agentes").delete().eq("id", id);
     await cargar();
   };
 
