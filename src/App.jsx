@@ -17,6 +17,7 @@ import ReportesPage from "./pages/Reportes.jsx";
 import RamosPage from "./pages/Ramos.jsx";
 import AseguradorasPage from "./pages/Aseguradoras.jsx";
 import ConfiguracionPage from "./pages/Configuracion.jsx";
+import ComercialPage from "./pages/Comerciales.jsx";
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
 const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile, onClose }) => {
@@ -55,6 +56,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
             { id: "polizas", label: "Pólizas", icon: "shield" },
             { id: "renovaciones", label: "Renovaciones", icon: "bell" },
             { id: "soat", label: "Seguimiento SOAT", icon: "shield" },
+            { id: "comerciales", label: "Comerciales", icon: "users" },
             { id: "reportes", label: "Reportes", icon: "chart" },
           ].map((i) => (
             <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
@@ -103,7 +105,7 @@ const Topbar = ({ page, userRol, isMobile, onToggleSidebar }) => {
   const labels = {
     dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads",
     cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones",
-    soat: "Seguimiento SOAT", ramos: "Ramos de Seguros",
+    soat: "Seguimiento SOAT", comerciales: "Comerciales", ramos: "Ramos de Seguros",
     aseguradoras: "Aseguradoras", reportes: "Reportes",
   };
   const [ahora, setAhora] = useState(new Date());
@@ -579,6 +581,8 @@ export default function App() {
         );
       case "soat":
         return <SoatPage showConfirm={showConfirm} />;
+      case "comerciales":
+        return <ComercialPage showConfirm={showConfirm} />;
       case "reportes":
         return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
       case "ramos":

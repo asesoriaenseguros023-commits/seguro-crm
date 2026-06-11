@@ -5,9 +5,14 @@ import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, ACCIONES_SOAT } from "../co
 import { parseDateSoat, diasRenSoat, mapSoat, toSoatRow } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
-// Agentes ahora viven en Supabase (tabla soat_agentes) con realtime
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const fmtAnioMes = (s) => {
+  if (!s) return "Sin fecha";
+  const [m, y] = s.split("-");
+  const idx = parseInt(m, 10) - 1;
+  return `${MESES[idx] || m} ${y || ""}`.trim();
+};
 
-// ─── Helpers locales ──────────────────────────────────────────────────────────
 let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
 const soatEmpty = () => ({
@@ -17,7 +22,6 @@ const soatEmpty = () => ({
   motivoNoCompra: "", historial: [], notas: "",
 });
 
-// Parsea dd/mm/yyyy a timestamp para ordenar cronológicamente
 const parseFechaCompra = (s) => {
   if (!s) return 0;
   const p = s.split("/");
@@ -27,6 +31,24 @@ const parseFechaCompra = (s) => {
 
 const FASES_SIN_ACCION = ["compro", "no_interes"];
 
+// ─── Funnel bar ───────────────────────────────────────────────────────────────
+const FunnelBar = ({ label, value, total, color, bold }) => {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+        <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color: "#333" }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color }}>
+          {value} <span style={{ fontSize: 11.5, color: "#888", fontWeight: 400 }}>({pct}%)</span>
+        </span>
+      </div>
+      <div style={{ background: "#e8f0fe", borderRadius: 6, height: 26, overflow: "hidden" }}>
+        <div style={{ background: color, width: `${Math.max(pct, value > 0 ? 1 : 0)}%`, height: "100%", borderRadius: 6, transition: "width 0.6s ease" }} />
+      </div>
+    </div>
+  );
+};
+
 const SoatPage = ({ showConfirm }) => {
   const [clientes, setClientes] = useState([]);
   const [loadingSoat, setLoadingSoat] = useState(true);
@@ -34,32 +56,40 @@ const SoatPage = ({ showConfirm }) => {
   const [filtroAgente, setFiltroAgente] = useState("Todos");
   const [filtroFecha, setFiltroFecha] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaModo, setBusquedaModo] = useState("nombre");
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [agentes, setAgentes] = useState(["Sin asignar"]);
   const [nuevoAgente, setNuevoAgente] = useState("");
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
-  const [importDups, setImportDups] = useState(null); // {nuevos, duplicados}
+  const [importDups, setImportDups] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
   const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
+  // Funnel
+  const [showFunnel, setShowFunnel] = useState(false);
+  const [funnelBases, setFunnelBases] = useState([]);
+  // Export dialog
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportBases, setExportBases] = useState([]);
+  const [exportEstados, setExportEstados] = useState(FASES_SOAT.map(f => f.id));
   const fileRef = useRef();
 
   // ─── Carga inicial + realtime ────────────────────────────────────────────
   useEffect(() => {
-    // Clientes
     supabase.from("soat_clientes").select("*").order("created_at", { ascending: false })
       .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
 
-    // Agentes desde Supabase
-    supabase.from("soat_agentes").select("nombre").order("created_at", { ascending: true })
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          const nombres = data.map(r => r.nombre);
-          setAgentes(nombres.includes("Sin asignar") ? nombres : ["Sin asignar", ...nombres]);
-        }
-      });
+    const cargarAgentes = () =>
+      supabase.from("soat_agentes").select("nombre").order("created_at", { ascending: true })
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            const nombres = data.map(r => r.nombre);
+            setAgentes(nombres.includes("Sin asignar") ? nombres : ["Sin asignar", ...nombres]);
+          }
+        });
+    cargarAgentes();
 
-    const channel = supabase.channel("soat-changes")
+    const channel = supabase.channel("soat-all")
       .on("postgres_changes", { event: "*", schema: "public", table: "soat_clientes" }, (payload) => {
         if (payload.eventType === "INSERT")
           setClientes(p => p.some(x => x.id === payload.new.id) ? p : [mapSoat(payload.new), ...p]);
@@ -68,35 +98,25 @@ const SoatPage = ({ showConfirm }) => {
         if (payload.eventType === "DELETE")
           setClientes(p => p.filter(x => x.id !== payload.old.id));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "soat_agentes" }, () => {
-        // Recarga la lista completa en cualquier cambio (INSERT o DELETE)
-        supabase.from("soat_agentes").select("nombre").order("created_at", { ascending: true })
-          .then(({ data }) => {
-            if (data) {
-              const nombres = data.map(r => r.nombre);
-              setAgentes(nombres.includes("Sin asignar") ? nombres : ["Sin asignar", ...nombres]);
-            }
-          });
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "soat_agentes" }, cargarAgentes)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ─── Agentes en Supabase (realtime sincroniza a todos los dispositivos) ──
+  // ─── Agentes ─────────────────────────────────────────────────────────────
   const addAgente = async () => {
     const nombre = nuevoAgente.trim();
     if (!nombre || agentes.includes(nombre)) return;
     setNuevoAgente("");
     await supabase.from("soat_agentes").insert({ nombre });
-    // El canal realtime actualizará la lista en todos los dispositivos
   };
   const removeAgente = async (nombre) => {
     if (nombre === "Sin asignar") return;
     await supabase.from("soat_agentes").delete().eq("nombre", nombre);
   };
 
-  // ─── Update campo con limpieza de acción cuando fase lo requiere ─────────
+  // ─── Update campo ─────────────────────────────────────────────────────────
   const updateC = async (id, field, value) => {
     const dbField = {
       fase: "fase", agente: "agente", proximaAccion: "proxima_accion",
@@ -104,11 +124,9 @@ const SoatPage = ({ showConfirm }) => {
       notas: "notas", nombre: "nombre", telefono: "telefono",
       placa: "placa", anioMes: "anio_mes", fechaCompra: "fecha_compra",
     }[field] || field;
-
     const clearAccion = field === "fase" && FASES_SIN_ACCION.includes(value);
     const patch = { [field]: value, ...(clearAccion ? { proximaAccion: "", fechaProxima: "" } : {}) };
     const dbPatch = { [dbField]: value, ...(clearAccion ? { proxima_accion: "", fecha_proxima: "" } : {}) };
-
     setClientes(p => p.map(c => c.id === id ? { ...c, ...patch } : c));
     if (modal?.id === id) setModal(p => ({ ...p, ...patch }));
     await supabase.from("soat_clientes").update(dbPatch).eq("id", id);
@@ -119,7 +137,7 @@ const SoatPage = ({ showConfirm }) => {
     setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
   };
 
-  // ─── Registrar llamada ────────────────────────────────────────────────────
+  // ─── Llamada ──────────────────────────────────────────────────────────────
   const registrarLlamada = async () => {
     if (!callLog.resultado) return;
     const clearAccion = FASES_SIN_ACCION.includes(callLog.resultado);
@@ -175,13 +193,11 @@ const SoatPage = ({ showConfirm }) => {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
       if (!rows.length) { setImportMsg({ text: "El archivo está vacío", type: "error" }); return; }
-
       const keys = Object.keys(rows[0]);
       const col = (...names) => { for (const n of names) { const k = keys.find(k => k.toLowerCase().includes(n.toLowerCase())); if (k) return k; } return null; };
       const kN = col("nombre","name"), kT = col("tel","cel","phone"), kP = col("placa","plate");
       const kF = col("fecha compra","fecha","date","compra"), kE = col("estado","status","fase"), kM = col("fecha base","base","mes","año","anio");
       if (!kN) { setImportMsg({ text: "No se encontró columna 'Nombre'", type: "error" }); return; }
-
       const faseMap = {
         "interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion",
         "volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro",
@@ -204,7 +220,6 @@ const SoatPage = ({ showConfirm }) => {
         } catch {}
         return "";
       };
-
       const nuevos = rows.map(r => {
         const fechaRaw = kF ? r[kF] : "";
         const fechaStr = fechaRaw instanceof Date
@@ -216,12 +231,9 @@ const SoatPage = ({ showConfirm }) => {
           placa: kP ? String(r[kP] || "").trim() : "", fechaCompra: fechaStr, anioMes: anioMesVal,
           fase: faseMap[er] || "pendiente", agente: "Sin asignar" };
       }).filter(c => c.nombre);
-
-      // Detectar duplicados por nombre + teléfono
       const duplicados = nuevos.filter(n =>
         clientes.some(c => c.nombre.toLowerCase() === n.nombre.toLowerCase() && c.telefono === n.telefono)
       );
-
       if (duplicados.length > 0) {
         setImportDups({ nuevos, duplicados, soloNuevos: nuevos.filter(n => !clientes.some(c => c.nombre.toLowerCase() === n.nombre.toLowerCase() && c.telefono === n.telefono)) });
         setImportMsg({ text: "", type: "success" });
@@ -230,7 +242,6 @@ const SoatPage = ({ showConfirm }) => {
       }
     } catch (err) {
       setImportMsg({ text: "Error: " + err.message, type: "error" });
-      console.error(err);
     }
     e.target.value = "";
   };
@@ -250,36 +261,51 @@ const SoatPage = ({ showConfirm }) => {
     setTimeout(() => setImportMsg({ text: "", type: "success" }), 5000);
   };
 
-  // ─── Export ───────────────────────────────────────────────────────────────
-  const exportXLSX_SOAT = () => {
+  // ─── Export con dialog ────────────────────────────────────────────────────
+  const ejecutarExport = () => {
+    let lista = clientes;
+    if (exportBases.length > 0) lista = lista.filter(c => exportBases.includes(c.anioMes));
+    if (exportEstados.length > 0) lista = lista.filter(c => exportEstados.includes(c.fase));
     const cols = ["#","Fecha Base","Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Notas"];
-    const rows = filtrados.map((c, i) => [i+1, c.anioMes||"", c.nombre, c.telefono, c.placa,
+    const rows = lista.map((c, i) => [i+1, fmtAnioMes(c.anioMes), c.nombre, c.telefono, c.placa,
       c.fechaCompra, FM_SOAT[c.fase]?.label||c.fase, c.agente, c.intentos,
       c.proximaAccion, c.fechaProxima, c.motivoNoCompra, c.notas]);
     const ws = XLSX.utils.aoa_to_sheet([cols, ...rows]);
+    ws["!cols"] = [6,14,28,14,10,14,16,14,8,22,14,22,30].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "SOAT");
     XLSX.writeFile(wb, "soat-seguimiento.xlsx");
+    setShowExportDialog(false);
   };
 
-  // Convierte YYYY-MM-DD (date picker) → dd/mm/yyyy (formato guardado en DB)
+  // ─── Datos derivados ──────────────────────────────────────────────────────
   const toFechaStr = (yyyymmdd) => {
     if (!yyyymmdd) return "";
     const [y, m, d] = yyyymmdd.split("-");
     return `${d}/${m}/${y}`;
   };
 
-  // ─── Datos derivados ──────────────────────────────────────────────────────
+  const basesDisponibles = useMemo(() =>
+    [...new Set(clientes.map(c => c.anioMes).filter(Boolean))]
+      .sort((a, b) => {
+        const [ma, ya] = a.split("-"); const [mb, yb] = b.split("-");
+        return new Date(`${ya}-${ma}-01`) - new Date(`${yb}-${mb}-01`);
+      }),
+    [clientes]
+  );
+
   const filtrados = useMemo(() => clientes.filter(c => {
     const mF = filtroFase === "Todos" || c.fase === filtroFase;
     const mA = filtroAgente === "Todos" || c.agente === filtroAgente;
     const mFecha = !filtroFecha || c.fechaCompra === toFechaStr(filtroFecha) || c.fechaProxima === filtroFecha;
-    const mB = !busqueda
-      || c.nombre.toLowerCase().includes(busqueda.toLowerCase())
-      || (c.telefono||"").includes(busqueda)
-      || (c.placa||"").toLowerCase().includes(busqueda.toLowerCase());
+    const q = busqueda.trim().toLowerCase();
+    const mB = !q || (() => {
+      if (busquedaModo === "telefono") return (c.telefono || "").includes(busqueda.trim());
+      if (busquedaModo === "placa") return (c.placa || "").toLowerCase().startsWith(q);
+      return c.nombre.toLowerCase().includes(q);
+    })();
     return mF && mA && mFecha && mB;
-  }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda]);
+  }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda, busquedaModo]);
 
   const stats = {
     total: clientes.length,
@@ -296,11 +322,45 @@ const SoatPage = ({ showConfirm }) => {
     return d && d <= new Date();
   });
 
-  // ─── Estilos locales ──────────────────────────────────────────────────────
+  // ─── Funnel data ──────────────────────────────────────────────────────────
+  const funnelClientes = funnelBases.length === 0
+    ? clientes
+    : clientes.filter(c => funnelBases.includes(c.anioMes));
+
+  const funnelData = useMemo(() => {
+    const base = funnelClientes.length;
+    const gestionados = funnelClientes.filter(c => ["interesado","compro","ilocalizable","no_interes","en_gestion"].includes(c.fase)).length;
+    const noInteres = funnelClientes.filter(c => c.fase === "no_interes").length;
+    const compro = funnelClientes.filter(c => c.fase === "compro").length;
+    const ilocalizable = funnelClientes.filter(c => c.fase === "ilocalizable").length;
+    const activos = funnelClientes.filter(c => ["en_gestion","interesado"].includes(c.fase)).length;
+    return { base, gestionados, noInteres, compro, ilocalizable, activos };
+  }, [funnelClientes]);
+
+  // ─── Estilos ──────────────────────────────────────────────────────────────
   const inpS = { background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "9px 12px", color: BLUE.text, fontSize: 13, outline: "none", width: "100%", fontFamily: "inherit", boxSizing: "border-box" };
   const lblS = { fontSize: 11, color: "#6b87b0", fontWeight: 700, textTransform: "uppercase", marginBottom: 5, letterSpacing: "0.06em", display: "block" };
   const selS = { ...inpS, cursor: "pointer" };
   const filterSel = { ...S.select, width: "auto", padding: "7px 12px", fontSize: 13 };
+
+  // Pill toggle para multi-select
+  const PillToggle = ({ options, selected, onChange, fmt }) => (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {options.map(opt => {
+        const active = selected.includes(opt);
+        return (
+          <button key={opt} onClick={() => onChange(active ? selected.filter(s => s !== opt) : [...selected, opt])}
+            style={{ padding: "5px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer", border: "1.5px solid", background: active ? BLUE.primary : "#fff", color: active ? "#fff" : BLUE.text, borderColor: active ? BLUE.primary : BLUE.border, fontWeight: active ? 700 : 400, transition: "all 0.12s" }}>
+            {fmt ? fmt(opt) : opt}
+          </button>
+        );
+      })}
+      <button onClick={() => onChange(selected.length === options.length ? [] : [...options])}
+        style={{ padding: "5px 13px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: `1px solid ${BLUE.border}`, background: "transparent", color: "#888", transition: "all 0.12s" }}>
+        {selected.length === options.length ? "Ninguno" : "Todos"}
+      </button>
+    </div>
+  );
 
   return (
     <div>
@@ -311,11 +371,16 @@ const SoatPage = ({ showConfirm }) => {
           <div style={S.pageSub}>{clientes.length} clientes · {filtrados.length} visibles con filtros activos</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={descargarTemplate} style={{ ...S.btn("ghost"), border: `1px solid ${BLUE.border}` }}>Plantilla Excel</button>
+          <button onClick={() => { setFunnelBases([]); setShowFunnel(true); }}
+            style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
+            Funnel
+          </button>
+          <button onClick={descargarTemplate} style={{ ...S.btn("ghost"), border: `1px solid ${BLUE.border}` }}>Plantilla</button>
           <button onClick={() => fileRef.current.click()} style={S.btn("secondary")}>
             <Icon name="upload" size={16} /> Importar
           </button>
-          <button onClick={exportXLSX_SOAT} style={S.btn("success")}>
+          <button onClick={() => { setExportBases([]); setExportEstados(FASES_SOAT.map(f => f.id)); setShowExportDialog(true); }}
+            style={S.btn("success")}>
             <Icon name="download" size={16} /> Exportar
           </button>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={importCSV} style={{ display: "none" }} />
@@ -331,7 +396,6 @@ const SoatPage = ({ showConfirm }) => {
         </div>
       )}
 
-      {/* ── Modal duplicados en importación ─────────────────────────────────── */}
       {importDups && (
         <div style={{ background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "16px 20px", marginBottom: 16 }}>
           <div style={{ fontWeight: 700, color: "#92400e", marginBottom: 8, fontSize: 14 }}>
@@ -341,12 +405,8 @@ const SoatPage = ({ showConfirm }) => {
             Total en archivo: {importDups.nuevos.length} · Nuevos: {importDups.soloNuevos.length} · Duplicados: {importDups.duplicados.length}
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={S.btn("primary")} onClick={() => ejecutarImport(importDups.soloNuevos)}>
-              Importar solo los {importDups.soloNuevos.length} nuevos
-            </button>
-            <button style={S.btn("secondary")} onClick={() => ejecutarImport(importDups.nuevos)}>
-              Importar todos ({importDups.nuevos.length})
-            </button>
+            <button style={S.btn("primary")} onClick={() => ejecutarImport(importDups.soloNuevos)}>Importar solo los {importDups.soloNuevos.length} nuevos</button>
+            <button style={S.btn("secondary")} onClick={() => ejecutarImport(importDups.nuevos)}>Importar todos ({importDups.nuevos.length})</button>
             <button style={S.btn("ghost")} onClick={() => setImportDups(null)}>Cancelar</button>
           </div>
         </div>
@@ -376,7 +436,7 @@ const SoatPage = ({ showConfirm }) => {
         ))}
       </div>
 
-      {/* ── Filtro por fase (pills) ──────────────────────────────────────────── */}
+      {/* ── Fase pills ──────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 4 }}>
         {[{ id: "Todos", label: "Todos", color: "#6b7280" }, ...FASES_SOAT].map(f => {
           const cnt = f.id === "Todos" ? clientes.length : clientes.filter(c => c.fase === f.id).length;
@@ -391,50 +451,47 @@ const SoatPage = ({ showConfirm }) => {
       </div>
 
       {/* ── Barra de filtros ─────────────────────────────────────────────────── */}
-      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ ...S.searchBar, flex: 1, minWidth: 200 }}>
-          <Icon name="search" size={16} />
-          <input style={S.searchInput} placeholder="Nombre, teléfono o placa..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        {/* Modo búsqueda */}
+        <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
+          {[["nombre","Nombre"],["telefono","Teléfono"],["placa","Placa"]].map(([modo, label]) => (
+            <button key={modo} onClick={() => { setBusquedaModo(modo); setBusqueda(""); }}
+              style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+              {label}
+            </button>
+          ))}
         </div>
-        <select value={filtroAgente} onChange={e => setFiltroAgente(e.target.value)} style={filterSel}>
-          <option value="Todos">Todos los agentes</option>
-          {agentes.map(a => <option key={a}>{a}</option>)}
-        </select>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Filtro fecha:</label>
-          <input
-            type="date"
-            value={filtroFecha}
-            onChange={e => setFiltroFecha(e.target.value)}
-            style={{ ...filterSel, width: 150, padding: "7px 10px" }}
-          />
-          {filtroFecha && (
-            <button onClick={() => setFiltroFecha("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
-          )}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ ...S.searchBar, flex: 1, minWidth: 200 }}>
+            <Icon name="search" size={16} />
+            <input style={S.searchInput}
+              placeholder={busquedaModo === "telefono" ? "Número de teléfono..." : busquedaModo === "placa" ? "Placa del vehículo..." : "Nombre del cliente..."}
+              value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+          </div>
+          <select value={filtroAgente} onChange={e => setFiltroAgente(e.target.value)} style={filterSel}>
+            <option value="Todos">Todos los agentes</option>
+            {agentes.map(a => <option key={a}>{a}</option>)}
+          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Filtro fecha:</label>
+            <input type="date" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)}
+              style={{ ...filterSel, width: 150, padding: "7px 10px" }} />
+            {filtroFecha && (
+              <button onClick={() => setFiltroFecha("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
+            )}
+          </div>
+          <span style={{ fontSize: 12, color: "#6b87b0", whiteSpace: "nowrap", fontWeight: 600 }}>{filtrados.length} registros</span>
         </div>
-        <span style={{ fontSize: 12, color: "#6b87b0", whiteSpace: "nowrap", fontWeight: 600 }}>
-          {filtrados.length} registros
-        </span>
       </div>
 
       {/* ── Tabla ────────────────────────────────────────────────────────────── */}
       <div style={{ ...S.tableWrap, overflowX: "auto" }}>
         <div style={{ minWidth: 860 }}>
           <div style={{ ...S.tableHead, display: "grid", gridTemplateColumns: "36px 2fr 0.8fr 0.8fr 1.3fr 1fr 1.2fr 90px" }}>
-            <span>#</span>
-            <span>Cliente</span>
-            <span>F. Base</span>
-            <span>F. Compra</span>
-            <span>Fase</span>
-            <span>Agente</span>
-            <span>Próxima acción</span>
-            <span></span>
+            <span>#</span><span>Cliente</span><span>F. Base</span><span>F. Compra</span><span>Fase</span><span>Agente</span><span>Próxima acción</span><span></span>
           </div>
-
           {filtrados.length === 0 ? (
-            <div style={{ padding: 48, textAlign: "center", color: "#aaa", fontSize: 14 }}>
-              Sin registros. Importa un archivo o ajusta los filtros.
-            </div>
+            <div style={{ padding: 48, textAlign: "center", color: "#aaa", fontSize: 14 }}>Sin registros. Importa un archivo o ajusta los filtros.</div>
           ) : filtrados.map((c, idx) => {
             const fase = FM_SOAT[c.fase] || FASES_SOAT[0];
             const urgente = c.fechaProxima && parseDateSoat(c.fechaProxima) <= new Date();
@@ -442,8 +499,7 @@ const SoatPage = ({ showConfirm }) => {
               <div key={c.id}
                 style={{ ...S.tableRow, display: "grid", gridTemplateColumns: "36px 2fr 0.8fr 0.8fr 1.3fr 1fr 1.2fr 90px" }}
                 onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
-                onMouseLeave={e => e.currentTarget.style.background = ""}
-              >
+                onMouseLeave={e => e.currentTarget.style.background = ""}>
                 <div style={{ fontWeight: 700, color: "#bbb", fontSize: 12 }}>{idx + 1}</div>
                 <div style={{ cursor: "pointer" }} onClick={() => openModal(c)}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{c.nombre || "—"}</div>
@@ -452,7 +508,7 @@ const SoatPage = ({ showConfirm }) => {
                     {c.historial?.length > 0 && <span style={{ marginLeft: 6, color: "#aaa" }}>({c.historial.length} llam.)</span>}
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: "#555" }}>{c.anioMes || "—"}</div>
+                <div style={{ fontSize: 12, color: "#555" }}>{fmtAnioMes(c.anioMes)}</div>
                 <div style={{ fontSize: 12, color: "#555" }}>{c.fechaCompra || "—"}</div>
                 <select value={c.fase} onChange={e => updateC(c.id, "fase", e.target.value)}
                   style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1.5px solid ${fase.color}`, background: fase.bg, color: fase.text, cursor: "pointer", outline: "none", fontWeight: 700, width: "100%" }}>
@@ -478,9 +534,7 @@ const SoatPage = ({ showConfirm }) => {
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   <button onClick={() => openModal(c)} style={{ ...S.btn("primary"), padding: "5px 10px", fontSize: 11 }}>Ver</button>
-                  <button onClick={() => setEditModal({ ...c })} style={{ ...S.btn("ghost"), padding: "5px 8px" }}>
-                    <Icon name="edit" size={13} />
-                  </button>
+                  <button onClick={() => setEditModal({ ...c })} style={{ ...S.btn("ghost"), padding: "5px 8px" }}><Icon name="edit" size={13} /></button>
                 </div>
               </div>
             );
@@ -499,8 +553,7 @@ const SoatPage = ({ showConfirm }) => {
             </div>
           ))}
           <input value={nuevoAgente} onChange={e => setNuevoAgente(e.target.value)}
-            placeholder="Nombre del agente..."
-            onKeyDown={e => e.key === "Enter" && addAgente()}
+            placeholder="Nombre del agente..." onKeyDown={e => e.key === "Enter" && addAgente()}
             style={{ ...S.input, width: 180, padding: "6px 12px", fontSize: 13 }} />
           <button onClick={addAgente} style={S.btn("secondary")}>+ Agregar</button>
         </div>
@@ -561,8 +614,6 @@ const SoatPage = ({ showConfirm }) => {
       {modal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }} onClick={() => setModal(null)}>
           <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 680, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)" }} onClick={e => e.stopPropagation()}>
-
-            {/* Header modal */}
             <div style={{ padding: "22px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>{modal.nombre || "Cliente"}</div>
@@ -577,8 +628,6 @@ const SoatPage = ({ showConfirm }) => {
               </div>
               <button onClick={() => setModal(null)} style={{ background: "transparent", border: "none", color: "#aaa", fontSize: 24, cursor: "pointer", padding: "0 4px" }}>×</button>
             </div>
-
-            {/* Tabs */}
             <div style={{ display: "flex", padding: "16px 28px 0", borderBottom: `1px solid ${BLUE.border}`, gap: 4 }}>
               {[["info","Información"],["llamada","Registrar llamada"],["historial",`Historial (${modal.historial?.length || 0})`]].map(([t, l]) => (
                 <button key={t} onClick={() => setActiveTab(t)}
@@ -587,10 +636,7 @@ const SoatPage = ({ showConfirm }) => {
                 </button>
               ))}
             </div>
-
             <div style={{ padding: "22px 28px 28px" }}>
-
-              {/* Tab: Info */}
               {activeTab === "info" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -639,13 +685,9 @@ const SoatPage = ({ showConfirm }) => {
                     <label style={lblS}>Notas generales</label>
                     <textarea value={modal.notas || ""} onChange={e => { updateC(modal.id, "notas", e.target.value); setModal(p => ({ ...p, notas: e.target.value })); }} rows={3} style={{ ...inpS, resize: "vertical" }} />
                   </div>
-                  <button onClick={() => deleteC(modal.id)} style={{ ...S.btn("danger"), alignSelf: "flex-start" }}>
-                    Eliminar cliente
-                  </button>
+                  <button onClick={() => deleteC(modal.id)} style={{ ...S.btn("danger"), alignSelf: "flex-start" }}>Eliminar cliente</button>
                 </div>
               )}
-
-              {/* Tab: Registrar llamada */}
               {activeTab === "llamada" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", fontSize: 12.5, color: BLUE.text }}>
@@ -692,8 +734,6 @@ const SoatPage = ({ showConfirm }) => {
                   </button>
                 </div>
               )}
-
-              {/* Tab: Historial */}
               {activeTab === "historial" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {(!modal.historial || modal.historial.length === 0) && (
@@ -715,7 +755,115 @@ const SoatPage = ({ showConfirm }) => {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* ── Funnel modal ─────────────────────────────────────────────────────── */}
+      {showFunnel && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowFunnel(false)}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 620, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Funnel de Ventas</div>
+                <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 3 }}>
+                  {funnelBases.length === 0 ? "Toda la base" : funnelBases.map(fmtAnioMes).join(", ")} · {funnelClientes.length} clientes
+                </div>
+              </div>
+              <button onClick={() => setShowFunnel(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#aaa" }}>×</button>
+            </div>
+
+            {/* Filtro F.Base */}
+            <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 24 }}>
+              <label style={lblS}>Filtrar por F. Base</label>
+              <PillToggle
+                options={basesDisponibles}
+                selected={funnelBases}
+                onChange={setFunnelBases}
+                fmt={fmtAnioMes}
+              />
+            </div>
+
+            {/* Barras del funnel */}
+            <div style={{ marginBottom: 24 }}>
+              <FunnelBar label="Base total" value={funnelData.base} total={funnelData.base} color={BLUE.primary} bold />
+              <FunnelBar label="Gestionados" value={funnelData.gestionados} total={funnelData.base} color="#6366f1" />
+              <FunnelBar label="No interesados" value={funnelData.noInteres} total={funnelData.base} color="#ef4444" />
+              <FunnelBar label="Compró" value={funnelData.compro} total={funnelData.base} color="#8b5cf6" />
+              <FunnelBar label="Ilocalizable" value={funnelData.ilocalizable} total={funnelData.base} color="#9ca3af" />
+              <FunnelBar label="Clientes activos (En gestión + Interesados)" value={funnelData.activos} total={funnelData.base} color="#10b981" />
+            </div>
+
+            {/* KPIs */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {[
+                {
+                  label: "% de Éxito",
+                  value: funnelData.gestionados > 0 ? ((funnelData.compro / funnelData.gestionados) * 100).toFixed(1) : "0.0",
+                  sub: `${funnelData.compro} compró / ${funnelData.gestionados} gestionados`,
+                  color: "#8b5cf6",
+                  bg: "#ede9fe",
+                },
+                {
+                  label: "% Clientes Perdidos",
+                  value: funnelData.gestionados > 0 ? ((funnelData.noInteres / funnelData.gestionados) * 100).toFixed(1) : "0.0",
+                  sub: `${funnelData.noInteres} no interesados / ${funnelData.gestionados} gestionados`,
+                  color: "#ef4444",
+                  bg: "#fee2e2",
+                },
+              ].map(k => (
+                <div key={k.label} style={{ background: k.bg, border: `1px solid ${k.color}30`, borderRadius: 12, padding: "20px 22px", textAlign: "center" }}>
+                  <div style={{ fontSize: 38, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.value}%</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: k.color, marginTop: 8 }}>{k.label}</div>
+                  <div style={{ fontSize: 11.5, color: "#666", marginTop: 4 }}>{k.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Export dialog ────────────────────────────────────────────────────── */}
+      {showExportDialog && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowExportDialog(false)}>
+          <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+              <div style={{ fontWeight: 800, fontSize: 18, color: BLUE.text }}>Exportar a Excel</div>
+              <button onClick={() => setShowExportDialog(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa" }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={lblS}>F. Base <span style={{ color: "#aaa", fontWeight: 400, textTransform: "none" }}>(vacío = todas)</span></label>
+              <PillToggle options={basesDisponibles} selected={exportBases} onChange={setExportBases} fmt={fmtAnioMes} />
+            </div>
+
+            <div style={{ marginBottom: 28 }}>
+              <label style={lblS}>Estados <span style={{ color: "#aaa", fontWeight: 400, textTransform: "none" }}>(vacío = todos)</span></label>
+              <PillToggle
+                options={FASES_SOAT.map(f => f.id)}
+                selected={exportEstados}
+                onChange={setExportEstados}
+                fmt={id => FM_SOAT[id]?.label || id}
+              />
+            </div>
+
+            <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#6b87b0" }}>
+              Se exportarán <strong style={{ color: BLUE.text }}>
+                {(() => {
+                  let lista = clientes;
+                  if (exportBases.length > 0) lista = lista.filter(c => exportBases.includes(c.anioMes));
+                  if (exportEstados.length > 0) lista = lista.filter(c => exportEstados.includes(c.fase));
+                  return lista.length;
+                })()} registros
+              </strong>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setShowExportDialog(false)} style={S.btn("secondary")}>Cancelar</button>
+              <button onClick={ejecutarExport} style={S.btn("success")}>
+                <Icon name="download" size={16} /> Descargar Excel
+              </button>
             </div>
           </div>
         </div>
