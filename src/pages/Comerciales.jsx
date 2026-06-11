@@ -9,7 +9,11 @@ const ComercialPage = ({ showConfirm }) => {
   const [saving, setSaving] = useState(false);
 
   const cargar = async () => {
-    const { data } = await supabase.from("soat_agentes").select("*").order("created_at", { ascending: true });
+    const { data } = await supabase
+      .from("agentes")
+      .select("id, nombre, created_at")
+      .eq("es_comercial", true)
+      .order("nombre");
     if (data) setAgentes(data);
     setLoading(false);
   };
@@ -17,7 +21,7 @@ const ComercialPage = ({ showConfirm }) => {
   useEffect(() => {
     cargar();
     const ch = supabase.channel("comerciales-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "soat_agentes" }, cargar)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agentes" }, cargar)
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, []);
@@ -26,14 +30,17 @@ const ComercialPage = ({ showConfirm }) => {
     const nombre = nuevo.trim().toUpperCase();
     if (!nombre || agentes.some(a => a.nombre.toUpperCase() === nombre)) return;
     setSaving(true);
-    await supabase.from("soat_agentes").insert({ nombre });
+    const { error } = await supabase.from("agentes").insert({ nombre, es_comercial: true });
+    if (error) console.error(error);
+    await cargar();
     setNuevo(""); setSaving(false);
   };
 
   const remove = async (id, nombre) => {
-    const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados a este comercial quedarán como 'Sin asignar'.");
+    const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
-    await supabase.from("soat_agentes").delete().eq("id", id);
+    await supabase.from("agentes").delete().eq("id", id);
+    await cargar();
   };
 
   const inpS = { background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px", color: BLUE.text, fontSize: 13.5, outline: "none", fontFamily: "inherit", boxSizing: "border-box", width: "100%" };
@@ -43,7 +50,7 @@ const ComercialPage = ({ showConfirm }) => {
       <div style={S.pageHeader}>
         <div>
           <div style={S.pageTitle}>Comerciales</div>
-          <div style={S.pageSub}>{agentes.filter(a => a.nombre !== "Sin asignar").length} agentes registrados</div>
+          <div style={S.pageSub}>{agentes.length} agentes registrados</div>
         </div>
       </div>
 
@@ -73,7 +80,7 @@ const ComercialPage = ({ showConfirm }) => {
         {loading ? (
           <div style={{ padding: 48, textAlign: "center", color: "#aaa" }}>Cargando...</div>
         ) : agentes.length === 0 ? (
-          <div style={{ padding: 48, textAlign: "center", color: "#aaa" }}>Sin comerciales registrados.</div>
+          <div style={{ padding: 48, textAlign: "center", color: "#aaa" }}>Sin comerciales registrados. Agrega el primero.</div>
         ) : agentes.map((a, i) => (
           <div key={a.id}
             style={{ ...S.tableRow, display: "grid", gridTemplateColumns: "1fr 180px 100px" }}
@@ -89,12 +96,10 @@ const ComercialPage = ({ showConfirm }) => {
               {a.created_at ? new Date(a.created_at).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" }) : "—"}
             </div>
             <div>
-              {a.nombre !== "Sin asignar" && (
-                <button onClick={() => remove(a.id, a.nombre)}
-                  style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 12 }}>
-                  Eliminar
-                </button>
-              )}
+              <button onClick={() => remove(a.id, a.nombre)}
+                style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 12 }}>
+                Eliminar
+              </button>
             </div>
           </div>
         ))}
