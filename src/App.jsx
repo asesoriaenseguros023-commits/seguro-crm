@@ -56,7 +56,6 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
             { id: "polizas", label: "Pólizas", icon: "shield" },
             { id: "renovaciones", label: "Renovaciones", icon: "bell" },
             { id: "soat", label: "Seguimiento SOAT", icon: "shield" },
-            { id: "comerciales", label: "Comerciales", icon: "users" },
             { id: "reportes", label: "Reportes", icon: "chart" },
           ].map((i) => (
             <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
@@ -69,6 +68,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
               {[
                 { id: "ramos", label: "Ramos de Seguros", icon: "tag" },
                 { id: "aseguradoras", label: "Aseguradoras", icon: "shield" },
+                { id: "comerciales", label: "Comerciales", icon: "users" },
               ].map((i) => (
                 <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
                   <Icon name={i.icon} size={16} />{i.label}
