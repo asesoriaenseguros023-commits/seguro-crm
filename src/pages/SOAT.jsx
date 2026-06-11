@@ -79,12 +79,10 @@ const SoatPage = ({ showConfirm }) => {
       .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
 
     const cargarAgentes = () =>
-      supabase.from("agentes").select("nombre").eq("rol", "Comercial").order("nombre")
+      supabase.rpc("get_comerciales")
         .then(({ data }) => {
-          if (data && data.length > 0) {
-            const nombres = data.map(r => r.nombre);
-            setAgentes(["Sin asignar", ...nombres]);
-          }
+          if (data && data.length > 0)
+            setAgentes(["Sin asignar", ...data.map(r => r.nombre)]);
         });
     cargarAgentes();
 
