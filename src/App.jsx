@@ -189,7 +189,7 @@ export default function App() {
         .from("agentes")
         .select("id, nombre, rol")
         .eq("email", email)
-        .single();
+        .maybeSingle();
       if (data) {
         setUserName(data.nombre);
         setUserRol(data.rol || ROL_ADMIN);
