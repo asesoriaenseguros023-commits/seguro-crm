@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
+
+const API = "/api/comerciales";
 
 const ComercialPage = ({ showConfirm }) => {
   const [agentes, setAgentes] = useState([]);
@@ -9,28 +10,25 @@ const ComercialPage = ({ showConfirm }) => {
   const [saving, setSaving] = useState(false);
 
   const cargar = async () => {
-    const { data } = await supabase
-      .from("agentes").select("id, nombre, created_at")
-      .eq("rol", "Comercial").order("nombre");
-    if (data) setAgentes(data);
+    const res = await fetch(API);
+    const data = await res.json();
+    if (Array.isArray(data)) setAgentes(data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    cargar();
-    const ch = supabase.channel("comerciales-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "agentes" }, cargar)
-      .subscribe();
-    return () => supabase.removeChannel(ch);
-  }, []);
+  useEffect(() => { cargar(); }, []);
 
   const add = async () => {
     const nombre = nuevo.trim().toUpperCase();
     if (!nombre || agentes.some(a => a.nombre.toUpperCase() === nombre)) return;
     setSaving(true);
-    const email = `comercial.${nombre.toLowerCase().replace(/\s+/g, ".")}@crm.local`;
-    const { error } = await supabase.from("agentes").insert({ nombre, rol: "Comercial", email });
-    if (error) console.error(error);
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre }),
+    });
+    const data = await res.json();
+    if (data.error) console.error(data.error);
     await cargar();
     setNuevo(""); setSaving(false);
   };
@@ -38,7 +36,7 @@ const ComercialPage = ({ showConfirm }) => {
   const remove = async (id, nombre) => {
     const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
-    await supabase.from("agentes").delete().eq("id", id);
+    await fetch(`${API}?id=${id}`, { method: "DELETE" });
     await cargar();
   };
 

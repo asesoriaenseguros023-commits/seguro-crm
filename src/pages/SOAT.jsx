@@ -79,9 +79,9 @@ const SoatPage = ({ showConfirm }) => {
       .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
 
     const cargarAgentes = () =>
-      supabase.from("agentes").select("nombre").eq("rol", "Comercial").order("nombre")
-        .then(({ data }) => {
-          if (data && data.length > 0)
+      fetch("/api/comerciales").then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0)
             setAgentes(["Sin asignar", ...data.map(r => r.nombre)]);
         });
     cargarAgentes();
