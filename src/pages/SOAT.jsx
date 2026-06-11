@@ -60,7 +60,6 @@ const SoatPage = ({ showConfirm }) => {
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [agentes, setAgentes] = useState(["Sin asignar"]);
-  const [nuevoAgente, setNuevoAgente] = useState("");
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
   const [importDups, setImportDups] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
@@ -104,17 +103,6 @@ const SoatPage = ({ showConfirm }) => {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ─── Agentes ─────────────────────────────────────────────────────────────
-  const addAgente = async () => {
-    const nombre = nuevoAgente.trim();
-    if (!nombre || agentes.includes(nombre)) return;
-    setNuevoAgente("");
-    await supabase.from("soat_agentes").insert({ nombre });
-  };
-  const removeAgente = async (nombre) => {
-    if (nombre === "Sin asignar") return;
-    await supabase.from("soat_agentes").delete().eq("nombre", nombre);
-  };
 
   // ─── Update campo ─────────────────────────────────────────────────────────
   const updateC = async (id, field, value) => {
@@ -542,22 +530,6 @@ const SoatPage = ({ showConfirm }) => {
         </div>
       </div>
 
-      {/* ── Gestión de agentes ───────────────────────────────────────────────── */}
-      <div style={{ marginTop: 20, background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 12, padding: "16px 20px" }}>
-        <div style={{ fontWeight: 700, marginBottom: 12, color: BLUE.text, fontSize: 13 }}>Agentes comerciales</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {agentes.slice(1).map(a => (
-            <div key={a} style={{ background: BLUE.light, border: `1px solid ${BLUE.border}`, borderRadius: 20, padding: "5px 14px", fontSize: 13, display: "flex", gap: 8, alignItems: "center", color: BLUE.text, fontWeight: 600 }}>
-              {a}
-              <span style={{ cursor: "pointer", color: "#dc2626", fontWeight: 700, fontSize: 15, lineHeight: 1 }} onClick={() => removeAgente(a)}>×</span>
-            </div>
-          ))}
-          <input value={nuevoAgente} onChange={e => setNuevoAgente(e.target.value)}
-            placeholder="Nombre del agente..." onKeyDown={e => e.key === "Enter" && addAgente()}
-            style={{ ...S.input, width: 180, padding: "6px 12px", fontSize: 13 }} />
-          <button onClick={addAgente} style={S.btn("secondary")}>+ Agregar</button>
-        </div>
-      </div>
 
       {/* ── Modal edición rápida ─────────────────────────────────────────────── */}
       {editModal && (
