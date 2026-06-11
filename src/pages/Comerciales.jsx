@@ -9,7 +9,9 @@ const ComercialPage = ({ showConfirm }) => {
   const [saving, setSaving] = useState(false);
 
   const cargar = async () => {
-    const { data } = await supabase.rpc("get_comerciales");
+    const { data } = await supabase
+      .from("agentes").select("id, nombre, created_at")
+      .eq("rol", "Comercial").order("nombre");
     if (data) setAgentes(data);
     setLoading(false);
   };
@@ -26,7 +28,7 @@ const ComercialPage = ({ showConfirm }) => {
     const nombre = nuevo.trim().toUpperCase();
     if (!nombre || agentes.some(a => a.nombre.toUpperCase() === nombre)) return;
     setSaving(true);
-    const { error } = await supabase.rpc("insert_comercial", { p_nombre: nombre });
+    const { error } = await supabase.from("agentes").insert({ nombre, rol: "Comercial" });
     if (error) console.error(error);
     await cargar();
     setNuevo(""); setSaving(false);
@@ -35,7 +37,7 @@ const ComercialPage = ({ showConfirm }) => {
   const remove = async (id, nombre) => {
     const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
-    await supabase.rpc("delete_comercial", { p_id: id });
+    await supabase.from("agentes").delete().eq("id", id);
     await cargar();
   };
 
