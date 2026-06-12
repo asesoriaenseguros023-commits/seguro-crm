@@ -323,6 +323,7 @@ const SoatPage = ({ showConfirm }) => {
       return c.nombre.toLowerCase().includes(q);
     })();
     const mAlerta = !filtroAlerta || (() => {
+      if (["compro", "no_interes", "ilocalizable"].includes(c.fase)) return false;
       if (!c.fechaProxima) return false;
       const d = parseDateSoat(c.fechaProxima);
       return d && d <= new Date();
@@ -339,7 +340,9 @@ const SoatPage = ({ showConfirm }) => {
     proximos30: clientes.filter(c => { const d = diasRenSoat(c.fechaCompra); return d !== null && d >= 0 && d <= 30; }).length,
   };
 
+  const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
   const alertaHoy = clientes.filter(c => {
+    if (FASES_TERMINALES.includes(c.fase)) return false;
     if (!c.fechaProxima) return false;
     const d = parseDateSoat(c.fechaProxima);
     return d && d <= new Date();
