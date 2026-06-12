@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
-import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, ACCIONES_SOAT } from "../constants.js";
+import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
 import { parseDateSoat, diasRenSoat, mapSoat, toSoatRow } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
@@ -32,12 +32,14 @@ const parseFechaCompra = (s) => {
 const FASES_SIN_ACCION = ["compro", "no_interes"];
 
 // ─── Funnel bar ───────────────────────────────────────────────────────────────
-const FunnelBar = ({ label, value, total, color, bold }) => {
+const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 12, cursor: onClick ? "pointer" : "default" }} onClick={onClick}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-        <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color: "#333" }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color: "#333" }}>
+          {label}{onClick ? <span style={{ fontSize: 11, color, marginLeft: 6, fontWeight: 600 }}>▶ ver detalle</span> : null}
+        </span>
         <span style={{ fontSize: 13, fontWeight: 700, color }}>
           {value} <span style={{ fontSize: 11.5, color: "#888", fontWeight: 400 }}>({pct}%)</span>
         </span>
@@ -63,7 +65,12 @@ const SoatPage = ({ showConfirm }) => {
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
   const [importDups, setImportDups] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
-  const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
+  const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
+  const [filtroAlerta, setFiltroAlerta] = useState(false);
+  const [showNoInteresDetail, setShowNoInteresDetail] = useState(false);
+  const [ilocWarning, setIlocWarning] = useState(false);
+  const [callLogError, setCallLogError] = useState("");
+  const [modalCloseError, setModalCloseError] = useState("");
   // Funnel
   const [showFunnel, setShowFunnel] = useState(false);
   const [funnelBases, setFunnelBases] = useState([]);
@@ -120,14 +127,39 @@ const SoatPage = ({ showConfirm }) => {
 
   const openModal = (c) => {
     setModal(c); setActiveTab("info");
-    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
+    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
+    setCallLogError(""); setModalCloseError("");
+  };
+
+  const handleCloseModal = () => {
+    if (modal?.fase === "no_interes" && !modal?.motivoNoCompra) {
+      setModalCloseError("Debes seleccionar un motivo de no compra antes de cerrar.");
+      return;
+    }
+    setModalCloseError("");
+    setModal(null);
   };
 
   // ─── Llamada ──────────────────────────────────────────────────────────────
   const registrarLlamada = async () => {
     if (!callLog.resultado) return;
+    if (callLog.resultado === "no_interes" && !callLog.motivo) {
+      setCallLogError("Debes seleccionar un motivo de no compra.");
+      return;
+    }
+    if (callLog.resultado === "ilocalizable" && callLog.motivoIloc === "No contestó / Buzón") {
+      const fechasUnicas = [...new Set((modal.historial || []).map(h => h.fecha))];
+      if (fechasUnicas.length < 3) {
+        setIlocWarning(true);
+        return;
+      }
+    }
+    setCallLogError("");
     const clearAccion = FASES_SIN_ACCION.includes(callLog.resultado);
     const entry = { fecha: new Date().toLocaleDateString("es-CO"), ...callLog, agente: modal.agente };
+    const motivoGuardar = callLog.resultado === "no_interes" ? callLog.motivo
+      : callLog.resultado === "ilocalizable" ? callLog.motivoIloc
+      : modal.motivoNoCompra;
     const updated = {
       ...modal,
       historial: [entry, ...(modal.historial || [])],
@@ -135,7 +167,7 @@ const SoatPage = ({ showConfirm }) => {
       fase: callLog.resultado,
       proximaAccion: clearAccion ? "" : (callLog.proximaAccion || modal.proximaAccion),
       fechaProxima: clearAccion ? "" : (callLog.fechaProxima || modal.fechaProxima),
-      motivoNoCompra: callLog.motivo || modal.motivoNoCompra,
+      motivoNoCompra: motivoGuardar || modal.motivoNoCompra,
     };
     setClientes(p => p.map(c => c.id === modal.id ? updated : c));
     await supabase.from("soat_clientes").update({
@@ -144,7 +176,7 @@ const SoatPage = ({ showConfirm }) => {
       motivo_no_compra: updated.motivoNoCompra,
     }).eq("id", modal.id);
     setModal(updated);
-    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
+    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
     setActiveTab("historial");
   };
 
@@ -290,8 +322,13 @@ const SoatPage = ({ showConfirm }) => {
       if (busquedaModo === "placa") return (c.placa || "").toLowerCase().startsWith(q);
       return c.nombre.toLowerCase().includes(q);
     })();
-    return mF && mA && mFecha && mB;
-  }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda, busquedaModo]);
+    const mAlerta = !filtroAlerta || (() => {
+      if (!c.fechaProxima) return false;
+      const d = parseDateSoat(c.fechaProxima);
+      return d && d <= new Date();
+    })();
+    return mF && mA && mFecha && mB && mAlerta;
+  }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda, busquedaModo, filtroAlerta]);
 
   const stats = {
     total: clientes.length,
@@ -399,9 +436,13 @@ const SoatPage = ({ showConfirm }) => {
       )}
 
       {alertaHoy.length > 0 && (
-        <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#c2410c", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#c2410c", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <Icon name="bell" size={15} />
-          <strong>{alertaHoy.length} cliente{alertaHoy.length > 1 ? "s" : ""}</strong> con seguimiento pendiente para hoy o antes
+          <span><strong>{alertaHoy.length} cliente{alertaHoy.length > 1 ? "s" : ""}</strong> con seguimiento pendiente para hoy o antes</span>
+          <button onClick={() => setFiltroAlerta(v => !v)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#c2410c", fontWeight: 700, textDecoration: "underline", fontSize: 13, padding: 0, marginLeft: 4 }}>
+            {filtroAlerta ? "(Mostrar todos)" : "(Ver)"}
+          </button>
         </div>
       )}
 
@@ -546,7 +587,7 @@ const SoatPage = ({ showConfirm }) => {
               ))}
               <div>
                 <label style={lblS}>Fase</label>
-                <select value={editModal.fase} onChange={e => setEditModal(p => ({ ...p, fase: e.target.value }))} style={selS}>
+                <select value={editModal.fase} onChange={e => setEditModal(p => ({ ...p, fase: e.target.value, motivoNoCompra: "" }))} style={selS}>
                   {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
                 </select>
               </div>
@@ -556,6 +597,15 @@ const SoatPage = ({ showConfirm }) => {
                   {agentes.map(a => <option key={a}>{a}</option>)}
                 </select>
               </div>
+              {(editModal.fase === "no_interes" || editModal.fase === "ilocalizable") && (
+                <div style={{ gridColumn: "1/-1" }}>
+                  <label style={lblS}>Motivo {editModal.fase === "ilocalizable" ? "ilocalizable" : "no compra"}{editModal.fase === "no_interes" ? " *" : ""}</label>
+                  <select value={editModal.motivoNoCompra || ""} onChange={e => setEditModal(p => ({ ...p, motivoNoCompra: e.target.value }))} style={{ ...selS, borderColor: editModal.fase === "no_interes" && !editModal.motivoNoCompra ? "#fca5a5" : BLUE.border }}>
+                    <option value="">— Selecciona —</option>
+                    {(editModal.fase === "ilocalizable" ? MOTIVOS_ILOCALIZABLE : MOTIVOS_SOAT).map(m => <option key={m}>{m}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
               <button style={S.btn("danger")} onClick={async () => {
@@ -568,6 +618,10 @@ const SoatPage = ({ showConfirm }) => {
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setEditModal(null)} style={S.btn("secondary")}>Cancelar</button>
                 <button style={S.btn("primary")} onClick={async () => {
+                  if (editModal.fase === "no_interes" && !editModal.motivoNoCompra) {
+                    alert("Debes seleccionar un motivo de no compra.");
+                    return;
+                  }
                   const clearAccion = FASES_SIN_ACCION.includes(editModal.fase);
                   const dataSave = { ...editModal, ...(clearAccion ? { proximaAccion: "", fechaProxima: "" } : {}) };
                   await supabase.from("soat_clientes").update(toSoatRow(dataSave)).eq("id", editModal.id);
@@ -582,7 +636,7 @@ const SoatPage = ({ showConfirm }) => {
 
       {/* ── Modal detalle ────────────────────────────────────────────────────── */}
       {modal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }} onClick={() => setModal(null)}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }} onClick={handleCloseModal}>
           <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 680, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)" }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: "22px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
@@ -596,7 +650,7 @@ const SoatPage = ({ showConfirm }) => {
                   </span>
                 </div>
               </div>
-              <button onClick={() => setModal(null)} style={{ background: "transparent", border: "none", color: "#aaa", fontSize: 24, cursor: "pointer", padding: "0 4px" }}>×</button>
+              <button onClick={handleCloseModal} style={{ background: "transparent", border: "none", color: "#aaa", fontSize: 24, cursor: "pointer", padding: "0 4px" }}>×</button>
             </div>
             <div style={{ display: "flex", padding: "16px 28px 0", borderBottom: `1px solid ${BLUE.border}`, gap: 4 }}>
               {[["info","Información"],["llamada","Registrar llamada"],["historial",`Historial (${modal.historial?.length || 0})`]].map(([t, l]) => (
@@ -643,10 +697,19 @@ const SoatPage = ({ showConfirm }) => {
                     </>}
                     {modal.fase === "no_interes" && (
                       <div style={{ gridColumn: "1/-1" }}>
-                        <label style={lblS}>Motivo no compra</label>
-                        <select value={modal.motivoNoCompra || ""} onChange={e => { updateC(modal.id, "motivoNoCompra", e.target.value); setModal(p => ({ ...p, motivoNoCompra: e.target.value })); }} style={selS}>
-                          <option value="">Sin especificar</option>
+                        <label style={lblS}>Motivo no compra *</label>
+                        <select value={modal.motivoNoCompra || ""} onChange={e => { updateC(modal.id, "motivoNoCompra", e.target.value); setModal(p => ({ ...p, motivoNoCompra: e.target.value })); setModalCloseError(""); }} style={{ ...selS, borderColor: !modal.motivoNoCompra ? "#fca5a5" : BLUE.border }}>
+                          <option value="">— Selecciona un motivo —</option>
                           {MOTIVOS_SOAT.map(m => <option key={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {modal.fase === "ilocalizable" && (
+                      <div style={{ gridColumn: "1/-1" }}>
+                        <label style={lblS}>Motivo ilocalizable</label>
+                        <select value={modal.motivoNoCompra || ""} onChange={e => { updateC(modal.id, "motivoNoCompra", e.target.value); setModal(p => ({ ...p, motivoNoCompra: e.target.value })); }} style={selS}>
+                          <option value="">— Selecciona —</option>
+                          {MOTIVOS_ILOCALIZABLE.map(m => <option key={m}>{m}</option>)}
                         </select>
                       </div>
                     )}
@@ -655,6 +718,11 @@ const SoatPage = ({ showConfirm }) => {
                     <label style={lblS}>Notas generales</label>
                     <textarea value={modal.notas || ""} onChange={e => { updateC(modal.id, "notas", e.target.value); setModal(p => ({ ...p, notas: e.target.value })); }} rows={3} style={{ ...inpS, resize: "vertical" }} />
                   </div>
+                  {modalCloseError && (
+                    <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#dc2626" }}>
+                      {modalCloseError}
+                    </div>
+                  )}
                   <button onClick={() => deleteC(modal.id)} style={{ ...S.btn("danger"), alignSelf: "flex-start" }}>Eliminar cliente</button>
                 </div>
               )}
@@ -673,10 +741,19 @@ const SoatPage = ({ showConfirm }) => {
                     </div>
                     {callLog.resultado === "no_interes" && (
                       <div style={{ gridColumn: "1/-1" }}>
-                        <label style={lblS}>Motivo no compra</label>
-                        <select value={callLog.motivo} onChange={e => setCallLog(p => ({ ...p, motivo: e.target.value }))} style={selS}>
-                          <option value="">Sin especificar</option>
+                        <label style={lblS}>Motivo no compra *</label>
+                        <select value={callLog.motivo} onChange={e => { setCallLog(p => ({ ...p, motivo: e.target.value })); setCallLogError(""); }} style={{ ...selS, borderColor: !callLog.motivo ? "#fca5a5" : BLUE.border }}>
+                          <option value="">— Selecciona un motivo —</option>
                           {MOTIVOS_SOAT.map(m => <option key={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {callLog.resultado === "ilocalizable" && (
+                      <div style={{ gridColumn: "1/-1" }}>
+                        <label style={lblS}>Motivo ilocalizable</label>
+                        <select value={callLog.motivoIloc} onChange={e => { setCallLog(p => ({ ...p, motivoIloc: e.target.value })); setCallLogError(""); }} style={selS}>
+                          <option value="">— Selecciona —</option>
+                          {MOTIVOS_ILOCALIZABLE.map(m => <option key={m}>{m}</option>)}
                         </select>
                       </div>
                     )}
@@ -698,6 +775,11 @@ const SoatPage = ({ showConfirm }) => {
                       <textarea value={callLog.nota} onChange={e => setCallLog(p => ({ ...p, nota: e.target.value }))} rows={3} placeholder="Ej: Cliente pide que lo llamen el martes..." style={{ ...inpS, resize: "vertical" }} />
                     </div>
                   </div>
+                  {callLogError && (
+                    <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#dc2626" }}>
+                      {callLogError}
+                    </div>
+                  )}
                   <button onClick={registrarLlamada} disabled={!callLog.resultado}
                     style={{ ...S.btn(callLog.resultado ? "success" : "secondary"), opacity: callLog.resultado ? 1 : 0.4, cursor: callLog.resultado ? "pointer" : "not-allowed", justifyContent: "center" }}>
                     Guardar registro de llamada
@@ -717,7 +799,7 @@ const SoatPage = ({ showConfirm }) => {
                           <span style={{ fontSize: 12.5, fontWeight: 700, color: f?.text || BLUE.text, background: f?.bg || BLUE.light, padding: "3px 12px", borderRadius: 20 }}>{f?.label || h.resultado}</span>
                           <span style={{ fontSize: 12, color: "#aaa" }}>{h.fecha} · {h.agente}</span>
                         </div>
-                        {h.motivo && <div style={{ fontSize: 12.5, color: "#666", marginBottom: 4 }}>Motivo: {h.motivo}</div>}
+                        {(h.motivo || h.motivoIloc) && <div style={{ fontSize: 12.5, color: "#666", marginBottom: 4 }}>Motivo: {h.motivo || h.motivoIloc}</div>}
                         {h.proximaAccion && <div style={{ fontSize: 12.5, color: "#666", marginBottom: 4 }}>Acción: {h.proximaAccion}{h.fechaProxima ? ` · ${h.fechaProxima}` : ""}</div>}
                         {h.nota && <div style={{ fontSize: 13, color: "#444", fontStyle: "italic", marginTop: 6, borderLeft: `3px solid ${BLUE.border}`, paddingLeft: 10 }}>"{h.nota}"</div>}
                       </div>
@@ -759,7 +841,25 @@ const SoatPage = ({ showConfirm }) => {
             <div style={{ marginBottom: 24 }}>
               <FunnelBar label="Base total" value={funnelData.base} total={funnelData.base} color={BLUE.primary} bold />
               <FunnelBar label="Gestionados" value={funnelData.gestionados} total={funnelData.base} color="#6366f1" />
-              <FunnelBar label="No interesados" value={funnelData.noInteres} total={funnelData.base} color="#ef4444" />
+              <FunnelBar label="No interesados" value={funnelData.noInteres} total={funnelData.base} color="#ef4444" onClick={funnelData.noInteres > 0 ? () => setShowNoInteresDetail(v => !v) : undefined} />
+              {showNoInteresDetail && funnelData.noInteres > 0 && (() => {
+                const noInteresClientes = funnelClientes.filter(c => c.fase === "no_interes");
+                const motivosCount = [...MOTIVOS_SOAT, ""].reduce((acc, m) => {
+                  acc[m || "Sin motivo"] = noInteresClientes.filter(c => (c.motivoNoCompra || "") === m).length;
+                  return acc;
+                }, {});
+                return (
+                  <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 10, padding: "14px 16px", marginBottom: 12, marginTop: -4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#9f1239", marginBottom: 10 }}>Desglose por motivo — {funnelData.noInteres} no interesados</div>
+                    {Object.entries(motivosCount).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([motivo, count]) => (
+                      <div key={motivo} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6, color: "#555" }}>
+                        <span>{motivo}</span>
+                        <span style={{ fontWeight: 700, color: "#ef4444" }}>{count} <span style={{ color: "#aaa", fontWeight: 400 }}>({Math.round((count / funnelData.noInteres) * 100)}%)</span></span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               <FunnelBar label="Compró" value={funnelData.compro} total={funnelData.base} color="#8b5cf6" />
               <FunnelBar label="Ilocalizable" value={funnelData.ilocalizable} total={funnelData.base} color="#9ca3af" />
               <FunnelBar label="Clientes activos (En gestión + Interesados)" value={funnelData.activos} total={funnelData.base} color="#10b981" />
@@ -790,6 +890,20 @@ const SoatPage = ({ showConfirm }) => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ilocalizable warning ────────────────────────────────────────────── */}
+      {ilocWarning && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }} onClick={() => setIlocWarning(false)}>
+          <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 420, padding: "28px 32px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", textAlign: "center" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 42, marginBottom: 12 }}>⚠️</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: "#92400e", marginBottom: 10 }}>Llamadas insuficientes</div>
+            <div style={{ fontSize: 14, color: "#555", lineHeight: 1.6, marginBottom: 20 }}>
+              Recuerde que debe llamar más de <strong>3 veces en días diferentes</strong> antes de seleccionar "No contestó / Buzón" como motivo.
+            </div>
+            <button onClick={() => setIlocWarning(false)} style={{ ...S.btn("primary"), justifyContent: "center", width: "100%" }}>Entendido</button>
           </div>
         </div>
       )}

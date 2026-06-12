@@ -87,9 +87,9 @@ export const MOTIVOS_SOAT = [
   "Ya compró con otra aseguradora",
   "No tiene vehículo activo",
   "No le interesa renovar aún",
-  "No contestó / Buzón",
-  "Número equivocado",
 ];
+
+export const MOTIVOS_ILOCALIZABLE = ["Número equivocado", "No contestó / Buzón"];
 
 export const ACCIONES_SOAT = ["Volver a llamar", "Escribir por WhatsApp"];
 
