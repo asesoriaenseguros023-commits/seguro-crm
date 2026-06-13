@@ -17,7 +17,7 @@ let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
 const soatEmpty = () => ({
   id: soatNewId(), nombre: "", telefono: "", placa: "", anioMes: "",
-  fechaCompra: "", fase: "pendiente", agente: "Sin asignar",
+  fechaCompra: "", fechaVencimiento: "", fase: "pendiente", agente: "Sin asignar",
   intentos: 0, proximaAccion: "", fechaProxima: "",
   motivoNoCompra: "", historial: [], notas: "",
 });
@@ -116,6 +116,7 @@ const SoatPage = ({ showConfirm }) => {
       fechaProxima: "fecha_proxima", motivoNoCompra: "motivo_no_compra",
       notas: "notas", nombre: "nombre", telefono: "telefono",
       placa: "placa", anioMes: "anio_mes", fechaCompra: "fecha_compra",
+      fechaVencimiento: "fecha_vencimiento",
     }[field] || field;
     const clearAccion = field === "fase" && FASES_SIN_ACCION.includes(value);
     const patch = { [field]: value, ...(clearAccion ? { proximaAccion: "", fechaProxima: "" } : {}) };
@@ -245,9 +246,14 @@ const SoatPage = ({ showConfirm }) => {
           : String(fechaRaw || "").trim();
         const anioMesVal = kM ? String(r[kM] || "").trim() : parseAnioMes(fechaRaw);
         const er = kE ? String(r[kE] || "").toLowerCase().trim() : "";
+        const fv = (() => {
+          const p = fechaStr.split("/");
+          if (p.length === 3) return `${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`;
+          return "";
+        })();
         return { ...soatEmpty(), nombre: String(r[kN] || "").trim(), telefono: kT ? String(r[kT] || "").trim() : "",
           placa: kP ? String(r[kP] || "").trim() : "", fechaCompra: fechaStr, anioMes: anioMesVal,
-          fase: faseMap[er] || "pendiente", agente: "Sin asignar" };
+          fechaVencimiento: fv, fase: faseMap[er] || "pendiente", agente: "Sin asignar" };
       }).filter(c => c.nombre);
       const duplicados = nuevos.filter(n =>
         clientes.some(c => c.nombre.toLowerCase() === n.nombre.toLowerCase() && c.telefono === n.telefono)
@@ -284,9 +290,9 @@ const SoatPage = ({ showConfirm }) => {
     let lista = clientes;
     if (exportBases.length > 0) lista = lista.filter(c => exportBases.includes(c.anioMes));
     if (exportEstados.length > 0) lista = lista.filter(c => exportEstados.includes(c.fase));
-    const cols = ["#","Fecha Base","Nombre","Teléfono","Placa","Fecha Compra","Fase","Agente","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Notas"];
+    const cols = ["#","Fecha Base","Nombre","Teléfono","Placa","Fecha Vencimiento","Fase","Agente","Intentos","Próxima Acción","Fecha Próxima","Motivo No Compra","Notas"];
     const rows = lista.map((c, i) => [i+1, fmtAnioMes(c.anioMes), c.nombre, c.telefono, c.placa,
-      c.fechaCompra, FM_SOAT[c.fase]?.label||c.fase, c.agente, c.intentos,
+      c.fechaVencimiento, FM_SOAT[c.fase]?.label||c.fase, c.agente, c.intentos,
       c.proximaAccion, c.fechaProxima, c.motivoNoCompra, c.notas]);
     const ws = XLSX.utils.aoa_to_sheet([cols, ...rows]);
     ws["!cols"] = [6,14,28,14,10,14,16,14,8,22,14,22,30].map(w => ({ wch: w }));
@@ -315,7 +321,7 @@ const SoatPage = ({ showConfirm }) => {
   const filtrados = useMemo(() => clientes.filter(c => {
     const mF = filtroFase === "Todos" || c.fase === filtroFase;
     const mA = filtroAgente === "Todos" || c.agente === filtroAgente;
-    const mFecha = !filtroFecha || c.fechaCompra === toFechaStr(filtroFecha) || c.fechaProxima === filtroFecha;
+    const mFecha = !filtroFecha || c.fechaVencimiento === filtroFecha || c.fechaProxima === filtroFecha;
     const q = busqueda.trim().toLowerCase();
     const mB = !q || (() => {
       if (busquedaModo === "telefono") return (c.telefono || "").includes(busqueda.trim());
@@ -337,7 +343,13 @@ const SoatPage = ({ showConfirm }) => {
     enGestion: clientes.filter(c => c.fase === "en_gestion" || c.fase === "pendiente").length,
     interesados: clientes.filter(c => c.fase === "interesado").length,
     compro: clientes.filter(c => c.fase === "compro").length,
-    proximos30: clientes.filter(c => { const d = diasRenSoat(c.fechaCompra); return d !== null && d >= 0 && d <= 30; }).length,
+    proximos30: clientes.filter(c => {
+      if (!c.fechaVencimiento) return false;
+      const d = parseDateSoat(c.fechaVencimiento);
+      if (!d) return false;
+      const days = Math.ceil((d - new Date()) / 86400000);
+      return days >= 0 && days <= 30;
+    }).length,
   };
 
   const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
@@ -518,7 +530,7 @@ const SoatPage = ({ showConfirm }) => {
       <div style={{ ...S.tableWrap, overflowX: "auto" }}>
         <div style={{ minWidth: 860 }}>
           <div style={{ ...S.tableHead, display: "grid", gridTemplateColumns: "36px 2fr 0.8fr 0.8fr 1.3fr 1fr 1.2fr 90px" }}>
-            <span>#</span><span>Cliente</span><span>F. Base</span><span>F. Compra</span><span>Fase</span><span>Agente</span><span>Próxima acción</span><span></span>
+            <span>#</span><span>Cliente</span><span>F. Base</span><span>F. Vencimiento</span><span>Fase</span><span>Agente</span><span>Próxima acción</span><span></span>
           </div>
           {filtrados.length === 0 ? (
             <div style={{ padding: 48, textAlign: "center", color: "#aaa", fontSize: 14 }}>Sin registros. Importa un archivo o ajusta los filtros.</div>
@@ -539,7 +551,7 @@ const SoatPage = ({ showConfirm }) => {
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#555" }}>{fmtAnioMes(c.anioMes)}</div>
-                <div style={{ fontSize: 12, color: "#555" }}>{c.fechaCompra || "—"}</div>
+                <div style={{ fontSize: 12, color: "#555" }}>{c.fechaVencimiento || "—"}</div>
                 <select value={c.fase} onChange={e => updateC(c.id, "fase", e.target.value)}
                   style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1.5px solid ${fase.color}`, background: fase.bg, color: fase.text, cursor: "pointer", outline: "none", fontWeight: 700, width: "100%" }}>
                   {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
@@ -582,12 +594,16 @@ const SoatPage = ({ showConfirm }) => {
               <button onClick={() => setEditModal(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa" }}>×</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
-              {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de Compra","fechaCompra"],["Fecha Base","anioMes"]].map(([l, f]) => (
+              {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha Base","anioMes"]].map(([l, f]) => (
                 <div key={f} style={{ gridColumn: f === "nombre" ? "1/-1" : "auto" }}>
                   <label style={lblS}>{l}</label>
                   <input value={editModal[f] || ""} onChange={e => setEditModal(p => ({ ...p, [f]: e.target.value }))} style={inpS} />
                 </div>
               ))}
+              <div>
+                <label style={lblS}>F. Vencimiento</label>
+                <input type="date" value={editModal.fechaVencimiento || ""} onChange={e => setEditModal(p => ({ ...p, fechaVencimiento: e.target.value }))} style={inpS} />
+              </div>
               <div>
                 <label style={lblS}>Fase</label>
                 <select value={editModal.fase} onChange={e => setEditModal(p => ({ ...p, fase: e.target.value, motivoNoCompra: "" }))} style={selS}>
@@ -667,12 +683,16 @@ const SoatPage = ({ showConfirm }) => {
               {activeTab === "info" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha de compra","fechaCompra"],["Fecha Base","anioMes"]].map(([l, f]) => (
+                    {[["Nombre","nombre"],["Teléfono","telefono"],["Placa","placa"],["Fecha Base","anioMes"]].map(([l, f]) => (
                       <div key={f}>
                         <label style={lblS}>{l}</label>
                         <input value={modal[f] || ""} onChange={e => { updateC(modal.id, f, e.target.value); setModal(p => ({ ...p, [f]: e.target.value })); }} style={inpS} />
                       </div>
                     ))}
+                    <div>
+                      <label style={lblS}>F. Vencimiento</label>
+                      <input type="date" value={modal.fechaVencimiento || ""} onChange={e => { updateC(modal.id, "fechaVencimiento", e.target.value); setModal(p => ({ ...p, fechaVencimiento: e.target.value })); }} style={inpS} />
+                    </div>
                     <div>
                       <label style={lblS}>Agente</label>
                       <select value={modal.agente} onChange={e => { updateC(modal.id, "agente", e.target.value); setModal(p => ({ ...p, agente: e.target.value })); }} style={selS}>
