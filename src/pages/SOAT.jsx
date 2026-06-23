@@ -338,12 +338,14 @@ const SoatPage = ({ showConfirm }) => {
   }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda, busquedaModo, filtroAlerta]);
 
   const stats = {
-    total: clientes.length,
-    sinGestionar: clientes.filter(c => c.intentos === 0).length,
-    enGestion: clientes.filter(c => c.fase === "en_gestion" || c.fase === "pendiente").length,
+    total:       clientes.length,
+    pendiente:   clientes.filter(c => c.fase === "pendiente").length,
+    enGestion:   clientes.filter(c => c.fase === "en_gestion").length,
     interesados: clientes.filter(c => c.fase === "interesado").length,
-    compro: clientes.filter(c => c.fase === "compro").length,
-    proximos30: clientes.filter(c => {
+    compro:      clientes.filter(c => c.fase === "compro").length,
+    noInteres:   clientes.filter(c => c.fase === "no_interes").length,
+    ilocalizable:clientes.filter(c => c.fase === "ilocalizable").length,
+    proximos30:  clientes.filter(c => {
       if (!c.fechaVencimiento) return false;
       const d = parseDateSoat(c.fechaVencimiento);
       if (!d) return false;
@@ -351,6 +353,17 @@ const SoatPage = ({ showConfirm }) => {
       return days >= 0 && days <= 30;
     }).length,
   };
+
+  const STAT_CARDS = [
+    { label: "Total",         key: "total",        color: BLUE.primary, filter: "Todos"      },
+    { label: "Pendiente",     key: "pendiente",    color: "#94a3b8",    filter: "pendiente"  },
+    { label: "En gestión",    key: "enGestion",    color: "#f59e0b",    filter: "en_gestion" },
+    { label: "Interesado",    key: "interesados",  color: "#16a34a",    filter: "interesado" },
+    { label: "Compró",        key: "compro",       color: "#8b5cf6",    filter: "compro"     },
+    { label: "No interesado", key: "noInteres",    color: "#ef4444",    filter: "no_interes" },
+    { label: "Ilocalizable",  key: "ilocalizable", color: "#9ca3af",    filter: "ilocalizable"},
+    { label: "Vencen ≤30d",   key: "proximos30",   color: "#dc2626",    filter: null         },
+  ];
 
   const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
   const alertaHoy = clientes.filter(c => {
@@ -461,33 +474,33 @@ const SoatPage = ({ showConfirm }) => {
         </div>
       )}
 
-      {/* ── Stats ───────────────────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 20 }}>
-        {[
-          { label: "Total", value: stats.total, color: BLUE.primary },
-          { label: "Sin gestionar", value: stats.sinGestionar, color: "#f97316" },
-          { label: "En gestión", value: stats.enGestion, color: "#f59e0b" },
-          { label: "Interesados", value: stats.interesados, color: "#16a34a" },
-          { label: "Compraron", value: stats.compro, color: "#8b5cf6" },
-          { label: "Vencen ≤30d", value: stats.proximos30, color: "#dc2626" },
-        ].map(s => (
-          <div key={s.label} style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 10, padding: "16px 18px", boxShadow: "0 1px 4px rgba(26,86,219,0.06)" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
-            <div style={{ fontSize: 11.5, color: "#6b87b0", marginTop: 5, fontWeight: 600 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Fase pills ──────────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 4 }}>
-        {[{ id: "Todos", label: "Todos", color: "#6b7280" }, ...FASES_SOAT].map(f => {
-          const cnt = f.id === "Todos" ? clientes.length : clientes.filter(c => c.fase === f.id).length;
-          const active = filtroFase === f.id;
+      {/* ── Stats / Filtros ─────────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 10, marginBottom: 20 }}>
+        {STAT_CARDS.map(s => {
+          const active = s.filter && filtroFase === s.filter;
+          const clickable = !!s.filter;
           return (
-            <button key={f.id} onClick={() => setFiltroFase(f.id)}
-              style={{ background: active ? f.color : "#fff", border: `1.5px solid ${active ? f.color : BLUE.border}`, borderRadius: 20, padding: "6px 16px", fontSize: 12.5, color: active ? "#fff" : (f.color || "#555"), cursor: "pointer", whiteSpace: "nowrap", fontWeight: active ? 700 : 400, transition: "all 0.15s" }}>
-              {f.label} <span style={{ opacity: 0.75 }}>({cnt})</span>
-            </button>
+            <div key={s.label}
+              onClick={clickable ? () => setFiltroFase(active ? "Todos" : s.filter) : undefined}
+              style={{
+                background: active ? s.color : "#fff",
+                border: `1px solid ${active ? s.color : BLUE.border}`,
+                borderTop: `3px solid ${s.color}`,
+                borderRadius: 10,
+                padding: "14px 12px",
+                boxShadow: active ? `0 4px 12px ${s.color}40` : "0 1px 4px rgba(26,86,219,0.06)",
+                cursor: clickable ? "pointer" : "default",
+                transition: "all 0.18s",
+                userSelect: "none",
+              }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: active ? "#fff" : s.color, lineHeight: 1 }}>
+                {stats[s.key]}
+              </div>
+              <div style={{ fontSize: 11, color: active ? "rgba(255,255,255,0.88)" : "#6b87b0", marginTop: 5, fontWeight: 600, lineHeight: 1.3 }}>
+                {s.label}
+                {clickable && <span style={{ marginLeft: 4, opacity: 0.7 }}>{active ? "✕" : "▼"}</span>}
+              </div>
+            </div>
           );
         })}
       </div>
