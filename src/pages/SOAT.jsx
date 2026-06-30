@@ -191,21 +191,21 @@ const SoatPage = ({ showConfirm }) => {
 
   // ─── Template ─────────────────────────────────────────────────────────────
   const descargarTemplate = () => {
-    const cols = ["Nombre *", "Telefono", "Placa *", "Fecha Vencimiento (dd/mm/aaaa)", "Fecha Base (mm/aaaa)", "Estado"];
+    const cols = ["Nombre *", "Telefono *", "Placa", "Fecha Vencimiento * (dd/mm/aaaa)", "Fecha Base * (mm/aaaa)", "Estado *"];
     const instrucciones = [
       ["--- INSTRUCCIONES ---", "", "", "", "", ""],
       ["Nombre *", "Obligatorio. Nombre completo del cliente.", "", "", "", ""],
-      ["Telefono", "Celular sin espacios ni guiones.", "", "", "", ""],
-      ["Placa *", "Obligatorio. Sin espacios. Ej: ABC123. Se usa para detectar duplicados.", "", "", "", ""],
-      ["Fecha Vencimiento", "Fecha en que vence el SOAT. Formato: dd/mm/aaaa. Ej: 15/07/2026", "", "", "", ""],
-      ["Fecha Base", "Mes al que pertenece esta carga. Formato: mm/aaaa. Ej: 06/2026", "", "", "", ""],
-      ["Estado", "Opcional. Dejar vacío para que quede en Pendiente.", "", "", "", ""],
+      ["Telefono *", "Obligatorio. Celular sin espacios ni guiones.", "", "", "", ""],
+      ["Placa", "Opcional. Sin espacios. Ej: ABC123. Se usa para detectar duplicados.", "", "", "", ""],
+      ["Fecha Vencimiento *", "Obligatorio. Fecha en que vence el SOAT. Formato: dd/mm/aaaa. Ej: 15/07/2026", "", "", "", ""],
+      ["Fecha Base *", "Obligatorio. Mes al que pertenece esta carga. Formato: mm/aaaa. Ej: 06/2026", "", "", "", ""],
+      ["Estado *", "Obligatorio. Ej: pendiente, interesado, compro, no_interes, ilocalizable.", "", "", "", ""],
       ["", "", "", "", "", ""],
       ["--- DATOS (borrar filas de instrucciones antes de importar) ---", "", "", "", "", ""],
       cols,
-      ["MARIA PAULA LOPEZ", "3001234567", "ABC123", "15/07/2026", "06/2026", ""],
-      ["JUAN CARLOS PEREZ", "3109876543", "XYZ789", "22/08/2026", "06/2026", ""],
-      ["ANA MILENA GARCIA", "3156789012", "DEF456", "01/09/2026", "06/2026", ""],
+      ["MARIA PAULA LOPEZ", "3001234567", "ABC123", "15/07/2026", "06/2026", "pendiente"],
+      ["JUAN CARLOS PEREZ", "3109876543", "XYZ789", "22/08/2026", "06/2026", "pendiente"],
+      ["ANA MILENA GARCIA", "3156789012", "", "01/09/2026", "06/2026", "pendiente"],
     ];
     const ws = XLSX.utils.aoa_to_sheet(instrucciones);
     ws["!cols"] = [32, 55, 12, 30, 22, 14].map(w => ({ wch: w }));
