@@ -191,12 +191,24 @@ const SoatPage = ({ showConfirm }) => {
 
   // ─── Template ─────────────────────────────────────────────────────────────
   const descargarTemplate = () => {
-    const cols = ["Nombre", "Telefono", "Placa", "Fecha Compra", "Fecha Base", "Estado"];
-    const ws = XLSX.utils.aoa_to_sheet([cols,
-      ["MARIA LOPEZ", "3001234567", "ABC123", "16/01/2025", "", ""],
-      ["JUAN PEREZ", "3109876543", "XYZ789", "22/03/2025", "", ""],
-    ]);
-    ws["!cols"] = cols.map(() => ({ wch: 20 }));
+    const cols = ["Nombre *", "Telefono", "Placa *", "Fecha Vencimiento (dd/mm/aaaa)", "Fecha Base (mm/aaaa)", "Estado"];
+    const instrucciones = [
+      ["--- INSTRUCCIONES ---", "", "", "", "", ""],
+      ["Nombre *", "Obligatorio. Nombre completo del cliente.", "", "", "", ""],
+      ["Telefono", "Celular sin espacios ni guiones.", "", "", "", ""],
+      ["Placa *", "Obligatorio. Sin espacios. Ej: ABC123. Se usa para detectar duplicados.", "", "", "", ""],
+      ["Fecha Vencimiento", "Fecha en que vence el SOAT. Formato: dd/mm/aaaa. Ej: 15/07/2026", "", "", "", ""],
+      ["Fecha Base", "Mes al que pertenece esta carga. Formato: mm/aaaa. Ej: 06/2026", "", "", "", ""],
+      ["Estado", "Opcional. Dejar vacío para que quede en Pendiente.", "", "", "", ""],
+      ["", "", "", "", "", ""],
+      ["--- DATOS (borrar filas de instrucciones antes de importar) ---", "", "", "", "", ""],
+      cols,
+      ["MARIA PAULA LOPEZ", "3001234567", "ABC123", "15/07/2026", "06/2026", ""],
+      ["JUAN CARLOS PEREZ", "3109876543", "XYZ789", "22/08/2026", "06/2026", ""],
+      ["ANA MILENA GARCIA", "3156789012", "DEF456", "01/09/2026", "06/2026", ""],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(instrucciones);
+    ws["!cols"] = [32, 55, 12, 30, 22, 14].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Clientes SOAT");
     XLSX.writeFile(wb, "template_soat.xlsx");
@@ -255,11 +267,10 @@ const SoatPage = ({ showConfirm }) => {
           placa: kP ? String(r[kP] || "").trim() : "", fechaCompra: fechaStr, anioMes: anioMesVal,
           fechaVencimiento: fv, fase: faseMap[er] || "pendiente", agente: "Sin asignar" };
       }).filter(c => c.nombre);
-      const duplicados = nuevos.filter(n =>
-        clientes.some(c => c.nombre.toLowerCase() === n.nombre.toLowerCase() && c.telefono === n.telefono)
-      );
+      const esDupPlaca = (n) => !!n.placa && clientes.some(c => c.placa && c.placa.toUpperCase().trim() === n.placa.toUpperCase().trim());
+      const duplicados = nuevos.filter(esDupPlaca);
       if (duplicados.length > 0) {
-        setImportDups({ nuevos, duplicados, soloNuevos: nuevos.filter(n => !clientes.some(c => c.nombre.toLowerCase() === n.nombre.toLowerCase() && c.telefono === n.telefono)) });
+        setImportDups({ nuevos, duplicados, soloNuevos: nuevos.filter(n => !esDupPlaca(n)) });
         setImportMsg({ text: "", type: "success" });
       } else {
         await ejecutarImport(nuevos);
@@ -450,7 +461,7 @@ const SoatPage = ({ showConfirm }) => {
       {importDups && (
         <div style={{ background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "16px 20px", marginBottom: 16 }}>
           <div style={{ fontWeight: 700, color: "#92400e", marginBottom: 8, fontSize: 14 }}>
-            Se detectaron {importDups.duplicados.length} clientes repetidos (mismo nombre y teléfono)
+            Se detectaron {importDups.duplicados.length} placas que ya existen en el sistema
           </div>
           <div style={{ fontSize: 13, color: "#78350f", marginBottom: 14 }}>
             Total en archivo: {importDups.nuevos.length} · Nuevos: {importDups.soloNuevos.length} · Duplicados: {importDups.duplicados.length}
