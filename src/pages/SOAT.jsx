@@ -318,6 +318,8 @@ const SoatPage = ({ showConfirm }) => {
     setShowExportDialog(false);
   };
 
+  const fechaRefAlerta = (c) => c.fechaProxima || c.fechaVencimiento;
+
   // ─── Datos derivados ──────────────────────────────────────────────────────
   const toFechaStr = (yyyymmdd) => {
     if (!yyyymmdd) return "";
@@ -383,7 +385,6 @@ const SoatPage = ({ showConfirm }) => {
   ];
 
   const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
-  const fechaRefAlerta = (c) => c.fechaProxima || c.fechaVencimiento;
   const alertaHoy = clientes.filter(c => {
     if (FASES_TERMINALES.includes(c.fase)) return false;
     const ref = fechaRefAlerta(c);
