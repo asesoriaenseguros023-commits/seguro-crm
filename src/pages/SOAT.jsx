@@ -346,8 +346,9 @@ const SoatPage = ({ showConfirm }) => {
     })();
     const mAlerta = !filtroAlerta || (() => {
       if (["compro", "no_interes", "ilocalizable"].includes(c.fase)) return false;
-      if (!c.fechaProxima) return false;
-      const d = parseDateSoat(c.fechaProxima);
+      const ref = fechaRefAlerta(c);
+      if (!ref) return false;
+      const d = parseDateSoat(ref);
       return d && d <= new Date();
     })();
     return mF && mA && mFecha && mB && mAlerta;
@@ -382,10 +383,12 @@ const SoatPage = ({ showConfirm }) => {
   ];
 
   const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
+  const fechaRefAlerta = (c) => c.fechaProxima || c.fechaVencimiento;
   const alertaHoy = clientes.filter(c => {
     if (FASES_TERMINALES.includes(c.fase)) return false;
-    if (!c.fechaProxima) return false;
-    const d = parseDateSoat(c.fechaProxima);
+    const ref = fechaRefAlerta(c);
+    if (!ref) return false;
+    const d = parseDateSoat(ref);
     return d && d <= new Date();
   });
 
