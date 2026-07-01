@@ -241,6 +241,11 @@ const SoatPage = ({ showConfirm }) => {
           if (val instanceof Date) return `${String(val.getMonth()+1).padStart(2,"0")}-${val.getFullYear()}`;
           const s = String(val).trim(); if (!s) return "";
           const parts = s.split(/[/.-]/);
+          // Formato mm/aaaa o mm-aaaa (2 partes)
+          if (parts.length === 2 && parts[1].length === 4) {
+            return `${parts[0].padStart(2,"0")}-${parts[1]}`;
+          }
+          // Formato dd/mm/aaaa (3 partes)
           if (parts.length === 3) {
             let d, m, y;
             if (parts[2].length === 4) { [d, m, y] = parts; }
@@ -256,7 +261,7 @@ const SoatPage = ({ showConfirm }) => {
         const fechaStr = fechaRaw instanceof Date
           ? `${String(fechaRaw.getDate()).padStart(2,"0")}/${String(fechaRaw.getMonth()+1).padStart(2,"0")}/${fechaRaw.getFullYear()}`
           : String(fechaRaw || "").trim();
-        const anioMesVal = kM ? String(r[kM] || "").trim() : parseAnioMes(fechaRaw);
+        const anioMesVal = kM ? parseAnioMes(r[kM]) : parseAnioMes(fechaRaw);
         const er = kE ? String(r[kE] || "").toLowerCase().trim() : "";
         const fv = (() => {
           const p = fechaStr.split("/");
