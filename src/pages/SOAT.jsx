@@ -384,6 +384,7 @@ const SoatPage = ({ showConfirm }) => {
   const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
   const alertaHoy = clientes.filter(c => {
     if (FASES_TERMINALES.includes(c.fase)) return false;
+    if (c.fase === "pendiente") return true;
     if (!c.fechaProxima) return false;
     const d = parseDateSoat(c.fechaProxima);
     return d && d <= new Date();
