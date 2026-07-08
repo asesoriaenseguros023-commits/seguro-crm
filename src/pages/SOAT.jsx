@@ -92,6 +92,8 @@ const SoatPage = ({ showConfirm }) => {
   const [gestionHasta, setGestionHasta] = useState("");
   const [gestionAgente, setGestionAgente] = useState("Todos");
   const [gestionFases, setGestionFases] = useState(FASES_SOAT.map(f => f.id));
+  const [gestionDesdeFases, setGestionDesdeFases] = useState(FASES_SOAT.map(f => f.id));
+  const [gestionSoloCambios, setGestionSoloCambios] = useState(false);
   const [gestionPreset, setGestionPreset] = useState("7d");
   // Export dialog
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -450,9 +452,15 @@ const SoatPage = ({ showConfirm }) => {
     }
   };
 
-  const gestionAllEntries = useMemo(() => clientes.flatMap(c =>
-    (c.historial || []).map(h => ({ ...h, _clienteId: c.id, _nombre: c.nombre, _telefono: c.telefono, _placa: c.placa }))
-  ), [clientes]);
+  // historial se guarda más reciente primero: el "de" de un registro es el resultado
+  // del registro siguiente (más viejo); si no hay uno anterior, el cliente arrancó en "pendiente"
+  const gestionAllEntries = useMemo(() => clientes.flatMap(c => {
+    const hist = c.historial || [];
+    return hist.map((h, i) => ({
+      ...h, _clienteId: c.id, _nombre: c.nombre, _telefono: c.telefono, _placa: c.placa,
+      _desde: i + 1 < hist.length ? hist[i + 1].resultado : "pendiente",
+    }));
+  }), [clientes]);
 
   const gestionFiltradas = useMemo(() => {
     const desdeD = gestionDesde ? new Date(gestionDesde + "T00:00:00") : null;
@@ -464,9 +472,11 @@ const SoatPage = ({ showConfirm }) => {
       if (hastaD && d > hastaD) return false;
       if (gestionAgente !== "Todos" && h.agente !== gestionAgente) return false;
       if (gestionFases.length > 0 && !gestionFases.includes(h.resultado)) return false;
+      if (gestionDesdeFases.length > 0 && !gestionDesdeFases.includes(h._desde)) return false;
+      if (gestionSoloCambios && h._desde === h.resultado) return false;
       return true;
     }).sort((a, b) => parseHistFecha(b.fecha) - parseHistFecha(a.fecha));
-  }, [gestionAllEntries, gestionDesde, gestionHasta, gestionAgente, gestionFases]);
+  }, [gestionAllEntries, gestionDesde, gestionHasta, gestionAgente, gestionFases, gestionDesdeFases, gestionSoloCambios]);
 
   const gestionPorDia = useMemo(() => {
     const groups = new Map();
@@ -523,7 +533,7 @@ const SoatPage = ({ showConfirm }) => {
             style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
             Funnel
           </button>
-          <button onClick={() => { aplicarPresetGestion("7d"); setGestionAgente("Todos"); setGestionFases(FASES_SOAT.map(f => f.id)); setShowGestion(true); }}
+          <button onClick={() => { aplicarPresetGestion("7d"); setGestionAgente("Todos"); setGestionFases(FASES_SOAT.map(f => f.id)); setGestionDesdeFases(FASES_SOAT.map(f => f.id)); setGestionSoloCambios(false); setShowGestion(true); }}
             style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
             Gestión
           </button>
@@ -1090,11 +1100,19 @@ const SoatPage = ({ showConfirm }) => {
               </select>
             </div>
 
-            {/* Filtro por resultado */}
-            <div style={{ marginBottom: 18 }}>
-              <label style={lblS}>Filtrar por resultado</label>
+            {/* Filtro por transición de estado */}
+            <div style={{ marginBottom: 10 }}>
+              <label style={lblS}>Estado anterior (de)</label>
+              <PillToggle options={FASES_SOAT.map(f => f.id)} selected={gestionDesdeFases} onChange={setGestionDesdeFases} fmt={id => FM_SOAT[id]?.label || id} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={lblS}>Estado nuevo (a)</label>
               <PillToggle options={FASES_SOAT.map(f => f.id)} selected={gestionFases} onChange={setGestionFases} fmt={id => FM_SOAT[id]?.label || id} />
             </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: BLUE.text, marginBottom: 18, cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={gestionSoloCambios} onChange={e => setGestionSoloCambios(e.target.checked)} style={{ cursor: "pointer" }} />
+              Solo cambios de estado reales <span style={{ color: "#999", fontWeight: 400 }}>(ocultar llamadas que no cambiaron la fase)</span>
+            </label>
 
             {/* Resumen */}
             {gestionFiltradas.length > 0 && (
@@ -1120,6 +1138,8 @@ const SoatPage = ({ showConfirm }) => {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {items.map((h, i) => {
                     const f = FM_SOAT[h.resultado];
+                    const fDesde = FM_SOAT[h._desde];
+                    const cambio = h._desde !== h.resultado;
                     return (
                       <div key={i}
                         onClick={() => { const cli = clientes.find(c => c.id === h._clienteId); if (cli) { setShowGestion(false); openModal(cli); } }}
@@ -1131,7 +1151,11 @@ const SoatPage = ({ showConfirm }) => {
                             <span style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{h._nombre || "—"}</span>
                             <span style={{ fontSize: 11.5, color: "#999" }}>{h._telefono}{h._placa ? ` · ${h._placa}` : ""}</span>
                           </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: f?.text, background: f?.bg, padding: "2px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>{f?.label || h.resultado}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", opacity: cambio ? 1 : 0.55 }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: fDesde?.text, background: fDesde?.bg, padding: "2px 9px", borderRadius: 20 }}>{fDesde?.label || h._desde}</span>
+                            <span style={{ fontSize: 12, color: "#999" }}>→</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: f?.text, background: f?.bg, padding: "2px 10px", borderRadius: 20 }}>{f?.label || h.resultado}</span>
+                          </div>
                         </div>
                         <div style={{ fontSize: 12, color: "#888" }}>Agente: <strong>{h.agente}</strong></div>
                         {(h.motivo || h.motivoIloc) && <div style={{ fontSize: 12.5, color: "#666", marginTop: 4 }}>Motivo: {h.motivo || h.motivoIloc}</div>}
