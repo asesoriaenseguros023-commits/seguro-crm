@@ -6,7 +6,6 @@ import { parseDateSoat, diasRenSoat, mapSoat, toSoatRow } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const DIAS_SEMANA = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
 const fmtAnioMes = (s) => {
   if (!s) return "Sin fecha";
   const [m, y] = s.split("-");
@@ -22,8 +21,6 @@ const parseHistFecha = (s) => {
   if (!d || !m || !y) return null;
   return new Date(y, m - 1, d);
 };
-const fmtDiaLargo = (d) => `${DIAS_SEMANA[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`;
-const toYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
@@ -88,13 +85,6 @@ const SoatPage = ({ showConfirm }) => {
   const [funnelBases, setFunnelBases] = useState([]);
   // Gestión diaria
   const [showGestion, setShowGestion] = useState(false);
-  const [gestionDesde, setGestionDesde] = useState("");
-  const [gestionHasta, setGestionHasta] = useState("");
-  const [gestionAgente, setGestionAgente] = useState("Todos");
-  const [gestionFases, setGestionFases] = useState(FASES_SOAT.map(f => f.id));
-  const [gestionDesdeFases, setGestionDesdeFases] = useState(FASES_SOAT.map(f => f.id));
-  const [gestionSoloCambios, setGestionSoloCambios] = useState(false);
-  const [gestionPreset, setGestionPreset] = useState("7d");
   // Export dialog
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportBases, setExportBases] = useState([]);
@@ -431,69 +421,15 @@ const SoatPage = ({ showConfirm }) => {
   }, [funnelClientes]);
 
   // ─── Gestión diaria ───────────────────────────────────────────────────────
-  const aplicarPresetGestion = (preset) => {
-    setGestionPreset(preset);
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-    if (preset === "hoy") { setGestionDesde(toYMD(hoy)); setGestionHasta(toYMD(hoy)); }
-    else if (preset === "ayer") {
-      const a = new Date(hoy); a.setDate(a.getDate() - 1);
-      setGestionDesde(toYMD(a)); setGestionHasta(toYMD(a));
-    } else if (preset === "7d") {
-      const a = new Date(hoy); a.setDate(a.getDate() - 6);
-      setGestionDesde(toYMD(a)); setGestionHasta(toYMD(hoy));
-    } else if (preset === "30d") {
-      const a = new Date(hoy); a.setDate(a.getDate() - 29);
-      setGestionDesde(toYMD(a)); setGestionHasta(toYMD(hoy));
-    } else if (preset === "mes") {
-      const a = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-      setGestionDesde(toYMD(a)); setGestionHasta(toYMD(hoy));
-    } else if (preset === "todo") {
-      setGestionDesde(""); setGestionHasta("");
-    }
-  };
-
   // historial se guarda más reciente primero: el "de" de un registro es el resultado
   // del registro siguiente (más viejo); si no hay uno anterior, el cliente arrancó en "pendiente"
-  const gestionAllEntries = useMemo(() => clientes.flatMap(c => {
+  const gestionEntries = useMemo(() => clientes.flatMap(c => {
     const hist = c.historial || [];
     return hist.map((h, i) => ({
       ...h, _clienteId: c.id, _nombre: c.nombre, _telefono: c.telefono, _placa: c.placa,
       _desde: i + 1 < hist.length ? hist[i + 1].resultado : "pendiente",
     }));
-  }), [clientes]);
-
-  const gestionFiltradas = useMemo(() => {
-    const desdeD = gestionDesde ? new Date(gestionDesde + "T00:00:00") : null;
-    const hastaD = gestionHasta ? new Date(gestionHasta + "T23:59:59") : null;
-    return gestionAllEntries.filter(h => {
-      const d = parseHistFecha(h.fecha);
-      if (!d) return false;
-      if (desdeD && d < desdeD) return false;
-      if (hastaD && d > hastaD) return false;
-      if (gestionAgente !== "Todos" && h.agente !== gestionAgente) return false;
-      if (gestionFases.length > 0 && !gestionFases.includes(h.resultado)) return false;
-      if (gestionDesdeFases.length > 0 && !gestionDesdeFases.includes(h._desde)) return false;
-      if (gestionSoloCambios && h._desde === h.resultado) return false;
-      return true;
-    }).sort((a, b) => parseHistFecha(b.fecha) - parseHistFecha(a.fecha));
-  }, [gestionAllEntries, gestionDesde, gestionHasta, gestionAgente, gestionFases, gestionDesdeFases, gestionSoloCambios]);
-
-  const gestionPorDia = useMemo(() => {
-    const groups = new Map();
-    gestionFiltradas.forEach(h => {
-      const d = parseHistFecha(h.fecha);
-      const key = toYMD(d);
-      if (!groups.has(key)) groups.set(key, { date: d, items: [] });
-      groups.get(key).items.push(h);
-    });
-    return [...groups.values()].sort((a, b) => b.date - a.date);
-  }, [gestionFiltradas]);
-
-  const gestionResumen = useMemo(() => {
-    const counts = Object.fromEntries(FASES_SOAT.map(f => [f.id, 0]));
-    gestionFiltradas.forEach(h => { if (counts[h.resultado] !== undefined) counts[h.resultado]++; });
-    return counts;
-  }, [gestionFiltradas]);
+  }).sort((a, b) => parseHistFecha(b.fecha) - parseHistFecha(a.fecha)), [clientes]);
 
   // ─── Estilos ──────────────────────────────────────────────────────────────
   const inpS = { background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "9px 12px", color: BLUE.text, fontSize: 13, outline: "none", width: "100%", fontFamily: "inherit", boxSizing: "border-box" };
@@ -533,7 +469,7 @@ const SoatPage = ({ showConfirm }) => {
             style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
             Funnel
           </button>
-          <button onClick={() => { aplicarPresetGestion("7d"); setGestionAgente("Todos"); setGestionFases(FASES_SOAT.map(f => f.id)); setGestionDesdeFases(FASES_SOAT.map(f => f.id)); setGestionSoloCambios(false); setShowGestion(true); }}
+          <button onClick={() => setShowGestion(true)}
             style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
             Gestión
           </button>
@@ -1063,110 +999,57 @@ const SoatPage = ({ showConfirm }) => {
       {/* ── Gestión diaria modal ─────────────────────────────────────────────── */}
       {showGestion && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowGestion(false)}>
-          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 760, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 920, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Gestión diaria</div>
+                <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Gestión</div>
                 <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 3 }}>
-                  {gestionFiltradas.length} gestión{gestionFiltradas.length !== 1 ? "es" : ""} · {gestionPorDia.length} día{gestionPorDia.length !== 1 ? "s" : ""} con actividad
+                  {gestionEntries.length} gestión{gestionEntries.length !== 1 ? "es" : ""} registrada{gestionEntries.length !== 1 ? "s" : ""}
                 </div>
               </div>
               <button onClick={() => setShowGestion(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#aaa" }}>×</button>
             </div>
 
-            {/* Presets de rango */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-              {[["hoy","Hoy"],["ayer","Ayer"],["7d","Últimos 7 días"],["30d","Últimos 30 días"],["mes","Este mes"],["todo","Todo"]].map(([key, label]) => (
-                <button key={key} onClick={() => aplicarPresetGestion(key)}
-                  style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, cursor: "pointer", border: "1.5px solid", background: gestionPreset === key ? BLUE.primary : "#fff", color: gestionPreset === key ? "#fff" : BLUE.text, borderColor: gestionPreset === key ? BLUE.primary : BLUE.border, fontWeight: gestionPreset === key ? 700 : 400, transition: "all 0.12s" }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Rango personalizado + agente */}
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Desde:</label>
-                <input type="date" value={gestionDesde} onChange={e => { setGestionDesde(e.target.value); setGestionPreset(null); }} style={{ ...filterSel, width: 150, padding: "7px 10px" }} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Hasta:</label>
-                <input type="date" value={gestionHasta} onChange={e => { setGestionHasta(e.target.value); setGestionPreset(null); }} style={{ ...filterSel, width: 150, padding: "7px 10px" }} />
-              </div>
-              <select value={gestionAgente} onChange={e => setGestionAgente(e.target.value)} style={filterSel}>
-                <option value="Todos">Todos los agentes</option>
-                {agentes.map(a => <option key={a}>{a}</option>)}
-              </select>
-            </div>
-
-            {/* Filtro por transición de estado */}
-            <div style={{ marginBottom: 10 }}>
-              <label style={lblS}>Estado anterior (de)</label>
-              <PillToggle options={FASES_SOAT.map(f => f.id)} selected={gestionDesdeFases} onChange={setGestionDesdeFases} fmt={id => FM_SOAT[id]?.label || id} />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lblS}>Estado nuevo (a)</label>
-              <PillToggle options={FASES_SOAT.map(f => f.id)} selected={gestionFases} onChange={setGestionFases} fmt={id => FM_SOAT[id]?.label || id} />
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: BLUE.text, marginBottom: 18, cursor: "pointer", userSelect: "none" }}>
-              <input type="checkbox" checked={gestionSoloCambios} onChange={e => setGestionSoloCambios(e.target.checked)} style={{ cursor: "pointer" }} />
-              Solo cambios de estado reales <span style={{ color: "#999", fontWeight: 400 }}>(ocultar llamadas que no cambiaron la fase)</span>
-            </label>
-
-            {/* Resumen */}
-            {gestionFiltradas.length > 0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 22 }}>
-                {FASES_SOAT.filter(f => gestionResumen[f.id] > 0).map(f => (
-                  <div key={f.id} style={{ background: f.bg, color: f.text, borderRadius: 20, padding: "5px 14px", fontSize: 12.5, fontWeight: 700 }}>
-                    {f.label}: {gestionResumen[f.id]}
+            {gestionEntries.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#aaa", padding: 48, fontSize: 14 }}>Sin gestiones registradas.</div>
+            ) : (
+              <div style={{ ...S.tableWrap, overflowX: "auto" }}>
+                <div style={{ minWidth: 780 }}>
+                  <div style={{ ...S.tableHead, gridTemplateColumns: "90px 1.6fr 1.6fr 1fr 2fr" }}>
+                    <span>Fecha</span><span>Cliente</span><span>Cambio</span><span>Agente</span><span>Detalle</span>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {/* Timeline día a día */}
-            {gestionPorDia.length === 0 ? (
-              <div style={{ textAlign: "center", color: "#aaa", padding: 48, fontSize: 14 }}>Sin gestiones registradas en este rango.</div>
-            ) : gestionPorDia.map(({ date, items }) => (
-              <div key={toYMD(date)} style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: BLUE.text, textTransform: "capitalize" }}>{fmtDiaLargo(date)}</div>
-                  <div style={{ height: 1, flex: 1, background: BLUE.border }} />
-                  <div style={{ fontSize: 11.5, color: "#6b87b0", fontWeight: 700, whiteSpace: "nowrap" }}>{items.length} gestión{items.length !== 1 ? "es" : ""}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {items.map((h, i) => {
+                  {gestionEntries.map((h, i) => {
                     const f = FM_SOAT[h.resultado];
                     const fDesde = FM_SOAT[h._desde];
                     const cambio = h._desde !== h.resultado;
                     return (
                       <div key={i}
                         onClick={() => { const cli = clientes.find(c => c.id === h._clienteId); if (cli) { setShowGestion(false); openModal(cli); } }}
-                        style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", cursor: "pointer" }}
+                        style={{ ...S.tableRow, gridTemplateColumns: "90px 1.6fr 1.6fr 1fr 2fr", cursor: "pointer", alignItems: "flex-start" }}
                         onMouseEnter={e => e.currentTarget.style.background = BLUE.light}
-                        onMouseLeave={e => e.currentTarget.style.background = "#f8faff"}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{h._nombre || "—"}</span>
-                            <span style={{ fontSize: 11.5, color: "#999" }}>{h._telefono}{h._placa ? ` · ${h._placa}` : ""}</span>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", opacity: cambio ? 1 : 0.55 }}>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: fDesde?.text, background: fDesde?.bg, padding: "2px 9px", borderRadius: 20 }}>{fDesde?.label || h._desde}</span>
-                            <span style={{ fontSize: 12, color: "#999" }}>→</span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: f?.text, background: f?.bg, padding: "2px 10px", borderRadius: 20 }}>{f?.label || h.resultado}</span>
-                          </div>
+                        onMouseLeave={e => e.currentTarget.style.background = ""}>
+                        <div style={{ fontSize: 12, color: "#555" }}>{h.fecha}</div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{h._nombre || "—"}</div>
+                          <div style={{ fontSize: 11, color: "#999" }}>{h._telefono}{h._placa ? ` · ${h._placa}` : ""}</div>
                         </div>
-                        <div style={{ fontSize: 12, color: "#888" }}>Agente: <strong>{h.agente}</strong></div>
-                        {(h.motivo || h.motivoIloc) && <div style={{ fontSize: 12.5, color: "#666", marginTop: 4 }}>Motivo: {h.motivo || h.motivoIloc}</div>}
-                        {h.proximaAccion && <div style={{ fontSize: 12.5, color: "#666", marginTop: 2 }}>Próxima acción: {h.proximaAccion}{h.fechaProxima ? ` · ${h.fechaProxima}` : ""}</div>}
-                        {h.nota && <div style={{ fontSize: 13, color: "#444", fontStyle: "italic", marginTop: 6, borderLeft: `3px solid ${BLUE.border}`, paddingLeft: 10 }}>"{h.nota}"</div>}
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", opacity: cambio ? 1 : 0.55 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: fDesde?.text, background: fDesde?.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{fDesde?.label || h._desde}</span>
+                          <span style={{ fontSize: 12, color: "#999" }}>→</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: f?.text, background: f?.bg, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{f?.label || h.resultado}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#888" }}>{h.agente}</div>
+                        <div style={{ fontSize: 12, color: "#666" }}>
+                          {(h.motivo || h.motivoIloc) && <div>Motivo: {h.motivo || h.motivoIloc}</div>}
+                          {h.proximaAccion && <div>Acción: {h.proximaAccion}{h.fechaProxima ? ` · ${h.fechaProxima}` : ""}</div>}
+                          {h.nota && <div style={{ fontStyle: "italic", color: "#444" }}>"{h.nota}"</div>}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
