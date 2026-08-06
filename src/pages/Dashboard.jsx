@@ -2,7 +2,7 @@ import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, diasParaVencer } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
-const Dashboard = ({ interesados, cotizaciones, polizas, userName, onNav }) => {
+const Dashboard = ({ interesados, cotizaciones, polizas, onNav }) => {
   const activas = polizas.filter((p) => p.estado === "Activa");
   const primaTotal = activas.reduce((s, p) => s + Number(p.prima || 0), 0);
   const proxVencer = polizas.filter(

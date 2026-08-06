@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";

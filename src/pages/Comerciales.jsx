@@ -9,14 +9,15 @@ const ComercialPage = ({ showConfirm }) => {
   const [nuevo, setNuevo] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const cargar = async () => {
+  const fetchAgentes = async () => {
     const res = await fetch(API);
     const data = await res.json();
-    if (Array.isArray(data)) setAgentes(data);
-    setLoading(false);
+    return Array.isArray(data) ? data : [];
   };
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    fetchAgentes().then((data) => { setAgentes(data); setLoading(false); });
+  }, []);
 
   const add = async () => {
     const nombre = nuevo.trim().toUpperCase();
@@ -29,7 +30,7 @@ const ComercialPage = ({ showConfirm }) => {
     });
     const data = await res.json();
     if (data.error) console.error(data.error);
-    await cargar();
+    setAgentes(await fetchAgentes());
     setNuevo(""); setSaving(false);
   };
 
@@ -37,7 +38,7 @@ const ComercialPage = ({ showConfirm }) => {
     const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
     await fetch(`${API}?id=${id}`, { method: "DELETE" });
-    await cargar();
+    setAgentes(await fetchAgentes());
   };
 
   const inpS = { background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px", color: BLUE.text, fontSize: 13.5, outline: "none", fontFamily: "inherit", boxSizing: "border-box", width: "100%" };

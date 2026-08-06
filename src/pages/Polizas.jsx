@@ -3,7 +3,9 @@ import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, diasParaVencer, estadoColor, esAdmin } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
-const PolizasPage = ({ polizas, interesados, ramos, aseguradoras, onDelete, userRol, agenteActualId, showConfirm }) => {
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showConfirm }) => {
   const [q, setQ] = useState("");
   const [filtroRamo, setFiltroRamo] = useState("Todos");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
@@ -23,8 +25,6 @@ const PolizasPage = ({ polizas, interesados, ramos, aseguradoras, onDelete, user
     return Array.from(s).sort().reverse();
   }, [polizasPorRol]);
 
-  const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-
   const filtered = useMemo(
     () =>
       polizasPorRol.filter((p) => {
@@ -37,7 +37,7 @@ const PolizasPage = ({ polizas, interesados, ramos, aseguradoras, onDelete, user
         const matchAnio = filtroAnio === "Todos" || fe.startsWith(filtroAnio);
         const matchMes =
           filtroMes === "Todos" ||
-          fe.substring(5, 7) === String(meses.indexOf(filtroMes) + 1).padStart(2, "0");
+          fe.substring(5, 7) === String(MESES.indexOf(filtroMes) + 1).padStart(2, "0");
         return (
           matchQ &&
           (filtroRamo === "Todos" || p.ramo === filtroRamo) &&
@@ -77,7 +77,7 @@ const PolizasPage = ({ polizas, interesados, ramos, aseguradoras, onDelete, user
         </select>
         <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)}>
           <option value="Todos">Todos los meses</option>
-          {meses.map((m) => <option key={m}>{m}</option>)}
+          {MESES.map((m) => <option key={m}>{m}</option>)}
         </select>
         <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={filtroRamo} onChange={(e) => setFiltroRamo(e.target.value)}>
           <option value="Todos">Todos los ramos</option>

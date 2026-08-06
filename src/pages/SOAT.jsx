@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
 import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
-import { parseDateSoat, diasRenSoat, mapSoat, toSoatRow } from "../helpers.js";
+import { parseDateSoat, mapSoat, toSoatRow } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -31,14 +31,26 @@ const soatEmpty = () => ({
   motivoNoCompra: "", historial: [], notas: "",
 });
 
-const parseFechaCompra = (s) => {
-  if (!s) return 0;
-  const p = s.split("/");
-  if (p.length === 3) return new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`).getTime();
-  return 0;
-};
-
 const FASES_SIN_ACCION = ["compro", "no_interes"];
+
+// Pill toggle para multi-select
+const PillToggle = ({ options, selected, onChange, fmt }) => (
+  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+    {options.map(opt => {
+      const active = selected.includes(opt);
+      return (
+        <button key={opt} onClick={() => onChange(active ? selected.filter(s => s !== opt) : [...selected, opt])}
+          style={{ padding: "5px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer", border: "1.5px solid", background: active ? BLUE.primary : "#fff", color: active ? "#fff" : BLUE.text, borderColor: active ? BLUE.primary : BLUE.border, fontWeight: active ? 700 : 400, transition: "all 0.12s" }}>
+          {fmt ? fmt(opt) : opt}
+        </button>
+      );
+    })}
+    <button onClick={() => onChange(selected.length === options.length ? [] : [...options])}
+      style={{ padding: "5px 13px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: `1px solid ${BLUE.border}`, background: "transparent", color: "#888", transition: "all 0.12s" }}>
+      {selected.length === options.length ? "Ninguno" : "Todos"}
+    </button>
+  </div>
+);
 
 // ─── Funnel bar ───────────────────────────────────────────────────────────────
 const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
@@ -259,13 +271,15 @@ const SoatPage = ({ showConfirm }) => {
           }
           // Formato dd/mm/aaaa (3 partes)
           if (parts.length === 3) {
-            let d, m, y;
-            if (parts[2].length === 4) { [d, m, y] = parts; }
-            else if (parts[0].length === 4) { [y, m, d] = parts; }
+            let m, y;
+            if (parts[2].length === 4) { m = parts[1]; y = parts[2]; }
+            else if (parts[0].length === 4) { y = parts[0]; m = parts[1]; }
             else return "";
             return `${m.padStart(2,"0")}-${y}`;
           }
-        } catch {}
+        } catch {
+          // Fecha con formato irreconocible: cae al "" del return de abajo.
+        }
         return "";
       };
       const nuevos = rows.map(r => {
@@ -333,12 +347,6 @@ const SoatPage = ({ showConfirm }) => {
   const fechaRefAlerta = (c) => c.fechaProxima || c.fechaVencimiento;
 
   // ─── Datos derivados ──────────────────────────────────────────────────────
-  const toFechaStr = (yyyymmdd) => {
-    if (!yyyymmdd) return "";
-    const [y, m, d] = yyyymmdd.split("-");
-    return `${d}/${m}/${y}`;
-  };
-
   const basesDisponibles = useMemo(() =>
     [...new Set(clientes.map(c => c.anioMes).filter(Boolean))]
       .sort((a, b) => {
@@ -436,25 +444,6 @@ const SoatPage = ({ showConfirm }) => {
   const lblS = { fontSize: 11, color: "#6b87b0", fontWeight: 700, textTransform: "uppercase", marginBottom: 5, letterSpacing: "0.06em", display: "block" };
   const selS = { ...inpS, cursor: "pointer" };
   const filterSel = { ...S.select, width: "auto", padding: "7px 12px", fontSize: 13 };
-
-  // Pill toggle para multi-select
-  const PillToggle = ({ options, selected, onChange, fmt }) => (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {options.map(opt => {
-        const active = selected.includes(opt);
-        return (
-          <button key={opt} onClick={() => onChange(active ? selected.filter(s => s !== opt) : [...selected, opt])}
-            style={{ padding: "5px 13px", borderRadius: 20, fontSize: 12.5, cursor: "pointer", border: "1.5px solid", background: active ? BLUE.primary : "#fff", color: active ? "#fff" : BLUE.text, borderColor: active ? BLUE.primary : BLUE.border, fontWeight: active ? 700 : 400, transition: "all 0.12s" }}>
-            {fmt ? fmt(opt) : opt}
-          </button>
-        );
-      })}
-      <button onClick={() => onChange(selected.length === options.length ? [] : [...options])}
-        style={{ padding: "5px 13px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: `1px solid ${BLUE.border}`, background: "transparent", color: "#888", transition: "all 0.12s" }}>
-        {selected.length === options.length ? "Ninguno" : "Todos"}
-      </button>
-    </div>
-  );
 
   return (
     <div>

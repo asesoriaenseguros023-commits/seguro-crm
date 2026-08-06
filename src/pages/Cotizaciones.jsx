@@ -5,13 +5,12 @@ import Icon from "../components/Icon.jsx";
 import { PolizaEmitidaModal } from "./Leads.jsx";
 
 const CotizacionesPage = ({
-  cotizaciones, interesados, polizas, agentes, ramos, aseguradoras,
-  onAddCotizacion, onEditCotizacion, onDeleteCotizacion, onEmitirPoliza,
+  cotizaciones, interesados, aseguradoras,
+  onEditCotizacion, onDeleteCotizacion,
   userRol, agenteActualId, showConfirm,
 }) => {
   const [q, setQ] = useState("");
   const [editModal, setEditModal] = useState(null);
-  const [saving, setSaving] = useState(false);
 
   const cotizacionesFiltradas = useMemo(() => {
     const base = esAdmin(userRol)
@@ -27,9 +26,7 @@ const CotizacionesPage = ({
   }, [cotizaciones, q, userRol, agenteActualId]);
 
   const handleSave = async (cot, changes) => {
-    setSaving(cot.id);
     await onEditCotizacion({ ...cot, ...changes });
-    setSaving(false);
   };
 
   return (

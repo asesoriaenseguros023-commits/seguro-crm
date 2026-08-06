@@ -4,7 +4,7 @@ import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
-const ReportesPage = ({ polizas, ramos, clientes }) => {
+const ReportesPage = ({ polizas }) => {
   const [fechaInicio, setFechaInicio] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);

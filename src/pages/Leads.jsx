@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, today, esAdmin } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
 // ─── INTERESADO FORM ──────────────────────────────────────────────────────────
-export const InteresadoForm = ({ initial, agentes, ramos, clientes, onSave, onClose }) => {
+export const InteresadoForm = ({ initial, ramos, clientes, onSave, onClose }) => {
   const [form, setForm] = useState(
     initial || {
       clienteId: "", tipoSeguro: "", documentosChecklist: {},
@@ -351,17 +351,13 @@ export const PolizaEmitidaModal = ({ cot, aseguradoras, onSave, onClose }) => {
     primaEmitida: cot.primaEmitida || "",
     ivaEmitida: cot.ivaEmitida || "",
     gastosEmitida: cot.gastosEmitida || "",
-    totalPagoEmitida: cot.totalPagoEmitida || "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const total = (parseFloat(form.primaEmitida) || 0) + (parseFloat(form.ivaEmitida) || 0) + (parseFloat(form.gastosEmitida) || 0);
-    setForm((f) => ({ ...f, totalPagoEmitida: total || "" }));
-  }, [form.primaEmitida, form.ivaEmitida, form.gastosEmitida]);
+  const totalPagoEmitida = (parseFloat(form.primaEmitida) || 0) + (parseFloat(form.ivaEmitida) || 0) + (parseFloat(form.gastosEmitida) || 0);
 
-  const handleSave = async () => { setSaving(true); await onSave(form); setSaving(false); };
+  const handleSave = async () => { setSaving(true); await onSave({ ...form, totalPagoEmitida: totalPagoEmitida || "" }); setSaving(false); };
 
   return (
     <Modal
@@ -405,7 +401,7 @@ export const PolizaEmitidaModal = ({ cot, aseguradoras, onSave, onClose }) => {
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Total Pago</label>
-          <input style={{ ...S.input, background: "#f0fdf4", fontWeight: 700, color: "#16a34a" }} type="number" value={form.totalPagoEmitida} readOnly />
+          <input style={{ ...S.input, background: "#f0fdf4", fontWeight: 700, color: "#16a34a" }} type="number" value={totalPagoEmitida} readOnly />
         </div>
       </div>
     </Modal>
@@ -414,9 +410,9 @@ export const PolizaEmitidaModal = ({ cot, aseguradoras, onSave, onClose }) => {
 
 // ─── INTERESADOS PAGE ─────────────────────────────────────────────────────────
 const InteresadosPage = ({
-  interesados, cotizaciones, polizas, agentes, ramos, clientes,
+  interesados, agentes, ramos, clientes,
   onAddInteresado, onEditInteresado, onDeleteInteresado,
-  onAddCotizacion, onEditCotizacion, onEmitirPoliza,
+  onAddCotizacion,
   userRol, agenteActualId,
 }) => {
   const [q, setQ] = useState("");
@@ -424,8 +420,6 @@ const InteresadosPage = ({
   const [editInteresado, setEditInteresado] = useState(null);
   const [delInteresado, setDelInteresado] = useState(null);
   const [showCotizacion, setShowCotizacion] = useState(null);
-  const [editCotizacion, setEditCotizacion] = useState(null);
-  const [showEmision, setShowEmision] = useState(null);
 
   const interesadosFiltrados = useMemo(() => {
     const base = esAdmin(userRol)
@@ -443,16 +437,6 @@ const InteresadosPage = ({
   const handleSaveInteresado = async (form) => {
     if (editInteresado) { await onEditInteresado({ ...editInteresado, ...form }); setEditInteresado(null); }
     else { await onAddInteresado(form); setShowFormInteresado(false); }
-  };
-
-  const handleSaveCotizacion = async (form) => {
-    if (editCotizacion) { await onEditCotizacion({ ...editCotizacion, ...form }); setEditCotizacion(null); }
-    else { await onAddCotizacion(form); setShowCotizacion(null); }
-  };
-
-  const handleEmitir = async (form) => {
-    await onEmitirPoliza({ cotizacion: showEmision.cotizacion, interesado: showEmision.interesado, ...form });
-    setShowEmision(null);
   };
 
   return (
