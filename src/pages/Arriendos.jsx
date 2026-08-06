@@ -314,10 +314,23 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
   const abrirNuevo = () => { setForm(PAGO_INIT); setErrForm(""); setShowForm(true); };
 
   // Al elegir el inmueble, precarga el arrendatario y el canon que tiene
-  // asignados hoy (se pueden editar igual si el pago fue distinto).
+  // asignados hoy, y sugiere el período del mes en curso segun su día de
+  // pago (del día siguiente al vencimiento pasado hasta el vencimiento de
+  // este mes). Todo queda editable, incluido el monto.
   const seleccionarInmueble = (id) => {
     const inm = inmuebles.find((i) => i.id === id);
-    setForm((f) => ({ ...f, inmuebleId: id, arrendatarioId: inm?.arrendatarioId || "", valor: inm?.valorCanonBase || "" }));
+    let periodoInicio = "", periodoFin = "";
+    if (inm?.diaVencimientoPago) {
+      const hoy = new Date();
+      const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+      const diaVence = Math.min(inm.diaVencimientoPago, ultimoDiaMes);
+      const fin = new Date(hoy.getFullYear(), hoy.getMonth(), diaVence);
+      const inicio = new Date(fin.getFullYear(), fin.getMonth() - 1, fin.getDate() + 1);
+      const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      periodoInicio = toISO(inicio);
+      periodoFin = toISO(fin);
+    }
+    setForm((f) => ({ ...f, inmuebleId: id, arrendatarioId: inm?.arrendatarioId || "", valor: inm?.valorCanonBase || "", periodoInicio, periodoFin }));
   };
 
   const handleSave = async () => {
