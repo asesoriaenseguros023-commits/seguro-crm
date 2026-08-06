@@ -45,12 +45,12 @@ function calcularEstadoPago(inmueble, pagos) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
 
   const pagosInmueble = pagos.filter((p) => p.inmuebleId === inmueble.id && p.periodoFin);
-  let fechaVence;
+  let fechaVence, ultimoPago = null;
   if (pagosInmueble.length > 0) {
     // Ya pagó alguna vez: lo próximo que vence es el día en que se acaba la
     // cobertura del pago más reciente (no un día fijo del calendario).
-    const ultimoPeriodoFin = pagosInmueble.reduce((max, p) => (p.periodoFin > max ? p.periodoFin : max), pagosInmueble[0].periodoFin);
-    fechaVence = new Date(ultimoPeriodoFin + "T00:00:00");
+    ultimoPago = pagosInmueble.reduce((max, p) => (p.periodoFin > max.periodoFin ? p : max), pagosInmueble[0]);
+    fechaVence = new Date(ultimoPago.periodoFin + "T00:00:00");
   } else {
     // Nunca ha pagado: usa el día de pago del inmueble sobre el mes en curso.
     const anio = hoy.getFullYear(), mes = hoy.getMonth();
@@ -64,9 +64,9 @@ function calcularEstadoPago(inmueble, pagos) {
     const dias = -diasDiff;
     // Cada 30 días de atraso suma un mes más de canon a la mora total.
     const meses = Math.max(1, Math.ceil(dias / 30));
-    return { tipo: "mora", dias, meses, valorTotal: meses * (inmueble.valorCanonBase || 0), fechaVence };
+    return { tipo: "mora", dias, meses, valorTotal: meses * (inmueble.valorCanonBase || 0), fechaVence, ultimoPago };
   }
-  if (diasDiff <= 5) return { tipo: "proximo", dias: diasDiff, fechaVence };
+  if (diasDiff <= 5) return { tipo: "proximo", dias: diasDiff, fechaVence, ultimoPago };
   return null;
 }
 
@@ -692,17 +692,27 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
                 <span style={cardLabelS}>Mora total{estado.meses > 1 ? ` (${estado.meses} meses)` : ""}</span>
                 <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmt(estado.valorTotal)}</span>
               </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Fecha último pago</span>
+                <span style={{ fontSize: 12.5 }}>{estado.ultimoPago ? fmtDate(estado.ultimoPago.fechaPago) : "Nunca ha pagado"}</span>
+              </div>
+              {estado.ultimoPago && (
+                <div style={cardRowS}>
+                  <span style={cardLabelS}>Período del último pago</span>
+                  <span style={{ fontSize: 12.5 }}>{fmtDate(estado.ultimoPago.periodoInicio)} – {fmtDate(estado.ultimoPago.periodoFin)}</span>
+                </div>
+              )}
             </div>
           ))}
           {enMora.length === 0 && <div style={{ ...cardS, color: "#aaa", fontSize: 13 }}>Nadie en mora ahora mismo.</div>}
         </div>
       ) : (
-      <div style={{ ...S.tableWrap, marginBottom: 24 }}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr 1fr" }}>
-          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Canon mensual</div><div>Mora total</div><div>Días en mora</div>
+      <div style={{ ...S.tableWrap, marginBottom: 24, overflowX: "auto" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 0.9fr 0.9fr 1fr 1.2fr", minWidth: 1000 }}>
+          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Canon mensual</div><div>Mora total</div><div>Días en mora</div><div>Fecha último pago</div><div>Período del último pago</div>
         </div>
         {enMora.map(({ inmueble, estado }, idx) => (
-          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr 1fr" }}>
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 0.9fr 0.9fr 1fr 1.2fr", minWidth: 1000 }}>
             <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
             <div>{nombreArr(inmueble.arrendatarioId)}</div>
@@ -712,6 +722,8 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
               <span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span>
               {estado.meses > 1 && <span style={{ marginLeft: 6, fontSize: 11, color: "#888" }}>({estado.meses} meses)</span>}
             </div>
+            <div style={{ fontSize: 12.5 }}>{estado.ultimoPago ? fmtDate(estado.ultimoPago.fechaPago) : "Nunca ha pagado"}</div>
+            <div style={{ fontSize: 12.5 }}>{estado.ultimoPago ? `${fmtDate(estado.ultimoPago.periodoInicio)} – ${fmtDate(estado.ultimoPago.periodoFin)}` : "—"}</div>
           </div>
         ))}
         {enMora.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nadie en mora ahora mismo.</div>}
@@ -734,22 +746,34 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
                 <span style={cardLabelS}>Valor</span>
                 <span style={{ fontSize: 12.5 }}>{fmt(inmueble.valorCanonBase)}</span>
               </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Fecha último pago</span>
+                <span style={{ fontSize: 12.5 }}>{estado.ultimoPago ? fmtDate(estado.ultimoPago.fechaPago) : "Nunca ha pagado"}</span>
+              </div>
+              {estado.ultimoPago && (
+                <div style={cardRowS}>
+                  <span style={cardLabelS}>Período del último pago</span>
+                  <span style={{ fontSize: 12.5 }}>{fmtDate(estado.ultimoPago.periodoInicio)} – {fmtDate(estado.ultimoPago.periodoFin)}</span>
+                </div>
+              )}
             </div>
           ))}
           {proximos.length === 0 && <div style={{ ...cardS, color: "#aaa", fontSize: 13 }}>Nada por vencer en los próximos 5 días.</div>}
         </div>
       ) : (
-      <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr" }}>
-          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Valor</div><div>Vence en</div>
+      <div style={{ ...S.tableWrap, overflowX: "auto" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 0.9fr 1fr 1.2fr", minWidth: 900 }}>
+          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Valor</div><div>Vence en</div><div>Fecha último pago</div><div>Período del último pago</div>
         </div>
         {proximos.map(({ inmueble, estado }, idx) => (
-          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr" }}>
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 0.9fr 1fr 1.2fr", minWidth: 900 }}>
             <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
             <div>{nombreArr(inmueble.arrendatarioId)}</div>
             <div>{fmt(inmueble.valorCanonBase)}</div>
             <div><span style={S.chip("#f59e0b")}>{estado.dias === 0 ? "Hoy" : `${estado.dias} día${estado.dias === 1 ? "" : "s"}`}</span></div>
+            <div style={{ fontSize: 12.5 }}>{estado.ultimoPago ? fmtDate(estado.ultimoPago.fechaPago) : "Nunca ha pagado"}</div>
+            <div style={{ fontSize: 12.5 }}>{estado.ultimoPago ? `${fmtDate(estado.ultimoPago.periodoInicio)} – ${fmtDate(estado.ultimoPago.periodoFin)}` : "—"}</div>
           </div>
         ))}
         {proximos.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nada por vencer en los próximos 5 días.</div>}
