@@ -43,7 +43,12 @@ function calcularEstadoPago(inmueble, pagos) {
   }
 
   const diasDiff = Math.round((fechaVence - hoy) / 86400000);
-  if (diasDiff < 0) return { tipo: "mora", dias: -diasDiff, fechaVence };
+  if (diasDiff < 0) {
+    const dias = -diasDiff;
+    // Cada 30 días de atraso suma un mes más de canon a la mora total.
+    const meses = Math.max(1, Math.ceil(dias / 30));
+    return { tipo: "mora", dias, meses, valorTotal: meses * (inmueble.valorCanonBase || 0), fechaVence };
+  }
   if (diasDiff <= 5) return { tipo: "proximo", dias: diasDiff, fechaVence };
   return null;
 }
@@ -228,21 +233,24 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1.1fr 90px 200px" }}>
-          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div>Estado</div><div></div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
+          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
         </div>
         {arrendatarios.map((a) => (
-          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1.1fr 90px 200px" }}>
+          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{a.nombre}</div>
-            <div>{a.telefono || "—"}</div>
-            <div>{a.documento || "—"}</div>
+            <div style={{ color: a.telefono ? "inherit" : "#ccc" }}>{a.telefono || "—"}</div>
+            <div style={{ color: a.documento ? "inherit" : "#ccc" }}>{a.documento || "—"}</div>
             <div>
-              {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ color: "#aaa" }}>Sin inmueble</span>}
+              {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ color: "#ccc" }}>Sin inmueble</span>}
             </div>
-            <div><span style={S.chip(a.activo ? "#16a34a" : "#6b7280")}>{a.activo ? "Activo" : "Inactivo"}</span></div>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button style={S.btn(a.activo ? "secondary" : "success")} onClick={() => onToggleActivo(a)}>
-                {a.activo ? "Desactivar" : "Activar"}
+            <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => onToggleActivo(a)}
+                title={a.activo ? "Clic para desactivar" : "Clic para activar"}
+                style={{ ...S.chip(a.activo ? "#16a34a" : "#9ca3af"), border: "none", cursor: "pointer", fontWeight: 700 }}
+              >
+                {a.activo ? "Activo" : "Inactivo"}
               </button>
               <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
@@ -574,15 +582,19 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
 
       <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 10 }}>En mora ({enMora.length})</div>
       <div style={{ ...S.tableWrap, marginBottom: 24 }}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
-          <div>Inmueble</div><div>Arrendatario</div><div>Valor adeudado</div><div>Días en mora</div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr" }}>
+          <div>Inmueble</div><div>Arrendatario</div><div>Canon mensual</div><div>Mora total</div><div>Días en mora</div>
         </div>
         {enMora.map(({ inmueble, estado }) => (
-          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr" }}>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
             <div>{nombreArr(inmueble.arrendatarioId)}</div>
-            <div>{fmt(inmueble.valorCanonBase)}</div>
-            <div><span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span></div>
+            <div style={{ color: "#888" }}>{fmt(inmueble.valorCanonBase)}</div>
+            <div style={{ fontWeight: 700, color: "#dc2626" }}>{fmt(estado.valorTotal)}</div>
+            <div>
+              <span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span>
+              {estado.meses > 1 && <span style={{ marginLeft: 6, fontSize: 11, color: "#888" }}>({estado.meses} meses)</span>}
+            </div>
           </div>
         ))}
         {enMora.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nadie en mora ahora mismo.</div>}
@@ -749,12 +761,19 @@ const ArriendosPage = () => {
             onClick={() => !t.proximamente && setTab(t.id)}
             disabled={t.proximamente}
             style={{
+              display: "flex", alignItems: "center", gap: 6,
               padding: "9px 18px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: t.proximamente ? "default" : "pointer",
-              background: tab === t.id ? BLUE.primary : "#fff", color: tab === t.id ? "#fff" : t.proximamente ? "#bbb" : "#555",
-              boxShadow: "0 1px 4px rgba(26,86,219,0.08)",
+              background: tab === t.id ? BLUE.primary : t.proximamente ? "transparent" : "#fff",
+              color: tab === t.id ? "#fff" : t.proximamente ? "#bbb" : "#555",
+              boxShadow: t.proximamente ? "none" : "0 1px 4px rgba(26,86,219,0.08)",
             }}
           >
-            {t.label}{t.proximamente ? " (próximamente)" : ""}
+            {t.label}
+            {t.proximamente && (
+              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "#c7ccd6", border: "1px solid #e2e5ea", borderRadius: 20, padding: "1px 6px" }}>
+                Pronto
+              </span>
+            )}
           </button>
         ))}
       </div>
