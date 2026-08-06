@@ -1,29 +1,17 @@
--- Módulo Arriendos — schema completo (inmuebles, arrendatarios, pagos, movimientos)
--- Sin tabla de contratos: el inmueble guarda directamente quién lo arrienda hoy.
--- Correr una sola vez en el SQL Editor de Supabase, en una base nueva.
--- Si ya corriste una versión anterior con "contratos", usa
--- arriendos_migracion_sin_contratos.sql en vez de este archivo.
+-- Simplifica el módulo Arriendos quitando la tabla "contratos" (no aportaba
+-- valor para este caso de uso: manejo personal de pocos inmuebles).
+-- Seguro de correr: NO toca la tabla "inmuebles" ni "arrendatarios" (ahí
+-- están tus datos reales). Solo borra "contratos", "pagos" y "movimientos",
+-- que están vacías todavía (el módulo de Pagos no se había construido).
 
-create table if not exists arrendatarios (
-  id uuid primary key default gen_random_uuid(),
-  nombre text not null,
-  telefono text,
-  documento text,
-  created_at timestamptz not null default now()
-);
+drop table if exists movimientos cascade;
+drop table if exists pagos cascade;
+drop table if exists contratos cascade;
 
-create table if not exists inmuebles (
-  id uuid primary key default gen_random_uuid(),
-  nombre text not null,
-  direccion text,
-  valor_canon_base numeric not null default 0,
-  dia_vencimiento_pago int not null check (dia_vencimiento_pago between 1 and 31),
-  activo boolean not null default true,
-  arrendatario_id uuid references arrendatarios(id) on delete set null,
-  created_at timestamptz not null default now()
-);
+alter table inmuebles
+  add column if not exists arrendatario_id uuid references arrendatarios(id) on delete set null;
 
-create table if not exists pagos (
+create table pagos (
   id uuid primary key default gen_random_uuid(),
   inmueble_id uuid not null references inmuebles(id) on delete restrict,
   arrendatario_id uuid not null references arrendatarios(id) on delete restrict,
@@ -36,7 +24,7 @@ create table if not exists pagos (
   created_at timestamptz not null default now()
 );
 
-create table if not exists movimientos (
+create table movimientos (
   id uuid primary key default gen_random_uuid(),
   fecha date not null,
   tipo text not null check (tipo in ('ingreso_arriendo', 'gasto', 'prestamo', 'otro')),
@@ -59,16 +47,9 @@ create table if not exists arrendador_config (
   created_at timestamptz not null default now()
 );
 
--- RLS: mismo patrón permisivo para "anon" que usa el resto de tablas del proyecto
--- (la app entera ya está protegida por el login de Supabase Auth delante).
-alter table inmuebles enable row level security;
-alter table arrendatarios enable row level security;
 alter table pagos enable row level security;
 alter table movimientos enable row level security;
 alter table arrendador_config enable row level security;
-
-create policy "anon_all_inmuebles" on inmuebles for all using (true) with check (true);
-create policy "anon_all_arrendatarios" on arrendatarios for all using (true) with check (true);
 create policy "anon_all_pagos" on pagos for all using (true) with check (true);
 create policy "anon_all_movimientos" on movimientos for all using (true) with check (true);
 create policy "anon_all_arrendador_config" on arrendador_config for all using (true) with check (true);

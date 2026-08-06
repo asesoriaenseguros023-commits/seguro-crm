@@ -146,6 +146,7 @@ export const mapInmueble = (r) => ({
   valorCanonBase: r.valor_canon_base || 0,
   diaVencimientoPago: r.dia_vencimiento_pago || 1,
   activo: r.activo !== false,
+  arrendatarioId: r.arrendatario_id || "",
 });
 
 export const toInmuebleRow = (f) => ({
@@ -154,6 +155,7 @@ export const toInmuebleRow = (f) => ({
   valor_canon_base: f.valorCanonBase || 0,
   dia_vencimiento_pago: f.diaVencimientoPago,
   activo: f.activo !== false,
+  arrendatario_id: f.arrendatarioId || null,
 });
 
 export const mapArrendatario = (r) => ({
@@ -161,6 +163,44 @@ export const mapArrendatario = (r) => ({
   nombre: r.nombre || "",
   telefono: r.telefono || "",
   documento: r.documento || "",
+});
+
+export const mapPago = (r) => ({
+  id: r.id,
+  inmuebleId: r.inmueble_id,
+  arrendatarioId: r.arrendatario_id,
+  fechaPago: r.fecha_pago,
+  periodoInicio: r.periodo_inicio,
+  periodoFin: r.periodo_fin,
+  valor: r.valor || 0,
+  metodo: r.metodo || "efectivo",
+  estado: r.estado || "pagado",
+});
+
+export const toPagoRow = (f) => ({
+  inmueble_id: f.inmuebleId,
+  arrendatario_id: f.arrendatarioId,
+  fecha_pago: f.fechaPago,
+  periodo_inicio: f.periodoInicio,
+  periodo_fin: f.periodoFin,
+  valor: Number(f.valor) || 0,
+  metodo: f.metodo,
+  estado: f.estado,
+});
+
+export const mapArrendador = (r) => ({
+  id: r.id,
+  nombre: r.nombre || "",
+  documento: r.documento || "",
+  telefono: r.telefono || "",
+  direccion: r.direccion || "",
+});
+
+export const toArrendadorRow = (f) => ({
+  nombre: f.nombre,
+  documento: f.documento,
+  telefono: f.telefono,
+  direccion: f.direccion,
 });
 
 // Color helpers for cotizaciones

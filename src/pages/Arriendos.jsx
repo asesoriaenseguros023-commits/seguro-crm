@@ -1,34 +1,38 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
-import { fmt, mapInmueble, toInmuebleRow, mapArrendatario } from "../helpers.js";
+import { fmt, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow } from "../helpers.js";
+import { generarComprobante, fmtMesLargo, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
 const TABS = [
   { id: "inmuebles", label: "Inmuebles" },
   { id: "arrendatarios", label: "Arrendatarios" },
-  { id: "contratos", label: "Contratos", proximamente: true },
-  { id: "pagos", label: "Pagos", proximamente: true },
+  { id: "pagos", label: "Pagos" },
+  { id: "arrendador", label: "Arrendador" },
   { id: "movimientos", label: "Movimientos", proximamente: true },
 ];
 
-const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true };
+const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "" };
 const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "" };
+const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), mesCorrespondiente: "", valor: "", metodo: "efectivo", estado: "pagado" };
+const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "" };
 
 // ─── Inmuebles ────────────────────────────────────────────────────────────
-const InmueblesTab = ({ inmuebles, onAdd, onEdit, onDelete }) => {
+const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState(INMUEBLE_INIT);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const nombreArrendatario = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "";
 
   const abrirNuevo = () => { setEditItem(null); setForm(INMUEBLE_INIT); setShowForm(true); };
   const abrirEditar = (i) => {
     setEditItem(i);
-    setForm({ nombre: i.nombre, direccion: i.direccion, valorCanonBase: i.valorCanonBase, diaVencimientoPago: i.diaVencimientoPago, activo: i.activo });
+    setForm({ nombre: i.nombre, direccion: i.direccion, valorCanonBase: i.valorCanonBase, diaVencimientoPago: i.diaVencimientoPago, activo: i.activo, arrendatarioId: i.arrendatarioId || "" });
     setShowForm(true);
   };
 
@@ -75,6 +79,13 @@ const InmueblesTab = ({ inmuebles, onAdd, onEdit, onDelete }) => {
               </div>
               <span style={S.chip(i.activo ? "#16a34a" : "#6b7280")}>{i.activo ? "Activo" : "Inactivo"}</span>
             </div>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${BLUE.border}` }}>
+              {i.arrendatarioId ? (
+                <span style={S.chip(BLUE.primary)}>Arrendado a {nombreArrendatario(i.arrendatarioId)}</span>
+              ) : (
+                <span style={S.chip("#6b7280")}>Vacante</span>
+              )}
+            </div>
           </div>
         ))}
         {inmuebles.length === 0 && (
@@ -112,6 +123,13 @@ const InmueblesTab = ({ inmuebles, onAdd, onEdit, onDelete }) => {
               <label style={S.label}>Día de pago *</label>
               <input style={S.input} type="number" min={1} max={31} value={form.diaVencimientoPago} onChange={(e) => set("diaVencimientoPago", e.target.value)} />
             </div>
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Arrendatario</label>
+            <select style={S.select} value={form.arrendatarioId} onChange={(e) => set("arrendatarioId", e.target.value)}>
+              <option value="">— Vacante —</option>
+              {arrendatarios.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={form.activo} onChange={(e) => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
@@ -238,20 +256,232 @@ const ArrendatariosTab = ({ arrendatarios, onAdd, onEdit, onDelete }) => {
   );
 };
 
+// ─── Pagos ────────────────────────────────────────────────────────────────
+const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [delItem, setDelItem] = useState(null);
+  const [form, setForm] = useState(PAGO_INIT);
+  const [saving, setSaving] = useState(false);
+  const [errForm, setErrForm] = useState("");
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const nombreInmueble = (id) => inmuebles.find((i) => i.id === id)?.nombre || "—";
+  const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
+
+  const abrirNuevo = () => { setForm(PAGO_INIT); setErrForm(""); setShowForm(true); };
+
+  // Al elegir el inmueble, precarga el arrendatario y el canon que tiene
+  // asignados hoy (se pueden editar igual si el pago fue distinto).
+  const seleccionarInmueble = (id) => {
+    const inm = inmuebles.find((i) => i.id === id);
+    setForm((f) => ({ ...f, inmuebleId: id, arrendatarioId: inm?.arrendatarioId || "", valor: inm?.valorCanonBase || "" }));
+  };
+
+  const handleSave = async () => {
+    if (!form.inmuebleId) { setErrForm("Elige el inmueble"); return; }
+    if (!form.arrendatarioId) { setErrForm("Elige el arrendatario"); return; }
+    if (!form.mesCorrespondiente) { setErrForm("Elige el mes"); return; }
+    if (!form.valor) { setErrForm("Escribe el valor"); return; }
+    setSaving(true);
+    setErrForm("");
+    const [y, m] = form.mesCorrespondiente.split("-").map(Number);
+    const periodoInicio = `${form.mesCorrespondiente}-01`;
+    const periodoFin = new Date(y, m, 0).toISOString().split("T")[0];
+    await onAdd({ ...form, periodoInicio, periodoFin });
+    setSaving(false);
+    setShowForm(false);
+  };
+
+  const generar = (pago) => {
+    generarComprobante({
+      pago,
+      inmueble: inmuebles.find((i) => i.id === pago.inmuebleId),
+      arrendatario: arrendatarios.find((a) => a.id === pago.arrendatarioId),
+      arrendador,
+    });
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Pagos</div>
+          <div style={S.pageSub}>{pagos.length} pagos registrados</div>
+        </div>
+        <button style={S.btn("primary")} onClick={abrirNuevo}>
+          <Icon name="plus" size={16} />Registrar pago
+        </button>
+      </div>
+
+      <div style={S.tableWrap}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr 130px" }}>
+          <div>Inmueble</div><div>Arrendatario</div><div>Mes</div><div>Valor</div><div>Medio</div><div></div>
+        </div>
+        {pagos.map((p) => (
+          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr 130px" }}>
+            <div style={{ fontWeight: 600, color: BLUE.text }}>{nombreInmueble(p.inmuebleId)}</div>
+            <div>{nombreArr(p.arrendatarioId)}</div>
+            <div style={{ textTransform: "capitalize" }}>{fmtMesLargo(p.periodoInicio)}</div>
+            <div>{fmt(p.valor)}</div>
+            <div>{METODOS_LABEL[p.metodo] || p.metodo}</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button style={S.btn("secondary")} onClick={() => generar(p)}>Generar</button>
+              <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(p)}><Icon name="trash" size={14} /></button>
+            </div>
+          </div>
+        ))}
+        {pagos.length === 0 && (
+          <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>No hay pagos registrados todavía.</div>
+        )}
+      </div>
+
+      {showForm && (
+        <Modal
+          title="Registrar pago"
+          onClose={() => setShowForm(false)}
+          footer={
+            <>
+              <button style={S.btn("secondary")} onClick={() => setShowForm(false)}>Cancelar</button>
+              <button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
+                {saving ? "Guardando…" : "Guardar"}
+              </button>
+            </>
+          }
+        >
+          <div style={S.formGroup}>
+            <label style={S.label}>Inmueble *</label>
+            <select style={S.select} value={form.inmuebleId} onChange={(e) => seleccionarInmueble(e.target.value)}>
+              <option value="">Selecciona…</option>
+              {inmuebles.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
+            </select>
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Arrendatario *</label>
+            <select style={S.select} value={form.arrendatarioId} onChange={(e) => set("arrendatarioId", e.target.value)}>
+              <option value="">Selecciona…</option>
+              {arrendatarios.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div style={S.formGroup}>
+              <label style={S.label}>Mes correspondiente *</label>
+              <input style={S.input} type="month" value={form.mesCorrespondiente} onChange={(e) => set("mesCorrespondiente", e.target.value)} />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Fecha de pago *</label>
+              <input style={S.input} type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div style={S.formGroup}>
+              <label style={S.label}>Valor *</label>
+              <input style={S.input} type="number" value={form.valor} onChange={(e) => set("valor", e.target.value)} placeholder="0" />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Medio de pago</label>
+              <select style={S.select} value={form.metodo} onChange={(e) => set("metodo", e.target.value)}>
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="pse">PSE</option>
+              </select>
+            </div>
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Estado</label>
+            <select style={S.select} value={form.estado} onChange={(e) => set("estado", e.target.value)}>
+              <option value="pagado">Pagado</option>
+              <option value="parcial">Pago parcial</option>
+              <option value="pendiente">Pendiente</option>
+            </select>
+          </div>
+          {errForm && <p style={{ color: "#dc2626", fontSize: 13 }}>{errForm}</p>}
+        </Modal>
+      )}
+
+      {delItem && (
+        <Modal
+          title="Eliminar pago"
+          onClose={() => setDelItem(null)}
+          footer={
+            <>
+              <button style={S.btn("secondary")} onClick={() => setDelItem(null)}>Cancelar</button>
+              <button style={S.btn("danger")} onClick={async () => { await onDelete(delItem.id); setDelItem(null); }}>Eliminar</button>
+            </>
+          }
+        >
+          <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar este pago de {nombreInmueble(delItem.inmuebleId)}?</p>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ─── Arrendador ───────────────────────────────────────────────────────────
+const ArrendadorTab = ({ arrendador, onSave }) => {
+  const [form, setForm] = useState(arrendador || ARRENDADOR_INIT);
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.nombre.trim()) return;
+    setSaving(true);
+    await onSave(form);
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Datos del arrendador</div>
+          <div style={S.pageSub}>Aparecen en cada comprobante de pago que generes</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 460, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
+        <div style={S.formGroup}>
+          <label style={S.label}>Nombre *</label>
+          <input style={S.input} value={form.nombre} onChange={(e) => set("nombre", e.target.value)} placeholder="Nombre completo" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Documento</label>
+          <input style={S.input} value={form.documento} onChange={(e) => set("documento", e.target.value)} placeholder="Cédula / NIT" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Teléfono</label>
+          <input style={S.input} value={form.telefono} onChange={(e) => set("telefono", e.target.value)} placeholder="Ej. 3001234567" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Dirección</label>
+          <input style={S.input} value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Dirección de contacto" />
+        </div>
+        <button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
+          {saving ? "Guardando…" : "Guardar"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ─── Página raíz del módulo ───────────────────────────────────────────────
 const ArriendosPage = () => {
   const [tab, setTab] = useState("inmuebles");
   const [inmuebles, setInmuebles] = useState([]);
   const [arrendatarios, setArrendatarios] = useState([]);
+  const [pagos, setPagos] = useState([]);
+  const [arrendador, setArrendador] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       supabase.from("inmuebles").select("*").order("nombre"),
       supabase.from("arrendatarios").select("*").order("nombre"),
-    ]).then(([{ data: inm }, { data: arr }]) => {
+      supabase.from("pagos").select("*").order("periodo_inicio", { ascending: false }),
+      supabase.from("arrendador_config").select("*").limit(1).maybeSingle(),
+    ]).then(([{ data: inm }, { data: arr }, { data: pgs }, { data: arrd }]) => {
       if (inm) setInmuebles(inm.map(mapInmueble));
       if (arr) setArrendatarios(arr.map(mapArrendatario));
+      if (pgs) setPagos(pgs.map(mapPago));
+      if (arrd) setArrendador(mapArrendador(arrd));
       setLoading(false);
     });
 
@@ -265,6 +495,15 @@ const ArriendosPage = () => {
         if (payload.eventType === "INSERT") setArrendatarios((p) => p.some((x) => x.id === payload.new.id) ? p : [...p, mapArrendatario(payload.new)].sort((a, b) => a.nombre.localeCompare(b.nombre)));
         if (payload.eventType === "UPDATE") setArrendatarios((p) => p.map((x) => x.id === payload.new.id ? mapArrendatario(payload.new) : x));
         if (payload.eventType === "DELETE") setArrendatarios((p) => p.filter((x) => x.id !== payload.old.id));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "pagos" }, (payload) => {
+        if (payload.eventType === "INSERT") setPagos((p) => p.some((x) => x.id === payload.new.id) ? p : [mapPago(payload.new), ...p]);
+        if (payload.eventType === "UPDATE") setPagos((p) => p.map((x) => x.id === payload.new.id ? mapPago(payload.new) : x));
+        if (payload.eventType === "DELETE") setPagos((p) => p.filter((x) => x.id !== payload.old.id));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "arrendador_config" }, (payload) => {
+        if (payload.eventType === "DELETE") setArrendador(null);
+        else setArrendador(mapArrendador(payload.new));
       })
       .subscribe();
 
@@ -303,6 +542,29 @@ const ArriendosPage = () => {
     setArrendatarios((p) => p.filter((x) => x.id !== id));
   };
 
+  const addPago = async (f) => {
+    const { data, error } = await supabase.from("pagos").insert([toPagoRow(f)]).select().single();
+    if (error) { console.error("addPago error:", error); return; }
+    if (data) setPagos((p) => [mapPago(data), ...p]);
+  };
+  const deletePago = async (id) => {
+    const { error } = await supabase.from("pagos").delete().eq("id", id);
+    if (error) { console.error("deletePago error:", error); return; }
+    setPagos((p) => p.filter((x) => x.id !== id));
+  };
+
+  const saveArrendador = async (f) => {
+    if (arrendador?.id) {
+      const { error } = await supabase.from("arrendador_config").update(toArrendadorRow(f)).eq("id", arrendador.id);
+      if (error) { console.error("saveArrendador error:", error); return; }
+      setArrendador({ ...arrendador, ...f });
+    } else {
+      const { data, error } = await supabase.from("arrendador_config").insert([toArrendadorRow(f)]).select().single();
+      if (error) { console.error("saveArrendador error:", error); return; }
+      if (data) setArrendador(mapArrendador(data));
+    }
+  };
+
   if (loading) return <div style={{ padding: 40, color: "#6b87b0", fontSize: 13 }}>Cargando…</div>;
 
   return (
@@ -324,8 +586,10 @@ const ArriendosPage = () => {
         ))}
       </div>
 
-      {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
+      {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
       {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} />}
+      {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onDelete={deletePago} />}
+      {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}
     </div>
   );
 };
