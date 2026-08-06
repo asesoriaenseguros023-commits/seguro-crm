@@ -26,17 +26,21 @@ const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: ""
 function calcularEstadoPago(inmueble, pagos) {
   if (!inmueble.arrendatarioId) return null;
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const anio = hoy.getFullYear(), mes = hoy.getMonth();
-  const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
-  const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
-  const fechaVence = new Date(anio, mes, diaVence);
 
-  const alDia = pagos.some((p) => {
-    if (p.inmuebleId !== inmueble.id || !p.periodoInicio || !p.periodoFin) return false;
-    const ini = new Date(p.periodoInicio + "T00:00:00"), fin = new Date(p.periodoFin + "T00:00:00");
-    return ini <= fechaVence && fin >= fechaVence;
-  });
-  if (alDia) return null;
+  const pagosInmueble = pagos.filter((p) => p.inmuebleId === inmueble.id && p.periodoFin);
+  let fechaVence;
+  if (pagosInmueble.length > 0) {
+    // Ya pagó alguna vez: lo próximo que vence es el día en que se acaba la
+    // cobertura del pago más reciente (no un día fijo del calendario).
+    const ultimoPeriodoFin = pagosInmueble.reduce((max, p) => (p.periodoFin > max ? p.periodoFin : max), pagosInmueble[0].periodoFin);
+    fechaVence = new Date(ultimoPeriodoFin + "T00:00:00");
+  } else {
+    // Nunca ha pagado: usa el día de pago del inmueble sobre el mes en curso.
+    const anio = hoy.getFullYear(), mes = hoy.getMonth();
+    const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+    const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
+    fechaVence = new Date(anio, mes, diaVence);
+  }
 
   const diasDiff = Math.round((fechaVence - hoy) / 86400000);
   if (diasDiff < 0) return { tipo: "mora", dias: -diasDiff, fechaVence };
