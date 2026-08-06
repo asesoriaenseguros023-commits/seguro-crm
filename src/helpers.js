@@ -138,6 +138,31 @@ export const toSoatRow = (c) => ({
   whatsapp: c.whatsapp || false,
 });
 
+// ─── Arriendos helpers ─────────────────────────────────────────────────────
+export const mapInmueble = (r) => ({
+  id: r.id,
+  nombre: r.nombre || "",
+  direccion: r.direccion || "",
+  valorCanonBase: r.valor_canon_base || 0,
+  diaVencimientoPago: r.dia_vencimiento_pago || 1,
+  activo: r.activo !== false,
+});
+
+export const toInmuebleRow = (f) => ({
+  nombre: f.nombre,
+  direccion: f.direccion,
+  valor_canon_base: f.valorCanonBase || 0,
+  dia_vencimiento_pago: f.diaVencimientoPago,
+  activo: f.activo !== false,
+});
+
+export const mapArrendatario = (r) => ({
+  id: r.id,
+  nombre: r.nombre || "",
+  telefono: r.telefono || "",
+  documento: r.documento || "",
+});
+
 // Color helpers for cotizaciones
 export const accionColor = (a) =>
   ({ "En Curso": "#f59e0b", "Cliente Rechaza": "#dc2626", "Póliza Emitida": "#16a34a" }[a] || "#6b7280");

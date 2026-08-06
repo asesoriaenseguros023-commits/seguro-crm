@@ -18,6 +18,7 @@ import RamosPage from "./pages/Ramos.jsx";
 import AseguradorasPage from "./pages/Aseguradoras.jsx";
 import ConfiguracionPage from "./pages/Configuracion.jsx";
 import ComercialPage from "./pages/Comerciales.jsx";
+import ArriendosPage from "./pages/Arriendos.jsx";
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
 const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile, onClose }) => {
@@ -74,6 +75,10 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
                   <Icon name={i.icon} size={16} />{i.label}
                 </div>
               ))}
+              <div style={S.sbSection}>Personal</div>
+              <div style={S.sbItem(current === "arriendos")} onClick={() => handleNav("arriendos")}>
+                <Icon name="home" size={16} />Arriendos
+              </div>
             </>
           )}
         </div>
@@ -106,7 +111,7 @@ const Topbar = ({ page, userRol, isMobile, onToggleSidebar }) => {
     dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads",
     cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones",
     soat: "Seguimiento SOAT", comerciales: "Comerciales", ramos: "Ramos de Seguros",
-    aseguradoras: "Aseguradoras", reportes: "Reportes",
+    aseguradoras: "Aseguradoras", reportes: "Reportes", arriendos: "Arriendos",
   };
   const [ahora, setAhora] = useState(new Date());
   useEffect(() => {
@@ -533,7 +538,7 @@ export default function App() {
   if (loading) return <><FontLoader /><LoadingScreen /></>;
 
   const handleNav = (p) => {
-    if (p === "ramos" && !esAdmin(userRol)) return;
+    if ((p === "ramos" || p === "arriendos") && !esAdmin(userRol)) return;
     setPage(p);
   };
 
@@ -589,6 +594,8 @@ export default function App() {
         return esAdmin(userRol) ? <RamosPage ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo} /> : null;
       case "aseguradoras":
         return esAdmin(userRol) ? <AseguradorasPage aseguradoras={aseguradoras} onAdd={addAseguradora} onEdit={editAseguradora} onDelete={deleteAseguradora} /> : null;
+      case "arriendos":
+        return esAdmin(userRol) ? <ArriendosPage /> : null;
       case "configuracion":
         return <ConfiguracionPage agentes={agentes} polizas={polizas} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} />;
       default:
