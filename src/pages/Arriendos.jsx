@@ -111,11 +111,11 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-        {inmuebles.map((i) => (
+        {inmuebles.map((i, idx) => (
           <div key={i.id} style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text }}>{i.nombre}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{i.nombre}</div>
                 {i.direccion && <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 2 }}>{i.direccion}</div>}
               </div>
               <div style={{ display: "flex", gap: 4 }}>
@@ -252,10 +252,10 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
 
       {isMobile ? (
         <div>
-          {arrendatarios.map((a) => (
+          {arrendatarios.map((a, idx) => (
             <div key={a.id} style={cardS}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{a.nombre}</div>
+                <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{a.nombre}</div>
                 <button
                   onClick={() => onToggleActivo(a)}
                   style={{ ...S.chip(a.activo ? "#16a34a" : "#9ca3af"), border: "none", cursor: "pointer", fontWeight: 700, flexShrink: 0 }}
@@ -283,11 +283,12 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
         </div>
       ) : (
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
-          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
+          <div>#</div><div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
         </div>
-        {arrendatarios.map((a) => (
-          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
+        {arrendatarios.map((a, idx) => (
+          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
+            <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{a.nombre}</div>
             <div style={{ color: a.telefono ? "inherit" : "#ccc" }}>{a.telefono || "—"}</div>
             <div style={{ color: a.documento ? "inherit" : "#ccc" }}>{a.documento || "—"}</div>
@@ -449,14 +450,18 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
 
       {isMobile ? (
         <div>
-          {pagos.map((p) => (
+          {pagos.map((p, idx) => (
             <div key={p.id} style={cardS}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{nombreInmueble(p.inmuebleId)}</div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{nombreInmueble(p.inmuebleId)}</div>
                   <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(p.arrendatarioId)}</div>
                 </div>
                 <div style={{ fontWeight: 700, color: BLUE.primary, fontSize: 15 }}>{fmt(p.valor)}</div>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Fecha de pago</span>
+                <span style={{ fontSize: 12.5 }}>{fmtDate(p.fechaPago)}</span>
               </div>
               <div style={cardRowS}>
                 <span style={cardLabelS}>Período</span>
@@ -478,14 +483,16 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
           )}
         </div>
       ) : (
-      <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 170px" }}>
-          <div>Inmueble</div><div>Arrendatario</div><div>Período</div><div>Valor</div><div>Medio</div><div></div>
+      <div style={{ ...S.tableWrap, overflowX: "auto" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 1.2fr 0.9fr 0.9fr 170px", minWidth: 900 }}>
+          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Fecha de pago</div><div>Período</div><div>Valor</div><div>Medio</div><div></div>
         </div>
-        {pagos.map((p) => (
-          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 170px" }}>
+        {pagos.map((p, idx) => (
+          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 1.2fr 0.9fr 0.9fr 170px", minWidth: 900 }}>
+            <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{nombreInmueble(p.inmuebleId)}</div>
             <div>{nombreArr(p.arrendatarioId)}</div>
+            <div style={{ fontSize: 12.5 }}>{fmtDate(p.fechaPago)}</div>
             <div style={{ fontSize: 12.5 }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</div>
             <div>{fmt(p.valor)}</div>
             <div>{METODOS_LABEL[p.metodo] || p.metodo}</div>
@@ -668,11 +675,11 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
       <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 10 }}>En mora ({enMora.length})</div>
       {isMobile ? (
         <div style={{ marginBottom: 24 }}>
-          {enMora.map(({ inmueble, estado }) => (
+          {enMora.map(({ inmueble, estado }, idx) => (
             <div key={inmueble.id} style={{ ...cardS, borderLeft: "3px solid #dc2626" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{inmueble.nombre}</div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{inmueble.nombre}</div>
                   <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
                 </div>
                 <span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span>
@@ -691,11 +698,12 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
         </div>
       ) : (
       <div style={{ ...S.tableWrap, marginBottom: 24 }}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr" }}>
-          <div>Inmueble</div><div>Arrendatario</div><div>Canon mensual</div><div>Mora total</div><div>Días en mora</div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr 1fr" }}>
+          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Canon mensual</div><div>Mora total</div><div>Días en mora</div>
         </div>
-        {enMora.map(({ inmueble, estado }) => (
-          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr" }}>
+        {enMora.map(({ inmueble, estado }, idx) => (
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr 1fr" }}>
+            <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
             <div>{nombreArr(inmueble.arrendatarioId)}</div>
             <div style={{ color: "#888" }}>{fmt(inmueble.valorCanonBase)}</div>
@@ -713,11 +721,11 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
       <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", marginBottom: 10 }}>Próximos vencimientos — 5 días o menos ({proximos.length})</div>
       {isMobile ? (
         <div>
-          {proximos.map(({ inmueble, estado }) => (
+          {proximos.map(({ inmueble, estado }, idx) => (
             <div key={inmueble.id} style={{ ...cardS, borderLeft: "3px solid #f59e0b" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{inmueble.nombre}</div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{inmueble.nombre}</div>
                   <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
                 </div>
                 <span style={S.chip("#f59e0b")}>{estado.dias === 0 ? "Hoy" : `${estado.dias} día${estado.dias === 1 ? "" : "s"}`}</span>
@@ -732,11 +740,12 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
         </div>
       ) : (
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
-          <div>Inmueble</div><div>Arrendatario</div><div>Valor</div><div>Vence en</div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr" }}>
+          <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Valor</div><div>Vence en</div>
         </div>
-        {proximos.map(({ inmueble, estado }) => (
-          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
+        {proximos.map(({ inmueble, estado }, idx) => (
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.2fr 1fr 1fr 1fr" }}>
+            <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
             <div>{nombreArr(inmueble.arrendatarioId)}</div>
             <div>{fmt(inmueble.valorCanonBase)}</div>
