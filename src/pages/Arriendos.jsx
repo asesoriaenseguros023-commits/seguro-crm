@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
-import { fmt, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow } from "../helpers.js";
-import { generarComprobante, fmtMesLargo, METODOS_LABEL } from "../pdfComprobante.js";
+import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow } from "../helpers.js";
+import { generarComprobante, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -10,14 +10,39 @@ const TABS = [
   { id: "inmuebles", label: "Inmuebles" },
   { id: "arrendatarios", label: "Arrendatarios" },
   { id: "pagos", label: "Pagos" },
+  { id: "alertas", label: "Alertas" },
   { id: "arrendador", label: "Arrendador" },
   { id: "movimientos", label: "Movimientos", proximamente: true },
 ];
 
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "" };
-const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "" };
-const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), mesCorrespondiente: "", valor: "", metodo: "efectivo", estado: "pagado" };
+const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "" };
+const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", metodo: "efectivo", estado: "pagado" };
 const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "" };
+
+// Un inmueble está "al día" del mes en curso si existe un pago cuyo período
+// cubre el día de vencimiento de este mes. Si no, según cuánto falte/pasó
+// esa fecha, el inmueble está "en mora" o "próximo a vencer".
+function calcularEstadoPago(inmueble, pagos) {
+  if (!inmueble.arrendatarioId) return null;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const anio = hoy.getFullYear(), mes = hoy.getMonth();
+  const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+  const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
+  const fechaVence = new Date(anio, mes, diaVence);
+
+  const alDia = pagos.some((p) => {
+    if (p.inmuebleId !== inmueble.id || !p.periodoInicio || !p.periodoFin) return false;
+    const ini = new Date(p.periodoInicio + "T00:00:00"), fin = new Date(p.periodoFin + "T00:00:00");
+    return ini <= fechaVence && fin >= fechaVence;
+  });
+  if (alDia) return null;
+
+  const diasDiff = Math.round((fechaVence - hoy) / 86400000);
+  if (diasDiff < 0) return { tipo: "mora", dias: -diasDiff, fechaVence };
+  if (diasDiff <= 5) return { tipo: "proximo", dias: diasDiff, fechaVence };
+  return null;
+}
 
 // ─── Inmuebles ────────────────────────────────────────────────────────────
 const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => {
@@ -157,22 +182,30 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
 };
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
-const ArrendatariosTab = ({ arrendatarios, onAdd, onEdit, onDelete }) => {
+const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, onAsignarInmueble }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState(ARRENDATARIO_INIT);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const inmuebleDe = (arrendatarioId) => inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
 
   const abrirNuevo = () => { setEditItem(null); setForm(ARRENDATARIO_INIT); setShowForm(true); };
-  const abrirEditar = (a) => { setEditItem(a); setForm({ nombre: a.nombre, telefono: a.telefono, documento: a.documento }); setShowForm(true); };
+  const abrirEditar = (a) => {
+    setEditItem(a);
+    setForm({ nombre: a.nombre, telefono: a.telefono, documento: a.documento, inmuebleId: inmuebleDe(a.id)?.id || "" });
+    setShowForm(true);
+  };
 
   const handleSave = async () => {
     if (!form.nombre.trim()) return;
     setSaving(true);
-    if (editItem) await onEdit({ id: editItem.id, ...form });
-    else await onAdd(form);
+    const { inmuebleId, ...datos } = form;
+    let id = editItem?.id;
+    if (editItem) await onEdit({ id: editItem.id, ...datos });
+    else id = await onAdd(datos);
+    if (id) await onAsignarInmueble(id, inmuebleId);
     setSaving(false);
     setShowForm(false);
     setEditItem(null);
@@ -191,14 +224,17 @@ const ArrendatariosTab = ({ arrendatarios, onAdd, onEdit, onDelete }) => {
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.5fr 1fr 1fr 90px" }}>
-          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div></div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.3fr 1fr 1fr 1.2fr 90px" }}>
+          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
         </div>
         {arrendatarios.map((a) => (
-          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.5fr 1fr 1fr 90px" }}>
+          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.3fr 1fr 1fr 1.2fr 90px" }}>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{a.nombre}</div>
             <div>{a.telefono || "—"}</div>
             <div>{a.documento || "—"}</div>
+            <div>
+              {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ color: "#aaa" }}>Sin inmueble</span>}
+            </div>
             <div style={{ display: "flex", gap: 4 }}>
               <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
@@ -234,6 +270,13 @@ const ArrendatariosTab = ({ arrendatarios, onAdd, onEdit, onDelete }) => {
           <div style={S.formGroup}>
             <label style={S.label}>Documento</label>
             <input style={S.input} value={form.documento} onChange={(e) => set("documento", e.target.value)} placeholder="Cédula / NIT" />
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Inmueble que arrienda</label>
+            <select style={S.select} value={form.inmuebleId} onChange={(e) => set("inmuebleId", e.target.value)}>
+              <option value="">— Ninguno —</option>
+              {inmuebles.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
+            </select>
           </div>
         </Modal>
       )}
@@ -280,14 +323,12 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
   const handleSave = async () => {
     if (!form.inmuebleId) { setErrForm("Elige el inmueble"); return; }
     if (!form.arrendatarioId) { setErrForm("Elige el arrendatario"); return; }
-    if (!form.mesCorrespondiente) { setErrForm("Elige el mes"); return; }
+    if (!form.periodoInicio || !form.periodoFin) { setErrForm("Elige la fecha de inicio y fin del período"); return; }
+    if (form.periodoFin < form.periodoInicio) { setErrForm("La fecha fin no puede ser antes que la fecha inicio"); return; }
     if (!form.valor) { setErrForm("Escribe el valor"); return; }
     setSaving(true);
     setErrForm("");
-    const [y, m] = form.mesCorrespondiente.split("-").map(Number);
-    const periodoInicio = `${form.mesCorrespondiente}-01`;
-    const periodoFin = new Date(y, m, 0).toISOString().split("T")[0];
-    await onAdd({ ...form, periodoInicio, periodoFin });
+    await onAdd(form);
     setSaving(false);
     setShowForm(false);
   };
@@ -314,14 +355,14 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr 130px" }}>
-          <div>Inmueble</div><div>Arrendatario</div><div>Mes</div><div>Valor</div><div>Medio</div><div></div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 130px" }}>
+          <div>Inmueble</div><div>Arrendatario</div><div>Período</div><div>Valor</div><div>Medio</div><div></div>
         </div>
         {pagos.map((p) => (
-          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr 130px" }}>
+          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 130px" }}>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{nombreInmueble(p.inmuebleId)}</div>
             <div>{nombreArr(p.arrendatarioId)}</div>
-            <div style={{ textTransform: "capitalize" }}>{fmtMesLargo(p.periodoInicio)}</div>
+            <div style={{ fontSize: 12.5 }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</div>
             <div>{fmt(p.valor)}</div>
             <div>{METODOS_LABEL[p.metodo] || p.metodo}</div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -364,13 +405,17 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <div style={S.formGroup}>
-              <label style={S.label}>Mes correspondiente *</label>
-              <input style={S.input} type="month" value={form.mesCorrespondiente} onChange={(e) => set("mesCorrespondiente", e.target.value)} />
+              <label style={S.label}>Período — inicio *</label>
+              <input style={S.input} type="date" value={form.periodoInicio} onChange={(e) => set("periodoInicio", e.target.value)} />
             </div>
             <div style={S.formGroup}>
-              <label style={S.label}>Fecha de pago *</label>
-              <input style={S.input} type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
+              <label style={S.label}>Período — fin *</label>
+              <input style={S.input} type="date" value={form.periodoFin} onChange={(e) => set("periodoFin", e.target.value)} />
             </div>
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Fecha de pago *</label>
+            <input style={S.input} type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <div style={S.formGroup}>
@@ -462,6 +507,61 @@ const ArrendadorTab = ({ arrendador, onSave }) => {
   );
 };
 
+// ─── Alertas ──────────────────────────────────────────────────────────────
+const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
+  const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
+
+  const calculadas = inmuebles
+    .map((i) => ({ inmueble: i, estado: calcularEstadoPago(i, pagos) }))
+    .filter((x) => x.estado);
+
+  const enMora = calculadas.filter((x) => x.estado.tipo === "mora").sort((a, b) => b.estado.dias - a.estado.dias);
+  const proximos = calculadas.filter((x) => x.estado.tipo === "proximo").sort((a, b) => a.estado.dias - b.estado.dias);
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Alertas</div>
+          <div style={S.pageSub}>En mora y próximos vencimientos, calculado contra el día de pago de cada inmueble</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 10 }}>En mora ({enMora.length})</div>
+      <div style={{ ...S.tableWrap, marginBottom: 24 }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
+          <div>Inmueble</div><div>Arrendatario</div><div>Valor adeudado</div><div>Días en mora</div>
+        </div>
+        {enMora.map(({ inmueble, estado }) => (
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
+            <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
+            <div>{nombreArr(inmueble.arrendatarioId)}</div>
+            <div>{fmt(inmueble.valorCanonBase)}</div>
+            <div><span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span></div>
+          </div>
+        ))}
+        {enMora.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nadie en mora ahora mismo.</div>}
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", marginBottom: 10 }}>Próximos vencimientos — 5 días o menos ({proximos.length})</div>
+      <div style={S.tableWrap}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
+          <div>Inmueble</div><div>Arrendatario</div><div>Valor</div><div>Vence en</div>
+        </div>
+        {proximos.map(({ inmueble, estado }) => (
+          <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
+            <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
+            <div>{nombreArr(inmueble.arrendatarioId)}</div>
+            <div>{fmt(inmueble.valorCanonBase)}</div>
+            <div><span style={S.chip("#f59e0b")}>{estado.dias === 0 ? "Hoy" : `${estado.dias} día${estado.dias === 1 ? "" : "s"}`}</span></div>
+          </div>
+        ))}
+        {proximos.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nada por vencer en los próximos 5 días.</div>}
+      </div>
+    </div>
+  );
+};
+
 // ─── Página raíz del módulo ───────────────────────────────────────────────
 const ArriendosPage = () => {
   const [tab, setTab] = useState("inmuebles");
@@ -528,8 +628,26 @@ const ArriendosPage = () => {
 
   const addArrendatario = async (f) => {
     const { data, error } = await supabase.from("arrendatarios").insert([f]).select().single();
-    if (error) { console.error("addArrendatario error:", error); return; }
+    if (error) { console.error("addArrendatario error:", error); return null; }
     if (data) setArrendatarios((p) => [...p, mapArrendatario(data)].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    return data?.id || null;
+  };
+
+  // Liga/libera el inmueble de un arrendatario. Solo toca la columna
+  // arrendatario_id (no usa toInmuebleRow) para no arriesgar pisar el resto
+  // de campos del inmueble con un objeto a medias.
+  const setInmuebleArrendatario = async (inmuebleId, arrendatarioId) => {
+    const { error } = await supabase.from("inmuebles").update({ arrendatario_id: arrendatarioId || null }).eq("id", inmuebleId);
+    if (error) { console.error("setInmuebleArrendatario error:", error); return; }
+    setInmuebles((p) => p.map((x) => x.id === inmuebleId ? { ...x, arrendatarioId: arrendatarioId || "" } : x));
+  };
+
+  const asignarInmuebleAArrendatario = async (arrendatarioId, nuevoInmuebleId) => {
+    const inmuebleAnterior = inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
+    if (inmuebleAnterior && inmuebleAnterior.id !== nuevoInmuebleId) {
+      await setInmuebleArrendatario(inmuebleAnterior.id, "");
+    }
+    if (nuevoInmuebleId) await setInmuebleArrendatario(nuevoInmuebleId, arrendatarioId);
   };
   const editArrendatario = async (f) => {
     const { error } = await supabase.from("arrendatarios").update({ nombre: f.nombre, telefono: f.telefono, documento: f.documento }).eq("id", f.id);
@@ -587,8 +705,9 @@ const ArriendosPage = () => {
       </div>
 
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
-      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} />}
+      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} />}
       {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onDelete={deletePago} />}
+      {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}
     </div>
   );

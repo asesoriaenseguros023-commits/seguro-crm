@@ -1,13 +1,5 @@
 import jsPDF from "jspdf";
 
-const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-
-export const fmtMesLargo = (periodoInicio) => {
-  if (!periodoInicio) return "—";
-  const [y, m] = periodoInicio.split("-");
-  return `${MESES[parseInt(m, 10) - 1]} ${y}`;
-};
-
 const fmtMoney = (n) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n || 0);
 
 const fmtFecha = (s) => {
@@ -64,7 +56,7 @@ export function generarComprobante({ pago, inmueble, arrendatario, arrendador })
   const boxY = y;
   const filas = [
     ["Valor", fmtMoney(pago.valor)],
-    ["Mes de", fmtMesLargo(pago.periodoInicio)],
+    ["Período", `${fmtFecha(pago.periodoInicio)} - ${fmtFecha(pago.periodoFin)}`],
     ["Medio de pago", METODOS_LABEL[pago.metodo] || pago.metodo],
     ["Fecha de pago", fmtFecha(pago.fechaPago)],
     ["Estado", ESTADOS_PAGO_LABEL[pago.estado] || pago.estado],
