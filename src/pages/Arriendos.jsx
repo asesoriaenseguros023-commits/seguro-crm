@@ -304,8 +304,9 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
 };
 
 // ─── Pagos ────────────────────────────────────────────────────────────────
-const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete }) => {
+const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState(PAGO_INIT);
   const [saving, setSaving] = useState(false);
@@ -315,7 +316,16 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
   const nombreInmueble = (id) => inmuebles.find((i) => i.id === id)?.nombre || "—";
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
 
-  const abrirNuevo = () => { setForm(PAGO_INIT); setErrForm(""); setShowForm(true); };
+  const abrirNuevo = () => { setEditItem(null); setForm(PAGO_INIT); setErrForm(""); setShowForm(true); };
+  const abrirEditar = (p) => {
+    setEditItem(p);
+    setForm({
+      inmuebleId: p.inmuebleId, arrendatarioId: p.arrendatarioId, fechaPago: p.fechaPago,
+      periodoInicio: p.periodoInicio, periodoFin: p.periodoFin, valor: p.valor, metodo: p.metodo, estado: p.estado,
+    });
+    setErrForm("");
+    setShowForm(true);
+  };
 
   // Al elegir el arrendatario, busca el inmueble que tiene asignado hoy y
   // precarga su canon, y sugiere el período del mes en curso según su día
@@ -345,9 +355,11 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
     if (!form.valor) { setErrForm("Escribe el valor"); return; }
     setSaving(true);
     setErrForm("");
-    await onAdd(form);
+    if (editItem) await onEdit({ id: editItem.id, ...form });
+    else await onAdd(form);
     setSaving(false);
     setShowForm(false);
+    setEditItem(null);
   };
 
   const generar = (pago) => {
@@ -372,11 +384,11 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 130px" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 170px" }}>
           <div>Inmueble</div><div>Arrendatario</div><div>Período</div><div>Valor</div><div>Medio</div><div></div>
         </div>
         {pagos.map((p) => (
-          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 130px" }}>
+          <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 170px" }}>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{nombreInmueble(p.inmuebleId)}</div>
             <div>{nombreArr(p.arrendatarioId)}</div>
             <div style={{ fontSize: 12.5 }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</div>
@@ -384,6 +396,7 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
             <div>{METODOS_LABEL[p.metodo] || p.metodo}</div>
             <div style={{ display: "flex", gap: 4 }}>
               <button style={S.btn("secondary")} onClick={() => generar(p)}>Generar</button>
+              <button style={S.btn("ghost")} onClick={() => abrirEditar(p)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(p)}><Icon name="trash" size={14} /></button>
             </div>
           </div>
@@ -395,11 +408,11 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
 
       {showForm && (
         <Modal
-          title="Registrar pago"
-          onClose={() => setShowForm(false)}
+          title={editItem ? "Editar pago" : "Registrar pago"}
+          onClose={() => { setShowForm(false); setEditItem(null); }}
           footer={
             <>
-              <button style={S.btn("secondary")} onClick={() => setShowForm(false)}>Cancelar</button>
+              <button style={S.btn("secondary")} onClick={() => { setShowForm(false); setEditItem(null); }}>Cancelar</button>
               <button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
                 {saving ? "Guardando…" : "Guardar"}
               </button>
@@ -698,6 +711,11 @@ const ArriendosPage = () => {
     if (error) { console.error("addPago error:", error); return; }
     if (data) setPagos((p) => [mapPago(data), ...p]);
   };
+  const editPago = async (f) => {
+    const { error } = await supabase.from("pagos").update(toPagoRow(f)).eq("id", f.id);
+    if (error) { console.error("editPago error:", error); return; }
+    setPagos((p) => p.map((x) => x.id === f.id ? { ...x, ...f } : x));
+  };
   const deletePago = async (id) => {
     const { error } = await supabase.from("pagos").delete().eq("id", id);
     if (error) { console.error("deletePago error:", error); return; }
@@ -739,7 +757,7 @@ const ArriendosPage = () => {
 
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
       {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} />}
-      {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onDelete={deletePago} />}
+      {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onEdit={editPago} onDelete={deletePago} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}
     </div>
