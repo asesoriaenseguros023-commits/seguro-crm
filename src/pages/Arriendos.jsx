@@ -20,6 +20,23 @@ const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId:
 const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", metodo: "efectivo", estado: "pagado" };
 const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "" };
 
+// Las tablas de columnas fijas (grid) se aplastan en pantallas angostas —
+// mismo umbral que usa App.jsx para su propio layout mobile. Por debajo,
+// cada tab con tabla cambia a una lista de tarjetas apiladas.
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
+const cardS = { background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)" };
+const cardRowS = { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 };
+const cardLabelS = { fontSize: 11, color: "#9aa8c7" };
+
 // Un inmueble está "al día" del mes en curso si existe un pago cuyo período
 // cubre el día de vencimiento de este mes. Si no, según cuánto falte/pasó
 // esa fecha, el inmueble está "en mora" o "próximo a vencer".
@@ -192,6 +209,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
 const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo }) => {
+  const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
@@ -232,6 +250,38 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
         </button>
       </div>
 
+      {isMobile ? (
+        <div>
+          {arrendatarios.map((a) => (
+            <div key={a.id} style={cardS}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{a.nombre}</div>
+                <button
+                  onClick={() => onToggleActivo(a)}
+                  style={{ ...S.chip(a.activo ? "#16a34a" : "#9ca3af"), border: "none", cursor: "pointer", fontWeight: 700, flexShrink: 0 }}
+                >
+                  {a.activo ? "Activo" : "Inactivo"}
+                </button>
+              </div>
+              {(a.telefono || a.documento) && (
+                <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 4 }}>
+                  {[a.telefono, a.documento].filter(Boolean).join(" · ")}
+                </div>
+              )}
+              <div style={{ marginTop: 8 }}>
+                {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ fontSize: 12.5, color: "#ccc" }}>Sin inmueble</span>}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BLUE.border}` }}>
+                <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} />Editar</button>
+                <button style={{ ...S.btn("danger"), flex: 1 }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} />Eliminar</button>
+              </div>
+            </div>
+          ))}
+          {arrendatarios.length === 0 && (
+            <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay arrendatarios. Agrega el primero.</div>
+          )}
+        </div>
+      ) : (
       <div style={S.tableWrap}>
         <div style={{ ...S.tableHead, gridTemplateColumns: "1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
           <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
@@ -261,6 +311,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
           <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>No hay arrendatarios. Agrega el primero.</div>
         )}
       </div>
+      )}
 
       {showForm && (
         <Modal
@@ -317,6 +368,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
 
 // ─── Pagos ────────────────────────────────────────────────────────────────
 const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, onDelete }) => {
+  const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
@@ -395,6 +447,37 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
         </button>
       </div>
 
+      {isMobile ? (
+        <div>
+          {pagos.map((p) => (
+            <div key={p.id} style={cardS}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{nombreInmueble(p.inmuebleId)}</div>
+                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(p.arrendatarioId)}</div>
+                </div>
+                <div style={{ fontWeight: 700, color: BLUE.primary, fontSize: 15 }}>{fmt(p.valor)}</div>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Período</span>
+                <span style={{ fontSize: 12.5 }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Medio de pago</span>
+                <span style={{ fontSize: 12.5 }}>{METODOS_LABEL[p.metodo] || p.metodo}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BLUE.border}` }}>
+                <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => generar(p)}>Generar</button>
+                <button style={S.btn("ghost")} onClick={() => abrirEditar(p)}><Icon name="edit" size={14} /></button>
+                <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(p)}><Icon name="trash" size={14} /></button>
+              </div>
+            </div>
+          ))}
+          {pagos.length === 0 && (
+            <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay pagos registrados todavía.</div>
+          )}
+        </div>
+      ) : (
       <div style={S.tableWrap}>
         <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1.3fr 1fr 1fr 170px" }}>
           <div>Inmueble</div><div>Arrendatario</div><div>Período</div><div>Valor</div><div>Medio</div><div></div>
@@ -417,6 +500,7 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
           <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>No hay pagos registrados todavía.</div>
         )}
       </div>
+      )}
 
       {showForm && (
         <Modal
@@ -562,6 +646,7 @@ const ArrendadorTab = ({ arrendador, onSave }) => {
 
 // ─── Alertas ──────────────────────────────────────────────────────────────
 const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
+  const isMobile = useIsMobile();
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
 
   const calculadas = inmuebles
@@ -581,6 +666,30 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 10 }}>En mora ({enMora.length})</div>
+      {isMobile ? (
+        <div style={{ marginBottom: 24 }}>
+          {enMora.map(({ inmueble, estado }) => (
+            <div key={inmueble.id} style={{ ...cardS, borderLeft: "3px solid #dc2626" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{inmueble.nombre}</div>
+                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
+                </div>
+                <span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Canon mensual</span>
+                <span style={{ fontSize: 12.5, color: "#888" }}>{fmt(inmueble.valorCanonBase)}</span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Mora total{estado.meses > 1 ? ` (${estado.meses} meses)` : ""}</span>
+                <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmt(estado.valorTotal)}</span>
+              </div>
+            </div>
+          ))}
+          {enMora.length === 0 && <div style={{ ...cardS, color: "#aaa", fontSize: 13 }}>Nadie en mora ahora mismo.</div>}
+        </div>
+      ) : (
       <div style={{ ...S.tableWrap, marginBottom: 24 }}>
         <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr" }}>
           <div>Inmueble</div><div>Arrendatario</div><div>Canon mensual</div><div>Mora total</div><div>Días en mora</div>
@@ -599,8 +708,29 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
         ))}
         {enMora.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nadie en mora ahora mismo.</div>}
       </div>
+      )}
 
       <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", marginBottom: 10 }}>Próximos vencimientos — 5 días o menos ({proximos.length})</div>
+      {isMobile ? (
+        <div>
+          {proximos.map(({ inmueble, estado }) => (
+            <div key={inmueble.id} style={{ ...cardS, borderLeft: "3px solid #f59e0b" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{inmueble.nombre}</div>
+                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
+                </div>
+                <span style={S.chip("#f59e0b")}>{estado.dias === 0 ? "Hoy" : `${estado.dias} día${estado.dias === 1 ? "" : "s"}`}</span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Valor</span>
+                <span style={{ fontSize: 12.5 }}>{fmt(inmueble.valorCanonBase)}</span>
+              </div>
+            </div>
+          ))}
+          {proximos.length === 0 && <div style={{ ...cardS, color: "#aaa", fontSize: 13 }}>Nada por vencer en los próximos 5 días.</div>}
+        </div>
+      ) : (
       <div style={S.tableWrap}>
         <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
           <div>Inmueble</div><div>Arrendatario</div><div>Valor</div><div>Vence en</div>
@@ -615,6 +745,7 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
         ))}
         {proximos.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Nada por vencer en los próximos 5 días.</div>}
       </div>
+      )}
     </div>
   );
 };
