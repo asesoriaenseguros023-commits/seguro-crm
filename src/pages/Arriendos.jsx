@@ -16,7 +16,7 @@ const TABS = [
 ];
 
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "" };
-const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "" };
+const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "", activo: true };
 const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", metodo: "efectivo", estado: "pagado" };
 const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "" };
 
@@ -153,7 +153,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
             <label style={S.label}>Arrendatario</label>
             <select style={S.select} value={form.arrendatarioId} onChange={(e) => set("arrendatarioId", e.target.value)}>
               <option value="">— Vacante —</option>
-              {arrendatarios.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              {arrendatarios.filter((a) => a.activo).map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -182,7 +182,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
 };
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
-const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, onAsignarInmueble }) => {
+const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
@@ -194,7 +194,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
   const abrirNuevo = () => { setEditItem(null); setForm(ARRENDATARIO_INIT); setShowForm(true); };
   const abrirEditar = (a) => {
     setEditItem(a);
-    setForm({ nombre: a.nombre, telefono: a.telefono, documento: a.documento, inmuebleId: inmuebleDe(a.id)?.id || "" });
+    setForm({ nombre: a.nombre, telefono: a.telefono, documento: a.documento, inmuebleId: inmuebleDe(a.id)?.id || "", activo: a.activo });
     setShowForm(true);
   };
 
@@ -224,18 +224,22 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.3fr 1fr 1fr 1.2fr 90px" }}>
-          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1.1fr 90px 200px" }}>
+          <div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div>Estado</div><div></div>
         </div>
         {arrendatarios.map((a) => (
-          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.3fr 1fr 1fr 1.2fr 90px" }}>
+          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1.1fr 90px 200px" }}>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{a.nombre}</div>
             <div>{a.telefono || "—"}</div>
             <div>{a.documento || "—"}</div>
             <div>
               {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ color: "#aaa" }}>Sin inmueble</span>}
             </div>
+            <div><span style={S.chip(a.activo ? "#16a34a" : "#6b7280")}>{a.activo ? "Activo" : "Inactivo"}</span></div>
             <div style={{ display: "flex", gap: 4 }}>
+              <button style={S.btn(a.activo ? "secondary" : "success")} onClick={() => onToggleActivo(a)}>
+                {a.activo ? "Desactivar" : "Activar"}
+              </button>
               <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
             </div>
@@ -313,12 +317,12 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
 
   const abrirNuevo = () => { setForm(PAGO_INIT); setErrForm(""); setShowForm(true); };
 
-  // Al elegir el inmueble, precarga el arrendatario y el canon que tiene
-  // asignados hoy, y sugiere el período del mes en curso segun su día de
-  // pago (del día siguiente al vencimiento pasado hasta el vencimiento de
-  // este mes). Todo queda editable, incluido el monto.
-  const seleccionarInmueble = (id) => {
-    const inm = inmuebles.find((i) => i.id === id);
+  // Al elegir el arrendatario, busca el inmueble que tiene asignado hoy y
+  // precarga su canon, y sugiere el período del mes en curso según su día
+  // de pago (del día siguiente al vencimiento pasado hasta el vencimiento
+  // de este mes). Todo queda editable, incluido el monto.
+  const seleccionarArrendatario = (arrendatarioId) => {
+    const inm = inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
     let periodoInicio = "", periodoFin = "";
     if (inm?.diaVencimientoPago) {
       const hoy = new Date();
@@ -330,12 +334,12 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
       periodoInicio = toISO(inicio);
       periodoFin = toISO(fin);
     }
-    setForm((f) => ({ ...f, inmuebleId: id, arrendatarioId: inm?.arrendatarioId || "", valor: inm?.valorCanonBase || "", periodoInicio, periodoFin }));
+    setForm((f) => ({ ...f, arrendatarioId, inmuebleId: inm?.id || "", valor: inm?.valorCanonBase || "", periodoInicio, periodoFin }));
   };
 
   const handleSave = async () => {
-    if (!form.inmuebleId) { setErrForm("Elige el inmueble"); return; }
     if (!form.arrendatarioId) { setErrForm("Elige el arrendatario"); return; }
+    if (!form.inmuebleId) { setErrForm("Este arrendatario no tiene un inmueble asignado. Asígnalo primero en Arrendatarios."); return; }
     if (!form.periodoInicio || !form.periodoFin) { setErrForm("Elige la fecha de inicio y fin del período"); return; }
     if (form.periodoFin < form.periodoInicio) { setErrForm("La fecha fin no puede ser antes que la fecha inicio"); return; }
     if (!form.valor) { setErrForm("Escribe el valor"); return; }
@@ -403,18 +407,29 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onDelete
           }
         >
           <div style={S.formGroup}>
-            <label style={S.label}>Inmueble *</label>
-            <select style={S.select} value={form.inmuebleId} onChange={(e) => seleccionarInmueble(e.target.value)}>
+            <label style={S.label}>Arrendatario *</label>
+            <select style={S.select} value={form.arrendatarioId} onChange={(e) => seleccionarArrendatario(e.target.value)}>
               <option value="">Selecciona…</option>
-              {inmuebles.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
+              {arrendatarios.filter((a) => a.activo).map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
           </div>
           <div style={S.formGroup}>
-            <label style={S.label}>Arrendatario *</label>
-            <select style={S.select} value={form.arrendatarioId} onChange={(e) => set("arrendatarioId", e.target.value)}>
-              <option value="">Selecciona…</option>
-              {arrendatarios.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-            </select>
+            <label style={S.label}>Inmueble</label>
+            {form.arrendatarioId ? (
+              form.inmuebleId ? (
+                <div style={{ ...S.input, background: "#f8faff", color: BLUE.text, fontWeight: 600, display: "flex", alignItems: "center" }}>
+                  {nombreInmueble(form.inmuebleId)}
+                </div>
+              ) : (
+                <div style={{ ...S.input, background: "#fef2f2", color: "#dc2626", fontSize: 12.5, display: "flex", alignItems: "center", border: "1px solid #fecaca" }}>
+                  Este arrendatario no tiene inmueble asignado
+                </div>
+              )
+            ) : (
+              <div style={{ ...S.input, background: "#f8faff", color: "#aaa", display: "flex", alignItems: "center" }}>
+                Elige primero el arrendatario
+              </div>
+            )}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <div style={S.formGroup}>
@@ -663,14 +678,19 @@ const ArriendosPage = () => {
     if (nuevoInmuebleId) await setInmuebleArrendatario(nuevoInmuebleId, arrendatarioId);
   };
   const editArrendatario = async (f) => {
-    const { error } = await supabase.from("arrendatarios").update({ nombre: f.nombre, telefono: f.telefono, documento: f.documento }).eq("id", f.id);
+    const { error } = await supabase.from("arrendatarios").update({ nombre: f.nombre, telefono: f.telefono, documento: f.documento, activo: f.activo !== false }).eq("id", f.id);
     if (error) { console.error("editArrendatario error:", error); return; }
-    setArrendatarios((p) => p.map((x) => x.id === f.id ? { ...x, ...f } : x));
+    setArrendatarios((p) => p.map((x) => x.id === f.id ? { ...x, ...f, activo: f.activo !== false } : x));
   };
   const deleteArrendatario = async (id) => {
     const { error } = await supabase.from("arrendatarios").delete().eq("id", id);
     if (error) { console.error("deleteArrendatario error:", error); return; }
     setArrendatarios((p) => p.filter((x) => x.id !== id));
+  };
+  const toggleActivoArrendatario = async (arrendatario) => {
+    const { error } = await supabase.from("arrendatarios").update({ activo: !arrendatario.activo }).eq("id", arrendatario.id);
+    if (error) { console.error("toggleActivoArrendatario error:", error); return; }
+    setArrendatarios((p) => p.map((x) => x.id === arrendatario.id ? { ...x, activo: !arrendatario.activo } : x));
   };
 
   const addPago = async (f) => {
@@ -718,7 +738,7 @@ const ArriendosPage = () => {
       </div>
 
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
-      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} />}
+      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} />}
       {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onDelete={deletePago} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}

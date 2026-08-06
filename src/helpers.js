@@ -163,6 +163,7 @@ export const mapArrendatario = (r) => ({
   nombre: r.nombre || "",
   telefono: r.telefono || "",
   documento: r.documento || "",
+  activo: r.activo !== false,
 });
 
 export const mapPago = (r) => ({
