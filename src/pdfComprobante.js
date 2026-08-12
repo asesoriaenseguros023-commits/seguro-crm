@@ -191,3 +191,148 @@ export function generarComprobante({ pago, inmueble, arrendatario, arrendador, n
   const blobUrl = doc.output("bloburl");
   window.open(blobUrl, "_blank");
 }
+
+const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// Próximo período a cobrar: si ya hubo pagos, el mes siguiente al último
+// período cubierto; si nunca ha pagado, el mes en curso según el día de
+// vencimiento del inmueble (mismo criterio que calcularEstadoPago).
+function siguientePeriodo(inmueble, pagos) {
+  if (!inmueble?.diaVencimientoPago) return { inicio: "", fin: "" };
+  const pagosInmueble = pagos.filter((p) => p.inmuebleId === inmueble.id && p.periodoFin);
+
+  if (pagosInmueble.length > 0) {
+    const ultimo = pagosInmueble.reduce((max, p) => (p.periodoFin > max.periodoFin ? p : max), pagosInmueble[0]);
+    const finAnterior = new Date(ultimo.periodoFin + "T00:00:00");
+    const inicio = new Date(finAnterior); inicio.setDate(inicio.getDate() + 1);
+    const fin = new Date(finAnterior); fin.setMonth(fin.getMonth() + 1);
+    return { inicio: toISO(inicio), fin: toISO(fin) };
+  }
+
+  const hoy = new Date();
+  const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth(), diaVence);
+  const inicio = new Date(fin.getFullYear(), fin.getMonth() - 1, fin.getDate() + 1);
+  return { inicio: toISO(inicio), fin: toISO(fin) };
+}
+
+// Cuenta de cobro: solicitud de pago del próximo período, antes de que el
+// arrendatario pague (a diferencia del comprobante, que confirma un pago
+// ya recibido). Mismo estilo visual, comparte los helpers de arriba.
+export function generarCuentaCobro({ arrendatario, inmueble, arrendador, pagos }) {
+  const doc = new jsPDF({ unit: "mm", format: "a5" });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const marginX = 12;
+  const contentW = W - marginX * 2;
+  let y = 16;
+
+  const checkPageBreak = (extra = 20) => {
+    if (y + extra > H - 10) { doc.addPage(); y = 16; }
+  };
+
+  const periodo = siguientePeriodo(inmueble, pagos || []);
+  const valor = inmueble?.valorCanonBase || 0;
+
+  doc.setFont("courier", "bold");
+  doc.setFontSize(14);
+  doc.text("CUENTA DE COBRO", W / 2, y, { align: "center" });
+  y += 6;
+  doc.text("ARRENDAMIENTO", W / 2, y, { align: "center" });
+  y += 6;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(9);
+  const inmuebleTxt = [inmueble?.nombre, inmueble?.direccion].filter(Boolean).join(" - ") || "—";
+  doc.text(inmuebleTxt, W / 2, y, { align: "center" });
+  y += 5;
+
+  doc.setFontSize(8.5);
+  doc.text(`Emitido ${fmtFecha(new Date().toISOString().slice(0, 10))}`, W / 2, y, { align: "center" });
+  y += 6;
+
+  dashedLine(doc, marginX, y, W - marginX);
+  y += 5;
+
+  sectionLabel(doc, marginX, y, "ARRENDADOR");
+  y += 5;
+  y += row(doc, marginX, y, contentW, "Nombre", arrendador?.nombre);
+  if (arrendador?.documento) y += row(doc, marginX, y, contentW, "C.C.", arrendador.documento);
+  y += 3;
+
+  sectionLabel(doc, marginX, y, "ARRENDATARIO");
+  y += 5;
+  y += row(doc, marginX, y, contentW, "Nombre", arrendatario?.nombre);
+  if (arrendatario?.documento) y += row(doc, marginX, y, contentW, "C.C.", arrendatario.documento);
+  if (arrendatario?.telefono) y += row(doc, marginX, y, contentW, "Telefono", arrendatario.telefono);
+  y += 2;
+
+  dashedLine(doc, marginX, y, W - marginX);
+  y += 5;
+
+  y += row(doc, marginX, y, contentW, "Concepto", "Canon arrendamiento");
+  y += row(doc, marginX, y, contentW, "Periodo a cobrar", fmtPeriodo(periodo.inicio, periodo.fin));
+  y += row(doc, marginX, y, contentW, "Fecha limite de pago", fmtFecha(periodo.fin));
+  y += 2;
+
+  dashedLine(doc, marginX, y, W - marginX);
+  y += 7;
+
+  doc.setFont("courier", "bold");
+  doc.setFontSize(9.5);
+  doc.text("VALOR A PAGAR", marginX, y);
+  doc.setFontSize(15);
+  doc.text(fmtMoney(valor), W - marginX, y, { align: "right" });
+  y += 6;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8.5);
+  const sonLineas = doc.splitTextToSize(`Son: ${montoEnLetras(valor)}`, contentW);
+  doc.text(sonLineas, marginX, y);
+  y += sonLineas.length * 4.2 + 3;
+
+  dashedLine(doc, marginX, y, W - marginX);
+  y += 6;
+
+  const notas = [];
+  if (!arrendador?.responsableIva) {
+    notas.push("Arrendador persona natural no responsable de IVA (Art. 437, Par. 3, Estatuto Tributario).");
+  }
+  if (arrendador?.telefono) {
+    notas.push(`Enviar comprobantes de pago al ${arrendador.telefono}.`);
+  }
+  if (arrendador?.cuentaBancaria) {
+    notas.push(`Pagos a ${arrendador.cuentaBancaria}.`);
+  }
+
+  if (notas.length > 0) {
+    checkPageBreak(14 + notas.length * 7);
+    doc.setFont("courier", "bold");
+    doc.setFontSize(9.5);
+    doc.text("NOTAS", marginX, y);
+    y += 5;
+
+    doc.setFontSize(8.3);
+    notas.forEach((texto, i) => {
+      doc.setFont("courier", "normal");
+      const lineas = doc.splitTextToSize(`${i + 1}. ${texto}`, contentW);
+      checkPageBreak(lineas.length * 3.7 + 3);
+      doc.text(lineas, marginX, y);
+      y += lineas.length * 3.7 + 2;
+    });
+  }
+
+  checkPageBreak(14);
+  dashedLine(doc, marginX, y, W - marginX);
+  y += 6;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8.5);
+  doc.text("Agradecemos su pago oportuno", W / 2, y, { align: "center" });
+  y += 4.5;
+  doc.text("antes de la fecha limite", W / 2, y, { align: "center" });
+
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl, "_blank");
+}

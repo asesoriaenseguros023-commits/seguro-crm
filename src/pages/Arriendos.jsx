@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow } from "../helpers.js";
-import { generarComprobante, siguienteNumeroComprobante, METODOS_LABEL } from "../pdfComprobante.js";
+import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -208,7 +208,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
 };
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
-const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo }) => {
+const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo }) => {
   const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -217,6 +217,10 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const inmuebleDe = (arrendatarioId) => inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
+
+  const generarCuenta = (a) => {
+    generarCuentaCobro({ arrendatario: a, inmueble: inmuebleDe(a.id), arrendador, pagos });
+  };
 
   const abrirNuevo = () => { setEditItem(null); setForm(ARRENDATARIO_INIT); setShowForm(true); };
   const abrirEditar = (a) => {
@@ -272,8 +276,11 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
                 {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ fontSize: 12.5, color: "#ccc" }}>Sin inmueble</span>}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BLUE.border}` }}>
-                <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} />Editar</button>
-                <button style={{ ...S.btn("danger"), flex: 1 }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} />Eliminar</button>
+                {inmuebleDe(a.id) && (
+                  <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => generarCuenta(a)}>Generar</button>
+                )}
+                <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
+                <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
               </div>
             </div>
           ))}
@@ -283,11 +290,11 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
         </div>
       ) : (
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 230px" }}>
           <div>#</div><div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
         </div>
         {arrendatarios.map((a, idx) => (
-          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 160px" }}>
+          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 230px" }}>
             <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{a.nombre}</div>
             <div style={{ color: a.telefono ? "inherit" : "#ccc" }}>{a.telefono || "—"}</div>
@@ -303,6 +310,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
               >
                 {a.activo ? "Activo" : "Inactivo"}
               </button>
+              {inmuebleDe(a.id) && <button style={S.btn("secondary")} onClick={() => generarCuenta(a)}>Generar</button>}
               <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
             </div>
@@ -376,7 +384,12 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
   const [form, setForm] = useState(PAGO_INIT);
   const [saving, setSaving] = useState(false);
   const [errForm, setErrForm] = useState("");
+  const [ordenFecha, setOrdenFecha] = useState("desc");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const pagosOrdenados = [...pagos].sort((a, b) =>
+    ordenFecha === "desc" ? b.fechaPago.localeCompare(a.fechaPago) : a.fechaPago.localeCompare(b.fechaPago)
+  );
 
   const nombreInmueble = (id) => inmuebles.find((i) => i.id === id)?.nombre || "—";
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
@@ -449,14 +462,19 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
           <div style={S.pageTitle}>Pagos</div>
           <div style={S.pageSub}>{pagos.length} pagos registrados</div>
         </div>
-        <button style={S.btn("primary")} onClick={abrirNuevo}>
-          <Icon name="plus" size={16} />Registrar pago
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={S.btn("secondary")} onClick={() => setOrdenFecha((o) => (o === "desc" ? "asc" : "desc"))}>
+            Fecha de pago {ordenFecha === "desc" ? "↓ recientes primero" : "↑ antiguos primero"}
+          </button>
+          <button style={S.btn("primary")} onClick={abrirNuevo}>
+            <Icon name="plus" size={16} />Registrar pago
+          </button>
+        </div>
       </div>
 
       {isMobile ? (
         <div>
-          {pagos.map((p, idx) => (
+          {pagosOrdenados.map((p, idx) => (
             <div key={p.id} style={cardS}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
@@ -493,7 +511,7 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
         <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 1.2fr 0.9fr 0.9fr 170px", minWidth: 900 }}>
           <div>#</div><div>Inmueble</div><div>Arrendatario</div><div>Fecha de pago</div><div>Período</div><div>Valor</div><div>Medio</div><div></div>
         </div>
-        {pagos.map((p, idx) => (
+        {pagosOrdenados.map((p, idx) => (
           <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.1fr 0.9fr 0.9fr 1.2fr 0.9fr 0.9fr 170px", minWidth: 900 }}>
             <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{nombreInmueble(p.inmuebleId)}</div>
@@ -962,7 +980,7 @@ const ArriendosPage = () => {
       </div>
 
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
-      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} />}
+      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendador={arrendador} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} />}
       {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onEdit={editPago} onDelete={deletePago} onAsignarNumero={asignarNumeroComprobante} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}
