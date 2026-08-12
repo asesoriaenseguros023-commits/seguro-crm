@@ -224,18 +224,50 @@ export function siguientePeriodo(inmueble, pagos) {
   return { inicio: toISO(inicio), fin: toISO(fin) };
 }
 
+// Períodos ya vencidos (fin <= hoy) para este arrendatario que no tienen
+// ningún pago registrado que los cubra, caminando mes a mes desde su último
+// pago. Si nunca ha pagado no hay forma de saber desde cuándo debe (no se
+// guarda fecha de inicio de contrato), así que no se listan atrasos.
+export function calcularPeriodosAdeudados(inmueble, arrendatarioId, pagos, hoy = new Date()) {
+  if (!inmueble?.diaVencimientoPago) return [];
+  const pagosArr = pagos.filter((p) => p.arrendatarioId === arrendatarioId && p.periodoFin);
+  if (pagosArr.length === 0) return [];
+
+  let cursorFin = pagosArr.reduce((max, p) => (p.periodoFin > max ? p.periodoFin : max), pagosArr[0].periodoFin);
+  const periodos = [];
+
+  while (true) {
+    const cursorDate = new Date(cursorFin + "T00:00:00");
+    const inicio = new Date(cursorDate); inicio.setDate(inicio.getDate() + 1);
+    const fin = new Date(cursorDate); fin.setMonth(fin.getMonth() + 1);
+    if (fin > hoy) break;
+
+    const finISO = toISO(fin);
+    const cubierto = pagosArr.some((p) => p.periodoFin === finISO);
+    if (!cubierto) {
+      periodos.push({ periodoInicio: toISO(inicio), periodoFin: finISO, valor: inmueble.valorCanonBase || 0 });
+    }
+    cursorFin = finISO;
+  }
+  return periodos;
+}
+
 // Cuenta de cobro: solicitud de pago del próximo período, antes de que el
 // arrendatario pague (a diferencia del comprobante, que confirma un pago ya
 // recibido). Formato de factura con tablas con bordes — visual distinto al
 // comprobante a propósito, según el formato de referencia del usuario.
-// `numero`, `periodo`, `saldoAnterior` y `fechaEmision` los calcula quien
-// llama (Arrendatarios.jsx), porque también necesita persistirlos en
-// `cuentas_cobro` antes de generar el PDF.
-export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador, periodo, valor, saldoAnterior, fechaEmision }) {
+// `numero`, `periodo` y `fechaEmision` los calcula quien llama
+// (Arrendatarios.jsx), porque también necesita persistirlos en
+// `cuentas_cobro` antes de generar el PDF. `periodosAdeudados` (si hay) se
+// recalcula siempre en vivo contra los pagos reales, para que la cuenta
+// refleje la deuda real de hoy y no un saldo congelado.
+export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador, periodo, valor, periodosAdeudados, fechaEmision }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const marginX = 15;
-  const total = (valor || 0) + (saldoAnterior || 0);
+  const atrasados = periodosAdeudados || [];
+  const totalAtrasado = atrasados.reduce((s, p) => s + (p.valor || 0), 0);
+  const total = (valor || 0) + totalAtrasado;
   let y = 20;
 
   // ── Encabezado ────────────────────────────────────────────────────────
@@ -283,8 +315,15 @@ export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador,
   y = doc.lastAutoTable.finalY + 6;
 
   // ── Detalle y total ──────────────────────────────────────────────────────
-  const filas = [["Canon de arrendamiento", fmtPeriodo(periodo.inicio, periodo.fin), fmtMoney(valor)]];
-  if (saldoAnterior) filas.push(["Saldo anterior" + (saldoAnterior < 0 ? " (a favor)" : ""), "", fmtMoney(saldoAnterior)]);
+  // Cada período atrasado va como su propia fila (en rojo, para que se
+  // distinga de un vistazo del cobro del período actual).
+  const rojo = [180, 35, 35];
+  const filasAtrasadas = atrasados.map((p) => [
+    { content: "Canon arrendamiento (atrasado)", styles: { textColor: rojo } },
+    { content: fmtPeriodo(p.periodoInicio, p.periodoFin), styles: { textColor: rojo } },
+    { content: fmtMoney(p.valor), styles: { textColor: rojo } },
+  ]);
+  const filas = [...filasAtrasadas, ["Canon de arrendamiento", fmtPeriodo(periodo.inicio, periodo.fin), fmtMoney(valor)]];
 
   autoTable(doc, {
     startY: y,

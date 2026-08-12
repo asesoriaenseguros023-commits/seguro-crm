@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow, mapCuentaCobro, toCuentaCobroRow } from "../helpers.js";
-import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, siguientePeriodo, METODOS_LABEL } from "../pdfComprobante.js";
+import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, siguientePeriodo, calcularPeriodosAdeudados, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -226,12 +226,13 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, cuentas
     const inmueble = inmuebleDe(a.id);
     const periodo = siguientePeriodo(inmueble, pagos);
     const valor = inmueble?.valorCanonBase || 0;
+    // Siempre en vivo contra los pagos reales, para que la cuenta muestre la
+    // deuda de hoy (no un saldo congelado de cuando se generó la primera vez).
+    const periodosAdeudados = calcularPeriodosAdeudados(inmueble, a.id, pagos);
+    const saldoAnterior = periodosAdeudados.reduce((s, p) => s + p.valor, 0);
 
     let cuenta = cuentasCobro.find((c) => c.arrendatarioId === a.id && c.periodoInicio === periodo.inicio && c.periodoFin === periodo.fin);
     if (!cuenta) {
-      const facturadoHistorico = cuentasCobro.filter((c) => c.arrendatarioId === a.id).reduce((s, c) => s + c.valor, 0);
-      const pagadoHistorico = pagos.filter((p) => p.arrendatarioId === a.id).reduce((s, p) => s + (p.valor || 0), 0);
-      const saldoAnterior = facturadoHistorico - pagadoHistorico;
       const numero = Math.max(0, ...cuentasCobro.map((c) => c.numero)) + 1;
       cuenta = await onAgregarCuentaCobro({
         numero, arrendatarioId: a.id, inmuebleId: inmueble?.id || "",
@@ -244,7 +245,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, cuentas
     generarCuentaCobro({
       numero: cuenta.numero, arrendatario: a, inmueble, arrendador,
       periodo: { inicio: cuenta.periodoInicio, fin: cuenta.periodoFin },
-      valor: cuenta.valor, saldoAnterior: cuenta.saldoAnterior, fechaEmision: cuenta.fechaEmision,
+      valor: cuenta.valor, periodosAdeudados, fechaEmision: cuenta.fechaEmision,
     });
   };
 
