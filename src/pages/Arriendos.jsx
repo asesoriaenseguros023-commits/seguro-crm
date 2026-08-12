@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow } from "../helpers.js";
-import { generarComprobante, METODOS_LABEL } from "../pdfComprobante.js";
+import { generarComprobante, siguienteNumeroComprobante, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -18,7 +18,7 @@ const TABS = [
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "" };
 const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "", activo: true };
 const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", metodo: "efectivo", estado: "pagado" };
-const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "" };
+const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "", cuentaBancaria: "", responsableIva: false };
 
 // Las tablas de columnas fijas (grid) se aplastan en pantallas angostas —
 // mismo umbral que usa App.jsx para su propio layout mobile. Por debajo,
@@ -368,7 +368,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, onAdd, onEdit, onDelete, o
 };
 
 // ─── Pagos ────────────────────────────────────────────────────────────────
-const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, onDelete }) => {
+const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, onDelete, onAsignarNumero }) => {
   const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -427,9 +427,15 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendador, onAdd, onEdit, 
     setEditItem(null);
   };
 
-  const generar = (pago) => {
+  const generar = async (pago) => {
+    let numeroComprobante = pago.numeroComprobante;
+    if (!numeroComprobante) {
+      numeroComprobante = siguienteNumeroComprobante(pagos, pago.fechaPago);
+      await onAsignarNumero(pago.id, numeroComprobante);
+    }
     generarComprobante({
       pago,
+      numeroComprobante,
       inmueble: inmuebles.find((i) => i.id === pago.inmuebleId),
       arrendatario: arrendatarios.find((a) => a.id === pago.arrendatarioId),
       arrendador,
@@ -642,6 +648,14 @@ const ArrendadorTab = ({ arrendador, onSave }) => {
         <div style={S.formGroup}>
           <label style={S.label}>Dirección</label>
           <input style={S.input} value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Dirección de contacto" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Cuenta bancaria</label>
+          <input style={S.input} value={form.cuentaBancaria} onChange={(e) => set("cuentaBancaria", e.target.value)} placeholder="Ej. cuenta de ahorros Bancolombia No. 123456 o llave @usuario" />
+        </div>
+        <div style={{ ...S.formGroup, display: "flex", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" id="responsableIva" checked={form.responsableIva} onChange={(e) => set("responsableIva", e.target.checked)} />
+          <label htmlFor="responsableIva" style={{ ...S.label, marginBottom: 0 }}>Responsable de IVA</label>
         </div>
         <button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
           {saving ? "Guardando…" : "Guardar"}
@@ -901,6 +915,11 @@ const ArriendosPage = () => {
     if (error) { console.error("deletePago error:", error); return; }
     setPagos((p) => p.filter((x) => x.id !== id));
   };
+  const asignarNumeroComprobante = async (pagoId, numeroComprobante) => {
+    const { error } = await supabase.from("pagos").update({ numero_comprobante: numeroComprobante }).eq("id", pagoId);
+    if (error) { console.error("asignarNumeroComprobante error:", error); return; }
+    setPagos((p) => p.map((x) => x.id === pagoId ? { ...x, numeroComprobante } : x));
+  };
 
   const saveArrendador = async (f) => {
     if (arrendador?.id) {
@@ -944,7 +963,7 @@ const ArriendosPage = () => {
 
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
       {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} />}
-      {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onEdit={editPago} onDelete={deletePago} />}
+      {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onEdit={editPago} onDelete={deletePago} onAsignarNumero={asignarNumeroComprobante} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}
     </div>

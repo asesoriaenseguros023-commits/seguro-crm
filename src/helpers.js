@@ -176,6 +176,7 @@ export const mapPago = (r) => ({
   valor: r.valor || 0,
   metodo: r.metodo || "efectivo",
   estado: r.estado || "pagado",
+  numeroComprobante: r.numero_comprobante || "",
 });
 
 export const toPagoRow = (f) => ({
@@ -195,6 +196,8 @@ export const mapArrendador = (r) => ({
   documento: r.documento || "",
   telefono: r.telefono || "",
   direccion: r.direccion || "",
+  cuentaBancaria: r.cuenta_bancaria || "",
+  responsableIva: r.responsable_iva === true,
 });
 
 export const toArrendadorRow = (f) => ({
@@ -202,6 +205,8 @@ export const toArrendadorRow = (f) => ({
   documento: f.documento,
   telefono: f.telefono,
   direccion: f.direccion,
+  cuenta_bancaria: f.cuentaBancaria || null,
+  responsable_iva: f.responsableIva === true,
 });
 
 // Color helpers for cotizaciones
