@@ -201,55 +201,48 @@ export function generarComprobante({ pago, inmueble, arrendatario, arrendador, n
 
 const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// Próximo período a cobrar: si ya hubo pagos, el mes siguiente al último
-// período cubierto; si nunca ha pagado, el mes en curso según el día de
-// vencimiento del inmueble (mismo criterio que calcularEstadoPago).
-export function siguientePeriodo(inmueble, pagos) {
-  if (!inmueble?.diaVencimientoPago) return { inicio: "", fin: "" };
-  const pagosInmueble = pagos.filter((p) => p.inmuebleId === inmueble.id && p.periodoFin);
+// Camina mes a mes desde el último pago de este arrendatario (o desde el
+// mes en curso si nunca ha pagado) hasta encontrar el primer período cuyo
+// fin todavía no llega (ese es el que se factura ahora, `periodoActual`).
+// Cada período anterior a ese que haya vencido sin un pago que lo cubra
+// queda en `periodosAdeudados` — nunca se solapan porque es un solo barrido
+// continuo, no dos cálculos independientes.
+export function calcularEstadoCuentaCobro(inmueble, arrendatarioId, pagos, hoy = new Date()) {
+  if (!inmueble?.diaVencimientoPago) return { periodosAdeudados: [], periodoActual: { inicio: "", fin: "" } };
 
-  if (pagosInmueble.length > 0) {
-    const ultimo = pagosInmueble.reduce((max, p) => (p.periodoFin > max.periodoFin ? p : max), pagosInmueble[0]);
-    const finAnterior = new Date(ultimo.periodoFin + "T00:00:00");
-    const inicio = new Date(finAnterior); inicio.setDate(inicio.getDate() + 1);
-    const fin = new Date(finAnterior); fin.setMonth(fin.getMonth() + 1);
-    return { inicio: toISO(inicio), fin: toISO(fin) };
+  const pagosArr = pagos.filter((p) => p.arrendatarioId === arrendatarioId && p.periodoFin);
+
+  let cursorFin;
+  if (pagosArr.length > 0) {
+    cursorFin = pagosArr.reduce((max, p) => (p.periodoFin > max ? p.periodoFin : max), pagosArr[0].periodoFin);
+  } else {
+    // Nunca ha pagado: arranca en el vencimiento del mes en curso, mismo
+    // criterio que calcularEstadoPago. No se listan atrasos en este caso
+    // porque no hay fecha de inicio de contrato guardada.
+    const anio = hoy.getFullYear(), mes = hoy.getMonth();
+    const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+    const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
+    const finMes = new Date(anio, mes, diaVence);
+    cursorFin = toISO(new Date(finMes.getFullYear(), finMes.getMonth() - 1, finMes.getDate()));
   }
 
-  const hoy = new Date();
-  const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-  const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
-  const fin = new Date(hoy.getFullYear(), hoy.getMonth(), diaVence);
-  const inicio = new Date(fin.getFullYear(), fin.getMonth() - 1, fin.getDate() + 1);
-  return { inicio: toISO(inicio), fin: toISO(fin) };
-}
-
-// Períodos ya vencidos (fin <= hoy) para este arrendatario que no tienen
-// ningún pago registrado que los cubra, caminando mes a mes desde su último
-// pago. Si nunca ha pagado no hay forma de saber desde cuándo debe (no se
-// guarda fecha de inicio de contrato), así que no se listan atrasos.
-export function calcularPeriodosAdeudados(inmueble, arrendatarioId, pagos, hoy = new Date()) {
-  if (!inmueble?.diaVencimientoPago) return [];
-  const pagosArr = pagos.filter((p) => p.arrendatarioId === arrendatarioId && p.periodoFin);
-  if (pagosArr.length === 0) return [];
-
-  let cursorFin = pagosArr.reduce((max, p) => (p.periodoFin > max ? p.periodoFin : max), pagosArr[0].periodoFin);
-  const periodos = [];
-
+  const periodosAdeudados = [];
   while (true) {
     const cursorDate = new Date(cursorFin + "T00:00:00");
     const inicio = new Date(cursorDate); inicio.setDate(inicio.getDate() + 1);
     const fin = new Date(cursorDate); fin.setMonth(fin.getMonth() + 1);
-    if (fin > hoy) break;
-
     const finISO = toISO(fin);
+
+    if (fin > hoy) {
+      return { periodosAdeudados, periodoActual: { inicio: toISO(inicio), fin: finISO } };
+    }
+
     const cubierto = pagosArr.some((p) => p.periodoFin === finISO);
     if (!cubierto) {
-      periodos.push({ periodoInicio: toISO(inicio), periodoFin: finISO, valor: inmueble.valorCanonBase || 0 });
+      periodosAdeudados.push({ periodoInicio: toISO(inicio), periodoFin: finISO, valor: inmueble.valorCanonBase || 0 });
     }
     cursorFin = finISO;
   }
-  return periodos;
 }
 
 // Cuenta de cobro: solicitud de pago del próximo período, antes de que el

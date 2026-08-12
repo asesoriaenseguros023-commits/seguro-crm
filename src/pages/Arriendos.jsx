@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow, mapCuentaCobro, toCuentaCobroRow } from "../helpers.js";
-import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, siguientePeriodo, calcularPeriodosAdeudados, METODOS_LABEL } from "../pdfComprobante.js";
+import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, calcularEstadoCuentaCobro, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -224,11 +224,13 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, cuentas
   // arrendatario menos todo lo que ha pagado, antes de sumar el cobro nuevo.
   const generarCuenta = async (a) => {
     const inmueble = inmuebleDe(a.id);
-    const periodo = siguientePeriodo(inmueble, pagos);
-    const valor = inmueble?.valorCanonBase || 0;
+    // Un solo barrido: `periodoActual` (el que se cobra ahora) y
+    // `periodosAdeudados` (lo que ya venció sin pagar) salen del mismo
+    // recorrido continuo, así que nunca pueden coincidir en el mismo mes.
     // Siempre en vivo contra los pagos reales, para que la cuenta muestre la
     // deuda de hoy (no un saldo congelado de cuando se generó la primera vez).
-    const periodosAdeudados = calcularPeriodosAdeudados(inmueble, a.id, pagos);
+    const { periodosAdeudados, periodoActual: periodo } = calcularEstadoCuentaCobro(inmueble, a.id, pagos);
+    const valor = inmueble?.valorCanonBase || 0;
     const saldoAnterior = periodosAdeudados.reduce((s, p) => s + p.valor, 0);
 
     let cuenta = cuentasCobro.find((c) => c.arrendatarioId === a.id && c.periodoInicio === periodo.inicio && c.periodoFin === periodo.fin);
