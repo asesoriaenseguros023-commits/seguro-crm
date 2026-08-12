@@ -209,6 +209,31 @@ export const toArrendadorRow = (f) => ({
   responsable_iva: f.responsableIva === true,
 });
 
+export const mapCuentaCobro = (r) => ({
+  id: r.id,
+  numero: r.numero,
+  arrendatarioId: r.arrendatario_id,
+  inmuebleId: r.inmueble_id,
+  periodoInicio: r.periodo_inicio,
+  periodoFin: r.periodo_fin,
+  valor: r.valor || 0,
+  saldoAnterior: r.saldo_anterior || 0,
+  fechaEmision: r.fecha_emision,
+  fechaVencimiento: r.fecha_vencimiento,
+});
+
+export const toCuentaCobroRow = (f) => ({
+  numero: f.numero,
+  arrendatario_id: f.arrendatarioId,
+  inmueble_id: f.inmuebleId || null,
+  periodo_inicio: f.periodoInicio,
+  periodo_fin: f.periodoFin,
+  valor: Number(f.valor) || 0,
+  saldo_anterior: Number(f.saldoAnterior) || 0,
+  fecha_emision: f.fechaEmision,
+  fecha_vencimiento: f.fechaVencimiento,
+});
+
 // Color helpers for cotizaciones
 export const accionColor = (a) =>
   ({ "En Curso": "#f59e0b", "Cliente Rechaza": "#dc2626", "Póliza Emitida": "#16a34a" }[a] || "#6b7280");

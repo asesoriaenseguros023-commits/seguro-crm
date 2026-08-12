@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
-import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow } from "../helpers.js";
-import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, METODOS_LABEL } from "../pdfComprobante.js";
+import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow, mapCuentaCobro, toCuentaCobroRow } from "../helpers.js";
+import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, siguientePeriodo, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -209,7 +209,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, onAdd, onEdit, onDelete }) => 
 };
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
-const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo }) => {
+const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, cuentasCobro, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo, onAgregarCuentaCobro }) => {
   const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -219,8 +219,33 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendador, onAdd, 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const inmuebleDe = (arrendatarioId) => inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
 
-  const generarCuenta = (a) => {
-    generarCuentaCobro({ arrendatario: a, inmueble: inmuebleDe(a.id), arrendador, pagos });
+  // Genera (o reutiliza, si ya existe para ese período) la cuenta de cobro:
+  // número consecutivo propio y saldo anterior = todo lo facturado a este
+  // arrendatario menos todo lo que ha pagado, antes de sumar el cobro nuevo.
+  const generarCuenta = async (a) => {
+    const inmueble = inmuebleDe(a.id);
+    const periodo = siguientePeriodo(inmueble, pagos);
+    const valor = inmueble?.valorCanonBase || 0;
+
+    let cuenta = cuentasCobro.find((c) => c.arrendatarioId === a.id && c.periodoInicio === periodo.inicio && c.periodoFin === periodo.fin);
+    if (!cuenta) {
+      const facturadoHistorico = cuentasCobro.filter((c) => c.arrendatarioId === a.id).reduce((s, c) => s + c.valor, 0);
+      const pagadoHistorico = pagos.filter((p) => p.arrendatarioId === a.id).reduce((s, p) => s + (p.valor || 0), 0);
+      const saldoAnterior = facturadoHistorico - pagadoHistorico;
+      const numero = Math.max(0, ...cuentasCobro.map((c) => c.numero)) + 1;
+      cuenta = await onAgregarCuentaCobro({
+        numero, arrendatarioId: a.id, inmuebleId: inmueble?.id || "",
+        periodoInicio: periodo.inicio, periodoFin: periodo.fin,
+        valor, saldoAnterior, fechaEmision: today(), fechaVencimiento: periodo.fin,
+      });
+    }
+    if (!cuenta) return;
+
+    generarCuentaCobro({
+      numero: cuenta.numero, arrendatario: a, inmueble, arrendador,
+      periodo: { inicio: cuenta.periodoInicio, fin: cuenta.periodoFin },
+      valor: cuenta.valor, saldoAnterior: cuenta.saldoAnterior, fechaEmision: cuenta.fechaEmision,
+    });
   };
 
   const abrirNuevo = () => { setEditItem(null); setForm(ARRENDATARIO_INIT); setShowForm(true); };
@@ -1035,6 +1060,7 @@ const ArriendosPage = () => {
   const [arrendatarios, setArrendatarios] = useState([]);
   const [pagos, setPagos] = useState([]);
   const [arrendador, setArrendador] = useState(null);
+  const [cuentasCobro, setCuentasCobro] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1043,11 +1069,13 @@ const ArriendosPage = () => {
       supabase.from("arrendatarios").select("*").order("nombre"),
       supabase.from("pagos").select("*").order("periodo_inicio", { ascending: false }),
       supabase.from("arrendador_config").select("*").limit(1).maybeSingle(),
-    ]).then(([{ data: inm }, { data: arr }, { data: pgs }, { data: arrd }]) => {
+      supabase.from("cuentas_cobro").select("*").order("numero", { ascending: false }),
+    ]).then(([{ data: inm }, { data: arr }, { data: pgs }, { data: arrd }, { data: cc }]) => {
       if (inm) setInmuebles(inm.map(mapInmueble));
       if (arr) setArrendatarios(arr.map(mapArrendatario));
       if (pgs) setPagos(pgs.map(mapPago));
       if (arrd) setArrendador(mapArrendador(arrd));
+      if (cc) setCuentasCobro(cc.map(mapCuentaCobro));
       setLoading(false);
     });
 
@@ -1070,6 +1098,11 @@ const ArriendosPage = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "arrendador_config" }, (payload) => {
         if (payload.eventType === "DELETE") setArrendador(null);
         else setArrendador(mapArrendador(payload.new));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "cuentas_cobro" }, (payload) => {
+        if (payload.eventType === "INSERT") setCuentasCobro((p) => p.some((x) => x.id === payload.new.id) ? p : [mapCuentaCobro(payload.new), ...p]);
+        if (payload.eventType === "UPDATE") setCuentasCobro((p) => p.map((x) => x.id === payload.new.id ? mapCuentaCobro(payload.new) : x));
+        if (payload.eventType === "DELETE") setCuentasCobro((p) => p.filter((x) => x.id !== payload.old.id));
       })
       .subscribe();
 
@@ -1164,6 +1197,15 @@ const ArriendosPage = () => {
     }
   };
 
+  const addCuentaCobro = async (f) => {
+    const { data, error } = await supabase.from("cuentas_cobro").insert([toCuentaCobroRow(f)]).select().single();
+    if (error) { console.error("addCuentaCobro error:", error); return null; }
+    if (!data) return null;
+    const cuenta = mapCuentaCobro(data);
+    setCuentasCobro((p) => [cuenta, ...p]);
+    return cuenta;
+  };
+
   if (loading) return <div style={{ padding: 40, color: "#6b87b0", fontSize: 13 }}>Cargando…</div>;
 
   return (
@@ -1194,7 +1236,7 @@ const ArriendosPage = () => {
 
       {tab === "dashboard" && <DashboardTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
-      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendador={arrendador} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} />}
+      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendador={arrendador} cuentasCobro={cuentasCobro} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} onAgregarCuentaCobro={addCuentaCobro} />}
       {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendador={arrendador} onAdd={addPago} onEdit={editPago} onDelete={deletePago} onAsignarNumero={asignarNumeroComprobante} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendador" && <ArrendadorTab key={arrendador?.id || "nuevo"} arrendador={arrendador} onSave={saveArrendador} />}
