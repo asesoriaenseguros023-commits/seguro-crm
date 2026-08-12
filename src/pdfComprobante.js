@@ -9,6 +9,12 @@ const fmtFecha = (s) => {
   return `${d}/${m}/${y}`;
 };
 
+const fmtFechaCorta = (s) => {
+  if (!s) return "—";
+  const [y, m, d] = s.split("-");
+  return `${d}/${m}/${y.slice(2)}`;
+};
+
 const fmtPeriodo = (inicio, fin) => {
   if (!inicio || !fin) return "—";
   const [, mi, di] = inicio.split("-");
@@ -149,7 +155,7 @@ export function generarComprobante({ pago, inmueble, arrendatario, arrendador, n
   const notas = [];
   const atraso = diasAtraso(pago);
   if (atraso > 0 && inmueble?.diaVencimientoPago) {
-    notas.push(`Pago recibido el ${fmtFecha(pago.fechaPago)}, ${atraso} dias despues del vencimiento (dia ${inmueble.diaVencimientoPago} c/mes). Se agradece cumplir el plazo en los proximos periodos.`);
+    notas.push(`Pago recibido el ${fmtFechaCorta(pago.fechaPago)}, ${atraso} dias despues del vencimiento (dia ${inmueble.diaVencimientoPago} c/mes). Se agradece cumplir el plazo en los proximos periodos.`);
   }
   if (!arrendador?.responsableIva) {
     notas.push("Arrendador persona natural no responsable de IVA (Art. 437, Par. 3, Estatuto Tributario).");
