@@ -817,41 +817,78 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
 };
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
-const StatCard = ({ label, value, color }) => (
+const StatCard = ({ label, value, color, sub }) => (
   <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)" }}>
     <div style={{ fontSize: 11, color: "#9aa8c7", marginBottom: 4 }}>{label}</div>
     <div style={{ fontSize: 18, fontWeight: 700, color: color || BLUE.text }}>{value}</div>
+    {sub && <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 3 }}>{sub}</div>}
   </div>
 );
+
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const toISODash = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const ESTADO_MES_INFO = {
+  a_tiempo: { label: "Pagó a tiempo", color: "#16a34a" },
+  tarde: { label: "Pagó tarde", color: "#d97706" },
+  no_pagado: { label: "No ha pagado", color: "#dc2626" },
+  no_vence: { label: "Aún no vence", color: "#9aa8c7" },
+};
+
+// Estado del inmueble frente a SU vencimiento dentro del mes en curso (no el
+// ciclo de mora general, que puede venir de meses atrás): a tiempo, tarde,
+// sin pagar, o el vencimiento todavía no llega este mes.
+function estadoMesActual(inmueble, pagos, hoy) {
+  if (!inmueble.arrendatarioId || !inmueble.diaVencimientoPago) return null;
+  const anio = hoy.getFullYear(), mes = hoy.getMonth();
+  const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+  const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
+  const vencimiento = new Date(anio, mes, diaVence);
+  const vencimientoISO = toISODash(vencimiento);
+
+  const pagoDelMes = pagos.find((p) => p.inmuebleId === inmueble.id && p.periodoFin === vencimientoISO);
+
+  if (vencimiento > hoy) return { tipo: "no_vence", vencimiento };
+  if (!pagoDelMes) return { tipo: "no_pagado", vencimiento };
+  if (pagoDelMes.fechaPago <= pagoDelMes.periodoFin) return { tipo: "a_tiempo", vencimiento, pago: pagoDelMes };
+  return { tipo: "tarde", vencimiento, pago: pagoDelMes };
+}
 
 const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
   const isMobile = useIsMobile();
   const [filtroInmueble, setFiltroInmueble] = useState("");
   const [filtroArrendatario, setFiltroArrendatario] = useState("");
 
-  const nombreInmueble = (id) => inmuebles.find((i) => i.id === id)?.nombre || "—";
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
 
-  const hoy = new Date();
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const inicioMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-01`;
-  const inicioAnio = `${hoy.getFullYear()}-01-01`;
+  const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  const inicioMesAnterior = toISODash(mesAnterior);
+  const finMesAnterior = toISODash(new Date(hoy.getFullYear(), hoy.getMonth(), 0));
 
   const inmueblesActivos = inmuebles.filter((i) => i.activo);
   const canonMensual = inmueblesActivos.reduce((s, i) => s + (i.valorCanonBase || 0), 0);
   const recaudadoMes = pagos.filter((p) => p.fechaPago >= inicioMes).reduce((s, p) => s + (p.valor || 0), 0);
-  const recaudadoAnio = pagos.filter((p) => p.fechaPago >= inicioAnio).reduce((s, p) => s + (p.valor || 0), 0);
+  const recaudadoMesAnterior = pagos.filter((p) => p.fechaPago >= inicioMesAnterior && p.fechaPago <= finMesAnterior).reduce((s, p) => s + (p.valor || 0), 0);
+  const variacionMes = recaudadoMesAnterior > 0 ? Math.round(((recaudadoMes - recaudadoMesAnterior) / recaudadoMesAnterior) * 100) : null;
 
-  const estados = inmueblesActivos.filter((i) => i.arrendatarioId).map((i) => calcularEstadoPago(i, pagos));
-  const enMora = estados.filter((e) => e?.tipo === "mora");
-  const proximos = estados.filter((e) => e?.tipo === "proximo");
-  const alDia = estados.length - enMora.length - proximos.length;
-  const carteraMora = enMora.reduce((s, e) => s + (e.valorTotal || 0), 0);
+  const estadosCiclo = inmueblesActivos.filter((i) => i.arrendatarioId).map((i) => ({ inmueble: i, estado: calcularEstadoPago(i, pagos) }));
+  const carteraMora = estadosCiclo.filter((x) => x.estado?.tipo === "mora").reduce((s, x) => s + (x.estado.valorTotal || 0), 0);
+
+  const estadosMes = inmueblesActivos
+    .map((i) => ({ inmueble: i, estado: estadoMesActual(i, pagos, hoy) }))
+    .filter((x) => x.estado);
+  const conteoMes = { a_tiempo: 0, tarde: 0, no_pagado: 0, no_vence: 0 };
+  estadosMes.forEach((x) => conteoMes[x.estado.tipo]++);
+  const ordenUrgencia = { no_pagado: 0, tarde: 1, a_tiempo: 2, no_vence: 3 };
+  const estadosMesOrdenados = [...estadosMes].sort((a, b) => ordenUrgencia[a.estado.tipo] - ordenUrgencia[b.estado.tipo]);
 
   // El filtro de arrendatario ancla también su inmueble actual, para poder
   // mostrar el estado (mora/próximo/al día) igual que si filtraras por inmueble.
   const inmuebleDelArrendatario = filtroArrendatario ? inmuebles.find((i) => i.arrendatarioId === filtroArrendatario) : null;
   const inmuebleParaEstado = filtroInmueble ? inmuebles.find((i) => i.id === filtroInmueble) : inmuebleDelArrendatario;
-  const estadoFiltro = inmuebleParaEstado ? calcularEstadoPago(inmuebleParaEstado, pagos) : null;
+  const estadoFiltroCiclo = inmuebleParaEstado ? calcularEstadoPago(inmuebleParaEstado, pagos) : null;
 
   const pagosFiltrados = pagos
     .filter((p) => (!filtroInmueble || p.inmuebleId === filtroInmueble) && (!filtroArrendatario || p.arrendatarioId === filtroArrendatario))
@@ -870,16 +907,74 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 22 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 24 }}>
         <StatCard label="Canon mensual esperado" value={fmt(canonMensual)} />
-        <StatCard label="Recaudado este mes" value={fmt(recaudadoMes)} />
-        <StatCard label="Recaudado este año" value={fmt(recaudadoAnio)} />
-        <StatCard label="Al día" value={alDia} color="#16a34a" />
-        <StatCard label="En mora" value={enMora.length} color="#dc2626" />
-        <StatCard label="Próximos a vencer" value={proximos.length} color="#f59e0b" />
-        <StatCard label="Cartera en mora" value={fmt(carteraMora)} color={carteraMora > 0 ? "#dc2626" : undefined} />
+        <StatCard
+          label="Recaudado este mes"
+          value={fmt(recaudadoMes)}
+          color={variacionMes === null ? undefined : variacionMes >= 0 ? "#16a34a" : "#dc2626"}
+          sub={variacionMes === null ? "sin dato del mes anterior" : `${variacionMes >= 0 ? "↑" : "↓"} ${Math.abs(variacionMes)}% vs. mes anterior`}
+        />
+        <StatCard label="Cartera en mora" value={fmt(carteraMora)} color={carteraMora > 0 ? "#dc2626" : "#16a34a"} sub="acumulado, ciclos vencidos" />
       </div>
 
+      <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 4 }}>
+        Este mes de {MESES[hoy.getMonth()]}
+      </div>
+      <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 10 }}>
+        Estado de cada inmueble frente a su día de vencimiento de {MESES[hoy.getMonth()]}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
+        {Object.entries(ESTADO_MES_INFO).map(([tipo, info]) => (
+          <StatCard key={tipo} label={info.label} value={conteoMes[tipo]} color={info.color} />
+        ))}
+      </div>
+
+      {isMobile ? (
+        <div style={{ marginBottom: 24 }}>
+          {estadosMesOrdenados.map(({ inmueble, estado }) => (
+            <div key={inmueble.id} style={{ ...cardS, borderLeft: `3px solid ${ESTADO_MES_INFO[estado.tipo].color}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{inmueble.nombre}</div>
+                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
+                </div>
+                <span style={S.chip(ESTADO_MES_INFO[estado.tipo].color)}>{ESTADO_MES_INFO[estado.tipo].label}</span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Vence este mes</span>
+                <span style={{ fontSize: 12.5 }}>{fmtDate(toISODash(estado.vencimiento))}</span>
+              </div>
+              {estado.pago && (
+                <div style={cardRowS}>
+                  <span style={cardLabelS}>Fecha de pago</span>
+                  <span style={{ fontSize: 12.5 }}>{fmtDate(estado.pago.fechaPago)}</span>
+                </div>
+              )}
+            </div>
+          ))}
+          {estadosMesOrdenados.length === 0 && <div style={{ ...cardS, color: "#aaa", fontSize: 13 }}>No hay inmuebles activos con arrendatario.</div>}
+        </div>
+      ) : (
+        <div style={{ ...S.tableWrap, marginBottom: 24, overflowX: "auto" }}>
+          <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", minWidth: 700 }}>
+            <div>Inmueble</div><div>Arrendatario</div><div>Vence este mes</div><div>Estado</div><div>Fecha de pago</div>
+          </div>
+          {estadosMesOrdenados.map(({ inmueble, estado }) => (
+            <div key={inmueble.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", minWidth: 700 }}>
+              <div style={{ fontWeight: 600, color: BLUE.text }}>{inmueble.nombre}</div>
+              <div>{nombreArr(inmueble.arrendatarioId)}</div>
+              <div style={{ fontSize: 12.5 }}>{fmtDate(toISODash(estado.vencimiento))}</div>
+              <div><span style={S.chip(ESTADO_MES_INFO[estado.tipo].color)}>{ESTADO_MES_INFO[estado.tipo].label}</span></div>
+              <div style={{ fontSize: 12.5 }}>{estado.pago ? fmtDate(estado.pago.fechaPago) : "—"}</div>
+            </div>
+          ))}
+          {estadosMesOrdenados.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>No hay inmuebles activos con arrendatario.</div>}
+        </div>
+      )}
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 10 }}>Detalle por inmueble o arrendatario</div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <select style={{ ...S.select, maxWidth: 240 }} value={filtroInmueble} onChange={(e) => { setFiltroInmueble(e.target.value); setFiltroArrendatario(""); }}>
           <option value="">Filtrar por inmueble…</option>
@@ -895,36 +990,27 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
       </div>
 
       {hayFiltro && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
-          <StatCard label="Total recaudado" value={fmt(totalFiltrado)} />
-          <StatCard label="Pagos registrados" value={pagosFiltrados.length} />
-          <StatCard label="Promedio por pago" value={fmt(promedioFiltrado)} />
-          {estadoFiltro ? (
-            <StatCard
-              label="Estado actual"
-              value={estadoFiltro.tipo === "mora" ? `En mora (${estadoFiltro.dias} d)` : `Vence en ${estadoFiltro.dias} d`}
-              color={estadoFiltro.tipo === "mora" ? "#dc2626" : "#f59e0b"}
-            />
-          ) : (
-            <StatCard label="Estado actual" value="Al día" color="#16a34a" />
-          )}
-        </div>
-      )}
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <StatCard label="Total recaudado" value={fmt(totalFiltrado)} />
+            <StatCard label="Pagos registrados" value={pagosFiltrados.length} />
+            <StatCard label="Promedio por pago" value={fmt(promedioFiltrado)} />
+            {estadoFiltroCiclo ? (
+              <StatCard
+                label="Estado actual"
+                value={estadoFiltroCiclo.tipo === "mora" ? `En mora (${estadoFiltroCiclo.dias} d)` : `Vence en ${estadoFiltroCiclo.dias} d`}
+                color={estadoFiltroCiclo.tipo === "mora" ? "#dc2626" : "#f59e0b"}
+              />
+            ) : (
+              <StatCard label="Estado actual" value="Al día" color="#16a34a" />
+            )}
+          </div>
 
-      {isMobile ? (
-        <div>
           {pagosFiltrados.slice(0, LIMITE).map((p) => (
             <div key={p.id} style={cardS}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{nombreInmueble(p.inmuebleId)}</div>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(p.arrendatarioId)}</div>
-                </div>
-                <div style={{ fontWeight: 700, color: BLUE.primary, fontSize: 15 }}>{fmt(p.valor)}</div>
-              </div>
               <div style={cardRowS}>
                 <span style={cardLabelS}>Fecha de pago</span>
-                <span style={{ fontSize: 12.5 }}>{fmtDate(p.fechaPago)}</span>
+                <span style={{ fontWeight: 700, color: BLUE.primary }}>{fmt(p.valor)} · {fmtDate(p.fechaPago)}</span>
               </div>
               <div style={cardRowS}>
                 <span style={cardLabelS}>Período</span>
@@ -933,26 +1019,10 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
             </div>
           ))}
           {pagosFiltrados.length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay pagos para este filtro.</div>}
-        </div>
-      ) : (
-        <div style={{ ...S.tableWrap, overflowX: "auto" }}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 1fr 0.9fr 1.2fr 0.9fr", minWidth: 700 }}>
-            <div>Inmueble</div><div>Arrendatario</div><div>Fecha de pago</div><div>Período</div><div>Valor</div>
-          </div>
-          {pagosFiltrados.slice(0, LIMITE).map((p) => (
-            <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 1fr 0.9fr 1.2fr 0.9fr", minWidth: 700 }}>
-              <div style={{ fontWeight: 600, color: BLUE.text }}>{nombreInmueble(p.inmuebleId)}</div>
-              <div>{nombreArr(p.arrendatarioId)}</div>
-              <div style={{ fontSize: 12.5 }}>{fmtDate(p.fechaPago)}</div>
-              <div style={{ fontSize: 12.5 }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</div>
-              <div>{fmt(p.valor)}</div>
-            </div>
-          ))}
-          {pagosFiltrados.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>No hay pagos para este filtro.</div>}
-        </div>
-      )}
-      {pagosFiltrados.length > LIMITE && (
-        <div style={{ fontSize: 12, color: "#999", marginTop: 8 }}>Mostrando los {LIMITE} más recientes de {pagosFiltrados.length}.</div>
+          {pagosFiltrados.length > LIMITE && (
+            <div style={{ fontSize: 12, color: "#999", marginTop: 8 }}>Mostrando los {LIMITE} más recientes de {pagosFiltrados.length}.</div>
+          )}
+        </>
       )}
     </div>
   );
