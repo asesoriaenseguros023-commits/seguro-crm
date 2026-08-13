@@ -147,6 +147,7 @@ export const mapInmueble = (r) => ({
   diaVencimientoPago: r.dia_vencimiento_pago || 1,
   activo: r.activo !== false,
   arrendatarioId: r.arrendatario_id || "",
+  arrendadorId: r.arrendador_id || "",
 });
 
 export const toInmuebleRow = (f) => ({
@@ -156,6 +157,7 @@ export const toInmuebleRow = (f) => ({
   dia_vencimiento_pago: f.diaVencimientoPago,
   activo: f.activo !== false,
   arrendatario_id: f.arrendatarioId || null,
+  arrendador_id: f.arrendadorId || null,
 });
 
 export const mapArrendatario = (r) => ({
