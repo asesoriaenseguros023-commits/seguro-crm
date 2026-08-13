@@ -16,7 +16,7 @@ const TABS = [
   { id: "movimientos", label: "Movimientos", proximamente: true },
 ];
 
-const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "" };
+const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "", fechaInicioArriendo: "" };
 const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "", activo: true };
 const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", valorAdministracion: "", metodo: "efectivo", estado: "pagado" };
 const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "", cuentaBancaria: "", responsableIva: false };
@@ -52,12 +52,26 @@ function calcularEstadoPago(inmueble, pagos) {
     // cobertura del pago más reciente (no un día fijo del calendario).
     ultimoPago = pagosInmueble.reduce((max, p) => (p.periodoFin > max.periodoFin ? p : max), pagosInmueble[0]);
     fechaVence = new Date(ultimoPago.periodoFin + "T00:00:00");
+  } else if (inmueble.fechaInicioArriendo) {
+    // Nunca ha pagado pero sabemos desde cuándo arrienda: el primer
+    // vencimiento es un mes después de esa fecha (mismo criterio que
+    // calcularEstadoCuentaCobro). Sin esto, un arrendatario recién llegado
+    // se marcaba como atrasado apenas pasaba el día de pago del mes en curso.
+    fechaVence = new Date(inmueble.fechaInicioArriendo + "T00:00:00");
+    fechaVence.setDate(fechaVence.getDate() - 1);
+    fechaVence.setMonth(fechaVence.getMonth() + 1);
   } else {
-    // Nunca ha pagado: usa el día de pago del inmueble sobre el mes en curso.
+    // Sin fecha de inicio y sin pagos: no hay forma de saber desde cuándo
+    // debe. Usa el día de pago del mes en curso, pero nunca uno que ya
+    // pasó, para no marcar como atrasado un arriendo que quizás ni ha
+    // empezado.
     const anio = hoy.getFullYear(), mes = hoy.getMonth();
-    const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
-    const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
+    const diaVence = Math.min(inmueble.diaVencimientoPago, new Date(anio, mes + 1, 0).getDate());
     fechaVence = new Date(anio, mes, diaVence);
+    if (fechaVence < hoy) {
+      const diaVenceSig = Math.min(inmueble.diaVencimientoPago, new Date(anio, mes + 2, 0).getDate());
+      fechaVence = new Date(anio, mes + 1, diaVenceSig);
+    }
   }
 
   const diasDiff = Math.round((fechaVence - hoy) / 86400000);
@@ -85,7 +99,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
   const abrirNuevo = () => { setEditItem(null); setForm(INMUEBLE_INIT); setShowForm(true); };
   const abrirEditar = (i) => {
     setEditItem(i);
-    setForm({ nombre: i.nombre, direccion: i.direccion, valorCanonBase: i.valorCanonBase, diaVencimientoPago: i.diaVencimientoPago, activo: i.activo, arrendatarioId: i.arrendatarioId || "", arrendadorId: i.arrendadorId || "", tieneAdministracion: i.tieneAdministracion, valorAdministracion: i.valorAdministracion || "" });
+    setForm({ nombre: i.nombre, direccion: i.direccion, valorCanonBase: i.valorCanonBase, diaVencimientoPago: i.diaVencimientoPago, activo: i.activo, arrendatarioId: i.arrendatarioId || "", arrendadorId: i.arrendadorId || "", tieneAdministracion: i.tieneAdministracion, valorAdministracion: i.valorAdministracion || "", fechaInicioArriendo: i.fechaInicioArriendo || "" });
     setShowForm(true);
   };
 
@@ -207,6 +221,13 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
               {arrendatarios.filter((a) => a.activo).map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
           </div>
+          {form.arrendatarioId && (
+            <div style={S.formGroup}>
+              <label style={S.label}>Fecha de inicio del arriendo</label>
+              <input style={S.input} type="date" value={form.fechaInicioArriendo} onChange={(e) => set("fechaInicioArriendo", e.target.value)} />
+              <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 4 }}>Evita que se marque como atrasado un arrendatario que apenas va a hacer su primer pago.</div>
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={form.activo} onChange={(e) => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Inmueble activo</span>

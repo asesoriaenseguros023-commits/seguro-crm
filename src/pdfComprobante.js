@@ -220,14 +220,25 @@ export function calcularEstadoCuentaCobro(inmueble, arrendatarioId, pagos, hoy =
   let cursorFin;
   if (pagosArr.length > 0) {
     cursorFin = pagosArr.reduce((max, p) => (p.periodoFin > max ? p.periodoFin : max), pagosArr[0].periodoFin);
+  } else if (inmueble.fechaInicioArriendo) {
+    // Nunca ha pagado pero sabemos desde cuándo arrienda: el primer período
+    // arranca ahí. Sin esto se asumía "el mes en curso", lo que marcaba
+    // como atrasado a un arrendatario que apenas va a hacer su primer pago.
+    const diaAntes = new Date(inmueble.fechaInicioArriendo + "T00:00:00");
+    diaAntes.setDate(diaAntes.getDate() - 1);
+    cursorFin = toISO(diaAntes);
   } else {
-    // Nunca ha pagado: arranca en el vencimiento del mes en curso, mismo
-    // criterio que calcularEstadoPago. No se listan atrasos en este caso
-    // porque no hay fecha de inicio de contrato guardada.
+    // Sin fecha de inicio y sin pagos: no hay forma de saber desde cuándo
+    // debe. Arranca en el día de pago del mes en curso, pero nunca uno que
+    // ya pasó, para no inventar un atraso de un arriendo que quizás ni ha
+    // empezado.
     const anio = hoy.getFullYear(), mes = hoy.getMonth();
-    const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
-    const diaVence = Math.min(inmueble.diaVencimientoPago, ultimoDiaMes);
-    const finMes = new Date(anio, mes, diaVence);
+    const diaVence = Math.min(inmueble.diaVencimientoPago, new Date(anio, mes + 1, 0).getDate());
+    let finMes = new Date(anio, mes, diaVence);
+    if (finMes <= hoy) {
+      const diaVenceSig = Math.min(inmueble.diaVencimientoPago, new Date(anio, mes + 2, 0).getDate());
+      finMes = new Date(anio, mes + 1, diaVenceSig);
+    }
     cursorFin = toISO(new Date(finMes.getFullYear(), finMes.getMonth() - 1, finMes.getDate()));
   }
 

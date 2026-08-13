@@ -150,6 +150,7 @@ export const mapInmueble = (r) => ({
   arrendadorId: r.arrendador_id || "",
   tieneAdministracion: r.tiene_administracion === true,
   valorAdministracion: r.valor_administracion || 0,
+  fechaInicioArriendo: r.fecha_inicio_arriendo || "",
 });
 
 export const toInmuebleRow = (f) => ({
@@ -162,6 +163,7 @@ export const toInmuebleRow = (f) => ({
   arrendador_id: f.arrendadorId || null,
   tiene_administracion: f.tieneAdministracion === true,
   valor_administracion: Number(f.valorAdministracion) || 0,
+  fecha_inicio_arriendo: f.fechaInicioArriendo || null,
 });
 
 export const mapArrendatario = (r) => ({
