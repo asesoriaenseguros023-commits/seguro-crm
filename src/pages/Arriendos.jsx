@@ -17,7 +17,7 @@ const TABS = [
 ];
 
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "", fechaInicioArriendo: "" };
-const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "", activo: true };
+const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "", activo: true, fechaInicioArriendo: "" };
 const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", valorAdministracion: "", metodo: "efectivo", estado: "pagado" };
 const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "", cuentaBancaria: "", responsableIva: false };
 
@@ -106,7 +106,11 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
   const handleSave = async () => {
     if (!form.nombre.trim()) return;
     setSaving(true);
-    const payload = { ...form, valorCanonBase: Number(form.valorCanonBase) || 0, diaVencimientoPago: Number(form.diaVencimientoPago), valorAdministracion: Number(form.valorAdministracion) || 0 };
+    // La fecha de inicio del arriendo se edita desde Arrendatarios, no aquí.
+    // Si desde este formulario cambian a un arrendatario distinto del que
+    // ya tenía, no tiene sentido arrastrar la fecha del inquilino anterior.
+    const fechaInicioArriendo = (editItem && form.arrendatarioId === editItem.arrendatarioId) ? form.fechaInicioArriendo : "";
+    const payload = { ...form, fechaInicioArriendo, valorCanonBase: Number(form.valorCanonBase) || 0, diaVencimientoPago: Number(form.diaVencimientoPago), valorAdministracion: Number(form.valorAdministracion) || 0 };
     if (editItem) await onEdit({ id: editItem.id, ...payload });
     else await onAdd(payload);
     setSaving(false);
@@ -221,13 +225,6 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
               {arrendatarios.filter((a) => a.activo).map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
           </div>
-          {form.arrendatarioId && (
-            <div style={S.formGroup}>
-              <label style={S.label}>Fecha de inicio del arriendo</label>
-              <input style={S.input} type="date" value={form.fechaInicioArriendo} onChange={(e) => set("fechaInicioArriendo", e.target.value)} />
-              <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 4 }}>Evita que se marque como atrasado un arrendatario que apenas va a hacer su primer pago.</div>
-            </div>
-          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={form.activo} onChange={(e) => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Inmueble activo</span>
@@ -301,18 +298,19 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
   const abrirNuevo = () => { setEditItem(null); setForm(ARRENDATARIO_INIT); setShowForm(true); };
   const abrirEditar = (a) => {
     setEditItem(a);
-    setForm({ nombre: a.nombre, telefono: a.telefono, documento: a.documento, inmuebleId: inmuebleDe(a.id)?.id || "", activo: a.activo });
+    const inm = inmuebleDe(a.id);
+    setForm({ nombre: a.nombre, telefono: a.telefono, documento: a.documento, inmuebleId: inm?.id || "", activo: a.activo, fechaInicioArriendo: inm?.fechaInicioArriendo || "" });
     setShowForm(true);
   };
 
   const handleSave = async () => {
     if (!form.nombre.trim()) return;
     setSaving(true);
-    const { inmuebleId, ...datos } = form;
+    const { inmuebleId, fechaInicioArriendo, ...datos } = form;
     let id = editItem?.id;
     if (editItem) await onEdit({ id: editItem.id, ...datos });
     else id = await onAdd(datos);
-    if (id) await onAsignarInmueble(id, inmuebleId);
+    if (id) await onAsignarInmueble(id, inmuebleId, fechaInicioArriendo);
     setSaving(false);
     setShowForm(false);
     setEditItem(null);
@@ -430,6 +428,13 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
               {inmuebles.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
             </select>
           </div>
+          {form.inmuebleId && (
+            <div style={S.formGroup}>
+              <label style={S.label}>Fecha de inicio del arriendo</label>
+              <input style={S.input} type="date" value={form.fechaInicioArriendo} onChange={(e) => set("fechaInicioArriendo", e.target.value)} />
+              <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 4 }}>Evita que se marque como atrasado si todavía no hace su primer pago.</div>
+            </div>
+          )}
         </Modal>
       )}
 
@@ -1281,21 +1286,23 @@ const ArriendosPage = () => {
     return data?.id || null;
   };
 
-  // Liga/libera el inmueble de un arrendatario. Solo toca la columna
-  // arrendatario_id (no usa toInmuebleRow) para no arriesgar pisar el resto
-  // de campos del inmueble con un objeto a medias.
-  const setInmuebleArrendatario = async (inmuebleId, arrendatarioId) => {
-    const { error } = await supabase.from("inmuebles").update({ arrendatario_id: arrendatarioId || null }).eq("id", inmuebleId);
+  // Liga/libera el inmueble de un arrendatario. Solo toca arrendatario_id (y
+  // fecha_inicio_arriendo al ligar) — no usa toInmuebleRow, para no
+  // arriesgar pisar el resto de campos del inmueble con un objeto a medias.
+  const setInmuebleArrendatario = async (inmuebleId, arrendatarioId, fechaInicioArriendo) => {
+    const cambios = { arrendatario_id: arrendatarioId || null };
+    if (arrendatarioId) cambios.fecha_inicio_arriendo = fechaInicioArriendo || null;
+    const { error } = await supabase.from("inmuebles").update(cambios).eq("id", inmuebleId);
     if (error) { console.error("setInmuebleArrendatario error:", error); return; }
-    setInmuebles((p) => p.map((x) => x.id === inmuebleId ? { ...x, arrendatarioId: arrendatarioId || "" } : x));
+    setInmuebles((p) => p.map((x) => x.id === inmuebleId ? { ...x, arrendatarioId: arrendatarioId || "", ...(arrendatarioId ? { fechaInicioArriendo: fechaInicioArriendo || "" } : {}) } : x));
   };
 
-  const asignarInmuebleAArrendatario = async (arrendatarioId, nuevoInmuebleId) => {
+  const asignarInmuebleAArrendatario = async (arrendatarioId, nuevoInmuebleId, fechaInicioArriendo) => {
     const inmuebleAnterior = inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
     if (inmuebleAnterior && inmuebleAnterior.id !== nuevoInmuebleId) {
       await setInmuebleArrendatario(inmuebleAnterior.id, "");
     }
-    if (nuevoInmuebleId) await setInmuebleArrendatario(nuevoInmuebleId, arrendatarioId);
+    if (nuevoInmuebleId) await setInmuebleArrendatario(nuevoInmuebleId, arrendatarioId, fechaInicioArriendo);
   };
   const editArrendatario = async (f) => {
     const { error } = await supabase.from("arrendatarios").update({ nombre: f.nombre, telefono: f.telefono, documento: f.documento, activo: f.activo !== false }).eq("id", f.id);
