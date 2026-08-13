@@ -148,6 +148,8 @@ export const mapInmueble = (r) => ({
   activo: r.activo !== false,
   arrendatarioId: r.arrendatario_id || "",
   arrendadorId: r.arrendador_id || "",
+  tieneAdministracion: r.tiene_administracion === true,
+  valorAdministracion: r.valor_administracion || 0,
 });
 
 export const toInmuebleRow = (f) => ({
@@ -158,6 +160,8 @@ export const toInmuebleRow = (f) => ({
   activo: f.activo !== false,
   arrendatario_id: f.arrendatarioId || null,
   arrendador_id: f.arrendadorId || null,
+  tiene_administracion: f.tieneAdministracion === true,
+  valor_administracion: Number(f.valorAdministracion) || 0,
 });
 
 export const mapArrendatario = (r) => ({
@@ -176,6 +180,7 @@ export const mapPago = (r) => ({
   periodoInicio: r.periodo_inicio,
   periodoFin: r.periodo_fin,
   valor: r.valor || 0,
+  valorAdministracion: r.valor_administracion || 0,
   metodo: r.metodo || "efectivo",
   estado: r.estado || "pagado",
   numeroComprobante: r.numero_comprobante || "",
@@ -188,6 +193,7 @@ export const toPagoRow = (f) => ({
   periodo_inicio: f.periodoInicio,
   periodo_fin: f.periodoFin,
   valor: Number(f.valor) || 0,
+  valor_administracion: Number(f.valorAdministracion) || 0,
   metodo: f.metodo,
   estado: f.estado,
 });
@@ -219,6 +225,7 @@ export const mapCuentaCobro = (r) => ({
   periodoInicio: r.periodo_inicio,
   periodoFin: r.periodo_fin,
   valor: r.valor || 0,
+  valorAdministracion: r.valor_administracion || 0,
   saldoAnterior: r.saldo_anterior || 0,
   fechaEmision: r.fecha_emision,
   fechaVencimiento: r.fecha_vencimiento,
@@ -231,6 +238,7 @@ export const toCuentaCobroRow = (f) => ({
   periodo_inicio: f.periodoInicio,
   periodo_fin: f.periodoFin,
   valor: Number(f.valor) || 0,
+  valor_administracion: Number(f.valorAdministracion) || 0,
   saldo_anterior: Number(f.saldoAnterior) || 0,
   fecha_emision: f.fechaEmision,
   fecha_vencimiento: f.fechaVencimiento,

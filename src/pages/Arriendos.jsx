@@ -16,9 +16,9 @@ const TABS = [
   { id: "movimientos", label: "Movimientos", proximamente: true },
 ];
 
-const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "" };
+const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "" };
 const ARRENDATARIO_INIT = { nombre: "", telefono: "", documento: "", inmuebleId: "", activo: true };
-const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", metodo: "efectivo", estado: "pagado" };
+const PAGO_INIT = { inmuebleId: "", arrendatarioId: "", fechaPago: today(), periodoInicio: "", periodoFin: "", valor: "", valorAdministracion: "", metodo: "efectivo", estado: "pagado" };
 const ARRENDADOR_INIT = { nombre: "", documento: "", telefono: "", direccion: "", cuentaBancaria: "", responsableIva: false };
 
 // Las tablas de columnas fijas (grid) se aplastan en pantallas angostas —
@@ -85,14 +85,14 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
   const abrirNuevo = () => { setEditItem(null); setForm(INMUEBLE_INIT); setShowForm(true); };
   const abrirEditar = (i) => {
     setEditItem(i);
-    setForm({ nombre: i.nombre, direccion: i.direccion, valorCanonBase: i.valorCanonBase, diaVencimientoPago: i.diaVencimientoPago, activo: i.activo, arrendatarioId: i.arrendatarioId || "", arrendadorId: i.arrendadorId || "" });
+    setForm({ nombre: i.nombre, direccion: i.direccion, valorCanonBase: i.valorCanonBase, diaVencimientoPago: i.diaVencimientoPago, activo: i.activo, arrendatarioId: i.arrendatarioId || "", arrendadorId: i.arrendadorId || "", tieneAdministracion: i.tieneAdministracion, valorAdministracion: i.valorAdministracion || "" });
     setShowForm(true);
   };
 
   const handleSave = async () => {
     if (!form.nombre.trim()) return;
     setSaving(true);
-    const payload = { ...form, valorCanonBase: Number(form.valorCanonBase) || 0, diaVencimientoPago: Number(form.diaVencimientoPago) };
+    const payload = { ...form, valorCanonBase: Number(form.valorCanonBase) || 0, diaVencimientoPago: Number(form.diaVencimientoPago), valorAdministracion: Number(form.valorAdministracion) || 0 };
     if (editItem) await onEdit({ id: editItem.id, ...payload });
     else await onAdd(payload);
     setSaving(false);
@@ -129,6 +129,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.primary }}>{fmt(i.valorCanonBase)}</div>
                 <div style={{ fontSize: 11, color: "#6b87b0" }}>Paga el día {i.diaVencimientoPago}</div>
+                {i.tieneAdministracion && <div style={{ fontSize: 11, color: "#7c3aed" }}>+ administración {fmt(i.valorAdministracion)}</div>}
               </div>
               <span style={S.chip(i.activo ? "#16a34a" : "#6b7280")}>{i.activo ? "Activo" : "Inactivo"}</span>
             </div>
@@ -182,6 +183,16 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
               <input style={S.input} type="number" min={1} max={31} value={form.diaVencimientoPago} onChange={(e) => set("diaVencimientoPago", e.target.value)} />
             </div>
           </div>
+          <div style={{ ...S.formGroup, display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" id="tieneAdministracion" checked={form.tieneAdministracion} onChange={(e) => set("tieneAdministracion", e.target.checked)} />
+            <label htmlFor="tieneAdministracion" style={{ ...S.label, marginBottom: 0 }}>¿Tiene administración?</label>
+          </div>
+          {form.tieneAdministracion && (
+            <div style={S.formGroup}>
+              <label style={S.label}>Valor administración *</label>
+              <input style={S.input} type="number" value={form.valorAdministracion} onChange={(e) => set("valorAdministracion", e.target.value)} placeholder="0" />
+            </div>
+          )}
           <div style={S.formGroup}>
             <label style={S.label}>Arrendador</label>
             <select style={S.select} value={form.arrendadorId} onChange={(e) => set("arrendadorId", e.target.value)}>
@@ -243,7 +254,8 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
     // Siempre en vivo contra los pagos reales, para que la cuenta muestre la
     // deuda de hoy (no un saldo congelado de cuando se generó la primera vez).
     const { periodosAdeudados, periodoActual: periodo } = calcularEstadoCuentaCobro(inmueble, a.id, pagos);
-    const valor = inmueble?.valorCanonBase || 0;
+    const valorAdministracion = inmueble?.tieneAdministracion ? (inmueble.valorAdministracion || 0) : 0;
+    const valor = (inmueble?.valorCanonBase || 0) + valorAdministracion;
     const saldoAnterior = periodosAdeudados.reduce((s, p) => s + p.valor, 0);
 
     let cuenta = cuentasCobro.find((c) => c.arrendatarioId === a.id && c.periodoInicio === periodo.inicio && c.periodoFin === periodo.fin);
@@ -252,7 +264,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
       cuenta = await onAgregarCuentaCobro({
         numero, arrendatarioId: a.id, inmuebleId: inmueble?.id || "",
         periodoInicio: periodo.inicio, periodoFin: periodo.fin,
-        valor, saldoAnterior, fechaEmision: today(), fechaVencimiento: periodo.fin,
+        valor, valorAdministracion, saldoAnterior, fechaEmision: today(), fechaVencimiento: periodo.fin,
       });
     }
     if (!cuenta) return;
@@ -261,7 +273,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
       numero: cuenta.numero, arrendatario: a, inmueble,
       arrendador: arrendadores.find((ar) => ar.id === inmueble?.arrendadorId),
       periodo: { inicio: cuenta.periodoInicio, fin: cuenta.periodoFin },
-      valor: cuenta.valor, periodosAdeudados, fechaEmision: cuenta.fechaEmision,
+      valor: cuenta.valor, valorAdministracion: cuenta.valorAdministracion, periodosAdeudados, fechaEmision: cuenta.fechaEmision,
     });
   };
 
@@ -442,7 +454,7 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
     setEditItem(p);
     setForm({
       inmuebleId: p.inmuebleId, arrendatarioId: p.arrendatarioId, fechaPago: p.fechaPago,
-      periodoInicio: p.periodoInicio, periodoFin: p.periodoFin, valor: p.valor, metodo: p.metodo, estado: p.estado,
+      periodoInicio: p.periodoInicio, periodoFin: p.periodoFin, valor: p.valor, valorAdministracion: p.valorAdministracion || "", metodo: p.metodo, estado: p.estado,
     });
     setErrForm("");
     setShowForm(true);
@@ -465,7 +477,9 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
       periodoInicio = toISO(inicio);
       periodoFin = toISO(fin);
     }
-    setForm((f) => ({ ...f, arrendatarioId, inmuebleId: inm?.id || "", valor: inm?.valorCanonBase || "", periodoInicio, periodoFin }));
+    const admin = inm?.tieneAdministracion ? (inm.valorAdministracion || 0) : 0;
+    const valorSugerido = (inm?.valorCanonBase || 0) + admin;
+    setForm((f) => ({ ...f, arrendatarioId, inmuebleId: inm?.id || "", valor: valorSugerido || "", valorAdministracion: admin || "", periodoInicio, periodoFin }));
   };
 
   const handleSave = async () => {
@@ -643,6 +657,12 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
               </select>
             </div>
           </div>
+          {inmuebles.find((i) => i.id === form.inmuebleId)?.tieneAdministracion && (
+            <div style={S.formGroup}>
+              <label style={S.label}>De los cuales, administración</label>
+              <input style={S.input} type="number" value={form.valorAdministracion} onChange={(e) => set("valorAdministracion", e.target.value)} placeholder="0" />
+            </div>
+          )}
           <div style={S.formGroup}>
             <label style={S.label}>Estado</label>
             <select style={S.select} value={form.estado} onChange={(e) => set("estado", e.target.value)}>
@@ -1000,7 +1020,7 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
   const finMesAnterior = toISODash(new Date(hoy.getFullYear(), hoy.getMonth(), 0));
 
   const inmueblesActivos = inmuebles.filter((i) => i.activo);
-  const canonMensual = inmueblesActivos.reduce((s, i) => s + (i.valorCanonBase || 0), 0);
+  const canonMensual = inmueblesActivos.reduce((s, i) => s + (i.valorCanonBase || 0) + (i.tieneAdministracion ? (i.valorAdministracion || 0) : 0), 0);
   const recaudadoMes = pagos.filter((p) => p.fechaPago >= inicioMes).reduce((s, p) => s + (p.valor || 0), 0);
   const recaudadoMesAnterior = pagos.filter((p) => p.fechaPago >= inicioMesAnterior && p.fechaPago <= finMesAnterior).reduce((s, p) => s + (p.valor || 0), 0);
   const variacionMes = recaudadoMesAnterior > 0 ? Math.round(((recaudadoMes - recaudadoMesAnterior) / recaudadoMesAnterior) * 100) : null;

@@ -124,7 +124,12 @@ export function generarComprobante({ pago, inmueble, arrendatario, arrendador, n
   y += 5;
 
   // ── Detalle del pago ──────────────────────────────────────────────────
-  y += row(doc, marginX, y, contentW, "Concepto", "Canon arrendamiento");
+  if (pago.valorAdministracion) {
+    y += row(doc, marginX, y, contentW, "Canon arrendamiento", fmtMoney(pago.valor - pago.valorAdministracion));
+    y += row(doc, marginX, y, contentW, "Administracion", fmtMoney(pago.valorAdministracion));
+  } else {
+    y += row(doc, marginX, y, contentW, "Concepto", "Canon arrendamiento");
+  }
   y += row(doc, marginX, y, contentW, "Periodo", fmtPeriodo(pago.periodoInicio, pago.periodoFin));
   if (inmueble?.diaVencimientoPago) y += row(doc, marginX, y, contentW, "Vence el", `dia ${inmueble.diaVencimientoPago} c/mes`);
   y += row(doc, marginX, y, contentW, "Medio de pago", METODOS_LABEL[pago.metodo] || pago.metodo);
@@ -239,7 +244,8 @@ export function calcularEstadoCuentaCobro(inmueble, arrendatarioId, pagos, hoy =
 
     const cubierto = pagosArr.some((p) => p.periodoFin === finISO);
     if (!cubierto) {
-      periodosAdeudados.push({ periodoInicio: toISO(inicio), periodoFin: finISO, valor: inmueble.valorCanonBase || 0 });
+      const admin = inmueble.tieneAdministracion ? (inmueble.valorAdministracion || 0) : 0;
+      periodosAdeudados.push({ periodoInicio: toISO(inicio), periodoFin: finISO, valor: (inmueble.valorCanonBase || 0) + admin });
     }
     cursorFin = finISO;
   }
@@ -254,7 +260,7 @@ export function calcularEstadoCuentaCobro(inmueble, arrendatarioId, pagos, hoy =
 // `cuentas_cobro` antes de generar el PDF. `periodosAdeudados` (si hay) se
 // recalcula siempre en vivo contra los pagos reales, para que la cuenta
 // refleje la deuda real de hoy y no un saldo congelado.
-export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador, periodo, valor, periodosAdeudados, fechaEmision }) {
+export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador, periodo, valor, valorAdministracion, periodosAdeudados, fechaEmision }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const marginX = 15;
@@ -316,7 +322,13 @@ export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador,
     { content: fmtPeriodo(p.periodoInicio, p.periodoFin), styles: { textColor: rojo } },
     { content: fmtMoney(p.valor), styles: { textColor: rojo } },
   ]);
-  const filas = [...filasAtrasadas, ["Canon de arrendamiento", fmtPeriodo(periodo.inicio, periodo.fin), fmtMoney(valor)]];
+  const filaActual = valorAdministracion
+    ? [
+        ["Canon de arrendamiento", fmtPeriodo(periodo.inicio, periodo.fin), fmtMoney(valor - valorAdministracion)],
+        ["Administracion", fmtPeriodo(periodo.inicio, periodo.fin), fmtMoney(valorAdministracion)],
+      ]
+    : [["Canon de arrendamiento", fmtPeriodo(periodo.inicio, periodo.fin), fmtMoney(valor)]];
+  const filas = [...filasAtrasadas, ...filaActual];
 
   autoTable(doc, {
     startY: y,
