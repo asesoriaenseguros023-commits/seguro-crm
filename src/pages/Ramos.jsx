@@ -3,37 +3,44 @@ import { S, BLUE } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
+const claveDoc = (nombre, tp) => (tp === "Natural" ? nombre : `J_${nombre}`);
+
 const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggleDocumento, onAddDocumento, onDeleteDocumento }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
-  const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true, documentos: {} });
-  const [nuevoDoc, setNuevoDoc] = useState("");
-  const [tipoPersona, setTipoPersona] = useState("Natural");
+  const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const docsMostrar = documentosCatalogo.filter((d) => d.tipo_persona === tipoPersona);
-  const claveDoc = (nombre, tp) => (tp === "Natural" ? nombre : `J_${nombre}`);
-  const ramoTieneDoc = (r, doc) => !!r.documentos?.[claveDoc(doc.nombre, tipoPersona)];
-
-  const agregarDocGlobal = () => {
-    const d = nuevoDoc.trim();
-    if (!d) { setNuevoDoc(""); return; }
-    if (docsMostrar.some((x) => x.nombre.toLowerCase() === d.toLowerCase())) { setNuevoDoc(""); return; }
-    onAddDocumento(d, tipoPersona);
-    setNuevoDoc("");
-  };
+  // Panel de documentos: guarda solo el id, no una copia del ramo — así, al
+  // marcar/desmarcar, siempre lee el estado más reciente desde `ramos`.
+  const [docsPanelId, setDocsPanelId] = useState(null);
+  const [tipoPersona, setTipoPersona] = useState("Natural");
+  const [nuevoDoc, setNuevoDoc] = useState("");
+  const docsPanelRamo = ramos.find((r) => r.id === docsPanelId) || null;
 
   const handleSave = async () => {
     setSaving(true);
     if (editItem) { await onEdit({ ...editItem, ...form }); setEditItem(null); setShowForm(false); }
-    else { await onAdd(form); setShowForm(false); setForm({ nombre: "", descripcion: "", activo: true, documentos: {} }); }
+    else { await onAdd({ ...form, documentos: {} }); setShowForm(false); setForm({ nombre: "", descripcion: "", activo: true }); }
     setSaving(false);
   };
 
-  const thStyle = { padding: "11px 14px", textAlign: "center", fontWeight: 700, color: BLUE.primary, fontSize: 11.5, borderBottom: `1px solid ${BLUE.border}`, minWidth: 110, whiteSpace: "nowrap", letterSpacing: 0.3 };
-  const tdStyle = (idx) => ({ textAlign: "center", borderBottom: `1px solid ${BLUE.border}`, padding: "10px 8px", background: idx % 2 === 0 ? "#fff" : "#f8faff" });
+  const contarDocs = (r, tp) => {
+    const total = documentosCatalogo.filter((d) => d.tipo_persona === tp).length;
+    const marcados = documentosCatalogo.filter((d) => d.tipo_persona === tp && r.documentos?.[claveDoc(d.nombre, tp)]).length;
+    return `${marcados}/${total}`;
+  };
+
+  const agregarDocGlobal = () => {
+    const d = nuevoDoc.trim();
+    if (!d) return;
+    const yaExiste = documentosCatalogo.some((x) => x.tipo_persona === tipoPersona && x.nombre.toLowerCase() === d.toLowerCase());
+    if (!yaExiste) onAddDocumento(d, tipoPersona);
+    setNuevoDoc("");
+  };
+
   const btnTP = (tp) => ({
     padding: "7px 18px", borderRadius: 8,
     border: `1.5px solid ${tipoPersona === tp ? BLUE.primary : BLUE.border}`,
@@ -41,123 +48,132 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
     color: tipoPersona === tp ? "#fff" : BLUE.text,
     fontSize: 13, fontWeight: 600, cursor: "pointer",
   });
-  const cellBtnStyle = (activo) => ({
-    width: "100%", padding: "6px 0", border: "none", cursor: "pointer",
-    background: "transparent", borderRadius: 6,
-    color: activo ? "#16a34a" : "#d1d5db",
-    fontSize: activo ? 18 : 14, fontWeight: 700, lineHeight: 1,
-  });
+
+  const docsDelTipo = documentosCatalogo.filter((d) => d.tipo_persona === tipoPersona);
 
   return (
     <div>
       <div style={S.pageHeader}>
         <div>
           <div style={S.pageTitle}>Ramos de Seguros</div>
-          <div style={S.pageSub}>Haz clic en una celda de la tabla para marcar o quitar un documento</div>
+          <div style={S.pageSub}>{ramos.length} ramos · clic en "Documentos" para elegir qué exige cada uno</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            <input
-              style={{ ...S.input, width: 200, padding: "8px 12px", fontSize: 13 }}
-              value={nuevoDoc}
-              onChange={(e) => setNuevoDoc(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && agregarDocGlobal()}
-              placeholder={`+ Doc ${tipoPersona}…`}
-            />
-            <button style={S.btn("secondary")} onClick={agregarDocGlobal}>Agregar</button>
-          </div>
-          <button
-            style={S.btn("primary")}
-            onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", descripcion: "", activo: true, documentos: {} }); }}
+        <button
+          style={S.btn("primary")}
+          onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", descripcion: "", activo: true }); }}
+        >
+          <Icon name="plus" size={16} />Nuevo Ramo
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+        {ramos.map((r) => (
+          <div
+            key={r.id}
+            style={{
+              background: "#fff", borderRadius: 12, padding: 18,
+              boxShadow: "0 1px 6px rgba(26,86,219,0.08)",
+              border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}`,
+            }}
           >
-            <Icon name="plus" size={16} />Nuevo Ramo
-          </button>
-        </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text }}>{r.nombre}</div>
+              <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>
+                {r.activo !== false ? "Activo" : "Inactivo"}
+              </span>
+            </div>
+            {r.descripcion && <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 4 }}>{r.descripcion}</div>}
+            <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>
+              Documentos: {contarDocs(r, "Natural")} Natural · {contarDocs(r, "Jurídica")} Jurídica
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+              <button
+                style={{ ...S.btn("secondary"), flex: 1, justifyContent: "center" }}
+                onClick={() => { setDocsPanelId(r.id); setTipoPersona("Natural"); }}
+              >
+                <Icon name="document" size={14} />Documentos
+              </button>
+              <button
+                style={S.btn("ghost")} title="Editar"
+                onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false }); setShowForm(true); }}
+              >
+                <Icon name="edit" size={14} />
+              </button>
+              <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar" onClick={() => setDelItem(r)}>
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {ramos.length === 0 && (
+          <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>
+            No hay ramos. Agrega el primero.
+          </div>
+        )}
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#6b87b0", marginRight: 4 }}>Ver documentos para:</span>
-        <button style={btnTP("Natural")} onClick={() => setTipoPersona("Natural")}>Persona Natural</button>
-        <button style={btnTP("Jurídica")} onClick={() => setTipoPersona("Jurídica")}>Persona Jurídica</button>
-      </div>
+      {/* ─── Panel de documentos de un ramo ─── */}
+      {docsPanelRamo && (
+        <Modal
+          title={`Documentos — ${docsPanelRamo.nombre}`}
+          onClose={() => setDocsPanelId(null)}
+          footer={<button style={S.btn("secondary")} onClick={() => setDocsPanelId(null)}>Cerrar</button>}
+        >
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <button style={btnTP("Natural")} onClick={() => setTipoPersona("Natural")}>Persona Natural</button>
+            <button style={btnTP("Jurídica")} onClick={() => setTipoPersona("Jurídica")}>Persona Jurídica</button>
+          </div>
 
-      <div style={{ overflowX: "auto", marginBottom: 24 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: BLUE.light }}>
-              <th style={{ ...thStyle, minWidth: 80 }}>ACCIONES</th>
-              <th style={{ ...thStyle, textAlign: "left", minWidth: 180, position: "sticky", left: 0, background: BLUE.light, zIndex: 2 }}>RAMO</th>
-              {docsMostrar.map((doc) => (
-                <th key={doc.id} style={thStyle}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                    <span>{doc.nombre}</span>
-                    <button
-                      title="Eliminar documento del catálogo"
-                      onClick={() => onDeleteDocumento(doc.id)}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 13, lineHeight: 1, padding: "0 2px", fontWeight: 700 }}
-                    >
-                      x
-                    </button>
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {ramos.length === 0 && (
-              <tr>
-                <td colSpan={docsMostrar.length + 2} style={{ padding: 40, textAlign: "center", color: "#aaa" }}>
-                  No hay ramos. Agrega el primero.
-                </td>
-              </tr>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
+            {docsDelTipo.length === 0 && (
+              <div style={{ fontSize: 13, color: "#aaa", padding: "8px 0" }}>Sin documentos en el catálogo todavía.</div>
             )}
-            {ramos.map((r, idx) => (
-              <tr key={r.id}>
-                <td style={tdStyle(idx)}>
-                  <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                    <button
-                      style={S.btn("ghost")}
-                      title="Editar nombre / descripción"
-                      onClick={() => {
-                        setEditItem(r);
-                        setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false, documentos: { ...(r.documentos || {}) } });
-                        setShowForm(true);
-                      }}
-                    >
-                      <Icon name="edit" size={14} />
-                    </button>
-                    <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar" onClick={() => setDelItem(r)}>
-                      <Icon name="trash" size={14} />
-                    </button>
-                  </div>
-                </td>
-                <td style={{ ...tdStyle(idx), textAlign: "left", padding: "12px 16px", fontWeight: 600, color: BLUE.text, position: "sticky", left: 0, zIndex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {r.nombre}
-                    <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>
-                      {r.activo !== false ? "Activo" : "Inactivo"}
-                    </span>
-                  </div>
-                </td>
-                {docsMostrar.map((doc) => {
-                  const activo = ramoTieneDoc(r, doc);
-                  return (
-                    <td key={doc.id} style={tdStyle(idx)}>
-                      <button
-                        title={activo ? `Quitar ${doc.nombre}` : `Exigir ${doc.nombre}`}
-                        onClick={() => onToggleDocumento(r, claveDoc(doc.nombre, tipoPersona))}
-                        style={cellBtnStyle(activo)}
-                      >
-                        {activo ? "✓" : "—"}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            {docsDelTipo.map((doc) => {
+              const marcado = !!docsPanelRamo.documentos?.[claveDoc(doc.nombre, tipoPersona)];
+              return (
+                <div
+                  key={doc.id}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                    background: marcado ? "#f0fdf4" : BLUE.light,
+                    border: `1px solid ${marcado ? "#bbf7d0" : BLUE.border}`,
+                    borderRadius: 10, padding: "10px 14px", cursor: "pointer",
+                  }}
+                  onClick={() => onToggleDocumento(docsPanelRamo, claveDoc(doc.nombre, tipoPersona))}
+                >
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
+                    <input type="checkbox" readOnly checked={marcado} style={{ width: 17, height: 17, accentColor: "#16a34a" }} />
+                    <span style={{ fontSize: 13.5, fontWeight: marcado ? 600 : 400, color: marcado ? "#166534" : BLUE.text }}>{doc.nombre}</span>
+                  </label>
+                  <button
+                    title="Quitar del catálogo (afecta a todos los ramos)"
+                    onClick={(e) => { e.stopPropagation(); onDeleteDocumento(doc.id); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 13, fontWeight: 700, padding: 2 }}
+                  >
+                    x
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ borderTop: `1px solid ${BLUE.border}`, paddingTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: BLUE.primary, letterSpacing: 0.5, marginBottom: 8 }}>
+              AGREGAR DOCUMENTO NUEVO AL CATÁLOGO ({tipoPersona.toUpperCase()})
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                style={{ ...S.input, fontSize: 13 }}
+                value={nuevoDoc}
+                onChange={(e) => setNuevoDoc(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && agregarDocGlobal()}
+                placeholder={`Nuevo documento para ${tipoPersona}…`}
+              />
+              <button style={S.btn("secondary")} onClick={agregarDocGlobal}>Agregar</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {showForm && (
         <Modal
@@ -174,7 +190,7 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
         >
           <div style={S.formGroup}>
             <label style={S.label}>Nombre del Ramo *</label>
-            <input style={S.input} value={form.nombre} onChange={(e) => set("nombre", e.target.value)} placeholder="Ej. SOAT, Vida, Automóvil" />
+            <input style={S.input} value={form.nombre} onChange={(e) => set("nombre", e.target.value)} placeholder="Ej. SOAT, Vida, Automóvil" autoFocus />
           </div>
           <div style={S.formGroup}>
             <label style={S.label}>Descripción</label>
@@ -186,7 +202,7 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
           </div>
           {!editItem && (
             <p style={{ fontSize: 12, color: "#6b87b0", marginTop: 16 }}>
-              Los documentos que exige este ramo se marcan después, directo en la tabla.
+              Los documentos que exige este ramo se eligen después, desde el botón "Documentos".
             </p>
           )}
         </Modal>
