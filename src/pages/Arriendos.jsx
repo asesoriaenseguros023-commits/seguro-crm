@@ -457,6 +457,14 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
 };
 
 // ─── Pagos ────────────────────────────────────────────────────────────────
+// Helpers de fecha en hora local (nunca `new Date(isoString)` directo: en
+// UTC-5 eso corre la fecha un día para atrás al leer getMonth()/getDate()).
+const parseISO = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const sumarDias = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return toISO(d); };
+// Fin de un período que arranca en `iso` y dura exactamente un mes calendario.
+const finDeUnMes = (iso) => { const d = parseISO(iso); d.setMonth(d.getMonth() + 1); d.setDate(d.getDate() - 1); return toISO(d); };
+
 const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit, onDelete, onAsignarNumero }) => {
   const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
@@ -466,11 +474,16 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
   const [saving, setSaving] = useState(false);
   const [errForm, setErrForm] = useState("");
   const [ordenFecha, setOrdenFecha] = useState("desc");
+  const [filtroArrendatario, setFiltroArrendatario] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const pagosOrdenados = [...pagos].sort((a, b) =>
-    ordenFecha === "desc" ? b.fechaPago.localeCompare(a.fechaPago) : a.fechaPago.localeCompare(b.fechaPago)
-  );
+  const pagosOrdenados = [...pagos]
+    .filter((p) => !filtroArrendatario || p.arrendatarioId === filtroArrendatario)
+    .sort((a, b) =>
+      ordenFecha === "desc" ? b.fechaPago.localeCompare(a.fechaPago) : a.fechaPago.localeCompare(b.fechaPago)
+    );
+
+  const arrendatariosOrdenados = [...arrendatarios].sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   const nombreInmueble = (id) => inmuebles.find((i) => i.id === id)?.nombre || "—";
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
@@ -486,20 +499,28 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
     setShowForm(true);
   };
 
-  // Al elegir el arrendatario, busca el inmueble que tiene asignado hoy y
-  // precarga su canon, y sugiere el período del mes en curso según su día
-  // de pago (del día siguiente al vencimiento pasado hasta el vencimiento
-  // de este mes). Todo queda editable, incluido el monto.
+  // Al elegir el arrendatario: si ya tiene pagos registrados, sugiere el
+  // período siguiente al del último (el que cubre la fecha más reciente),
+  // sin importar el orden en que se hayan capturado. Si es su primer pago,
+  // usa el día de vencimiento del inmueble para armar el período del mes en
+  // curso, como antes. Todo queda editable, incluido el monto.
   const seleccionarArrendatario = (arrendatarioId) => {
     const inm = inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
+    const pagosArr = pagos.filter((p) => p.arrendatarioId === arrendatarioId);
+    const ultimoPago = pagosArr.length
+      ? pagosArr.reduce((mas, p) => (p.periodoFin > mas.periodoFin ? p : mas))
+      : null;
+
     let periodoInicio = "", periodoFin = "";
-    if (inm?.diaVencimientoPago) {
+    if (ultimoPago) {
+      periodoInicio = sumarDias(ultimoPago.periodoFin, 1);
+      periodoFin = finDeUnMes(periodoInicio);
+    } else if (inm?.diaVencimientoPago) {
       const hoy = new Date();
       const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
       const diaVence = Math.min(inm.diaVencimientoPago, ultimoDiaMes);
       const fin = new Date(hoy.getFullYear(), hoy.getMonth(), diaVence);
       const inicio = new Date(fin.getFullYear(), fin.getMonth() - 1, fin.getDate() + 1);
-      const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       periodoInicio = toISO(inicio);
       periodoFin = toISO(fin);
     }
@@ -513,6 +534,13 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
     if (!form.inmuebleId) { setErrForm("Este arrendatario no tiene un inmueble asignado. Asígnalo primero en Arrendatarios."); return; }
     if (!form.periodoInicio || !form.periodoFin) { setErrForm("Elige la fecha de inicio y fin del período"); return; }
     if (form.periodoFin < form.periodoInicio) { setErrForm("La fecha fin no puede ser antes que la fecha inicio"); return; }
+    if (form.periodoFin < finDeUnMes(form.periodoInicio)) { setErrForm("El período no puede ser menor a un mes"); return; }
+    const seCruza = pagos.some((p) =>
+      p.arrendatarioId === form.arrendatarioId &&
+      (!editItem || p.id !== editItem.id) &&
+      form.periodoInicio <= p.periodoFin && p.periodoInicio <= form.periodoFin
+    );
+    if (seCruza) { setErrForm("Ese período se cruza con un pago que ya está registrado para este arrendatario"); return; }
     if (!form.valor) { setErrForm("Escribe el valor"); return; }
     setSaving(true);
     setErrForm("");
@@ -544,9 +572,11 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
       <div style={S.pageHeader}>
         <div>
           <div style={S.pageTitle}>Pagos</div>
-          <div style={S.pageSub}>{pagos.length} pagos registrados</div>
+          <div style={S.pageSub}>
+            {filtroArrendatario ? `${pagosOrdenados.length} de ${pagos.length} pagos` : `${pagos.length} pagos registrados`}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button style={S.btn("secondary")} onClick={() => setOrdenFecha((o) => (o === "desc" ? "asc" : "desc"))}>
             Fecha de pago {ordenFecha === "desc" ? "↓ recientes primero" : "↑ antiguos primero"}
           </button>
@@ -554,6 +584,17 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
             <Icon name="plus" size={16} />Registrar pago
           </button>
         </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#6b87b0" }}>Arrendatario:</span>
+        <select style={{ ...S.select, width: 220 }} value={filtroArrendatario} onChange={(e) => setFiltroArrendatario(e.target.value)}>
+          <option value="">Todos</option>
+          {arrendatariosOrdenados.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+        </select>
+        {filtroArrendatario && (
+          <button style={S.btn("ghost")} onClick={() => setFiltroArrendatario("")}>Quitar filtro</button>
+        )}
       </div>
 
       {isMobile ? (
@@ -586,8 +627,10 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
               </div>
             </div>
           ))}
-          {pagos.length === 0 && (
-            <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay pagos registrados todavía.</div>
+          {pagosOrdenados.length === 0 && (
+            <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>
+              {filtroArrendatario ? "Este arrendatario no tiene pagos registrados." : "No hay pagos registrados todavía."}
+            </div>
           )}
         </div>
       ) : (
@@ -611,8 +654,10 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
             </div>
           </div>
         ))}
-        {pagos.length === 0 && (
-          <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>No hay pagos registrados todavía.</div>
+        {pagosOrdenados.length === 0 && (
+          <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>
+            {filtroArrendatario ? "Este arrendatario no tiene pagos registrados." : "No hay pagos registrados todavía."}
+          </div>
         )}
       </div>
       )}
