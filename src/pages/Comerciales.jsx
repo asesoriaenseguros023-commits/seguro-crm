@@ -1,7 +1,15 @@
 import { useState, useEffect } from "react";
 import { S, BLUE } from "../constants.js";
+import { supabase } from "../supabase.js";
 
 const API = "/api/comerciales";
+
+// El endpoint ahora exige sesión de Admin — le mandamos el token de la
+// sesión activa de Supabase en cada llamada.
+const authHeaders = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+};
 
 const ComercialPage = ({ showConfirm }) => {
   const [agentes, setAgentes] = useState([]);
@@ -10,7 +18,7 @@ const ComercialPage = ({ showConfirm }) => {
   const [saving, setSaving] = useState(false);
 
   const fetchAgentes = async () => {
-    const res = await fetch(API);
+    const res = await fetch(API, { headers: await authHeaders() });
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   };
@@ -25,7 +33,7 @@ const ComercialPage = ({ showConfirm }) => {
     setSaving(true);
     const res = await fetch(API, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ nombre }),
     });
     const data = await res.json();
@@ -37,7 +45,7 @@ const ComercialPage = ({ showConfirm }) => {
   const remove = async (id, nombre) => {
     const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
-    await fetch(`${API}?id=${id}`, { method: "DELETE" });
+    await fetch(`${API}?id=${id}`, { method: "DELETE", headers: await authHeaders() });
     setAgentes(await fetchAgentes());
   };
 

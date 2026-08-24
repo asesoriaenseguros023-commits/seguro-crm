@@ -6,9 +6,11 @@ import Icon from "../components/Icon.jsx";
 
 const ReportesPage = ({ polizas }) => {
   const [fechaInicio, setFechaInicio] = useState(() => {
+    // Hora local, no toISOString() (UTC) — si no, entre 7pm y medianoche
+    // en Bogotá el rango por defecto queda un día adelantado.
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split("T")[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [fechaFin, setFechaFin] = useState(today());
   const [filtroAseg, setFiltroAseg] = useState("Todas");

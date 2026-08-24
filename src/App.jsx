@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { S, BLUE, ROL_ADMIN, ROL_AGENTE, SECCIONES, SUBTABS_CRM, SUBTABS_CONFIG } from "./constants.js";
+import { S, BLUE, ROL_AGENTE, SECCIONES, SUBTABS_CRM, SUBTABS_CONFIG } from "./constants.js";
 import { mapInteresado, mapCotizacion, mapPoliza, esAdmin, today } from "./helpers.js";
 import { FontLoader, LoadingScreen } from "./components/Modal.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
@@ -169,17 +169,19 @@ export default function App() {
         .maybeSingle();
       if (data) {
         setUserName(data.nombre);
-        setUserRol(data.rol || ROL_ADMIN);
+        setUserRol(data.rol || ROL_AGENTE);
         setAgenteActualId(data.id);
       } else {
-        // Fallback: si no encuentra el email, asumir Admin
-        setUserName("Administrador");
-        setUserRol(ROL_ADMIN);
+        // Fallback: si no encuentra el email en agentes, asumir el rol de
+        // MENOS privilegio (Agente), no Admin — un correo autenticado que
+        // no está en la tabla no debería heredar acceso total por defecto.
+        setUserName("Usuario");
+        setUserRol(ROL_AGENTE);
         setAgenteActualId(null);
       }
     } catch {
-      setUserName("Administrador");
-      setUserRol(ROL_ADMIN);
+      setUserName("Usuario");
+      setUserRol(ROL_AGENTE);
       setAgenteActualId(null);
     }
   };
@@ -391,7 +393,11 @@ export default function App() {
       const yaExiste = polizas.some((p) => p.cotizacionId === f.id);
       if (!yaExiste) {
         const vigenciaInicio = today();
-        const vigenciaFin = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split("T")[0]; })();
+        // Hora local, no toISOString() (UTC) — mismo motivo que today().
+        const vigenciaFin = (() => {
+          const d = new Date(); d.setFullYear(d.getFullYear() + 1);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        })();
         const { data: pol, error } = await supabase.from("polizas").insert([{
           cotizacion_id: f.id, cliente_nombre: f.clienteNombre, cliente_telefono: f.clienteTelefono,
           numero: f.numeroPolizaEmitida, ramo: f.ramo, aseguradora: f.aseguradoraEmitida,

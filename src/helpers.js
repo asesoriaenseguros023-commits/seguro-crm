@@ -23,7 +23,14 @@ export const estadoColor = (e) =>
 
 export const esAdmin = (rol) => rol === ROL_ADMIN;
 
-export const today = () => new Date().toISOString().split("T")[0];
+// Fecha de hoy en hora LOCAL, no UTC. toISOString() usa UTC — en Bogotá
+// (UTC-5), entre las 7pm y medianoche ya cae en el día siguiente, así que
+// cualquier fecha por defecto (registro, cotización, vigencia) quedaba
+// adelantada un día durante esas horas.
+export const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 // ─── MAPPERS ─────────────────────────────────────────────────────────────────
 export const mapCliente = (c) => ({
