@@ -3,67 +3,26 @@ import { S, BLUE } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
-const DOCS_NATURAL_DEFAULT = ["Cédula","SARLAFT","RUT","Contrato","Carta de Autorización"];
-const DOCS_JURIDICA_DEFAULT = ["Cámara de Comercio","RUT Empresa","SARLAFT","Estados Financieros","Cédula Rep. Legal","Contrato","Carta de Autorización"];
-const DOCS_KEY_NAT = "docs_natural_v2";
-const DOCS_KEY_JUR = "docs_juridica_v2";
-
-const initDocs = (key, defaults) => {
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored) return JSON.parse(stored);
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
-  } catch { return defaults; }
-};
-
-const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
+const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggleDocumento, onAddDocumento, onDeleteDocumento }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true, documentos: {} });
   const [nuevoDoc, setNuevoDoc] = useState("");
   const [tipoPersona, setTipoPersona] = useState("Natural");
-  const [docsNatural, setDocsNatural] = useState(() => initDocs(DOCS_KEY_NAT, DOCS_NATURAL_DEFAULT));
-  const [docsJuridica, setDocsJuridica] = useState(() => initDocs(DOCS_KEY_JUR, DOCS_JURIDICA_DEFAULT));
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const toggleDoc = (doc, tp) =>
-    setForm((f) => {
-      const key = tp === "Natural" ? doc : `J_${doc}`;
-      return { ...f, documentos: { ...f.documentos, [key]: !f.documentos[key] } };
-    });
-
-  const docsMostrar = tipoPersona === "Natural" ? docsNatural : docsJuridica;
+  const docsMostrar = documentosCatalogo.filter((d) => d.tipo_persona === tipoPersona);
+  const claveDoc = (nombre, tp) => (tp === "Natural" ? nombre : `J_${nombre}`);
+  const ramoTieneDoc = (r, doc) => !!r.documentos?.[claveDoc(doc.nombre, tipoPersona)];
 
   const agregarDocGlobal = () => {
     const d = nuevoDoc.trim();
     if (!d) { setNuevoDoc(""); return; }
-    if (tipoPersona === "Natural") {
-      if (docsNatural.includes(d)) { setNuevoDoc(""); return; }
-      const nuevos = [...docsNatural, d];
-      setDocsNatural(nuevos);
-      localStorage.setItem(DOCS_KEY_NAT, JSON.stringify(nuevos));
-    } else {
-      if (docsJuridica.includes(d)) { setNuevoDoc(""); return; }
-      const nuevos = [...docsJuridica, d];
-      setDocsJuridica(nuevos);
-      localStorage.setItem(DOCS_KEY_JUR, JSON.stringify(nuevos));
-    }
+    if (docsMostrar.some((x) => x.nombre.toLowerCase() === d.toLowerCase())) { setNuevoDoc(""); return; }
+    onAddDocumento(d, tipoPersona);
     setNuevoDoc("");
-  };
-
-  const eliminarDoc = (doc) => {
-    if (tipoPersona === "Natural") {
-      const nuevos = docsNatural.filter((d) => d !== doc);
-      setDocsNatural(nuevos);
-      localStorage.setItem(DOCS_KEY_NAT, JSON.stringify(nuevos));
-    } else {
-      const nuevos = docsJuridica.filter((d) => d !== doc);
-      setDocsJuridica(nuevos);
-      localStorage.setItem(DOCS_KEY_JUR, JSON.stringify(nuevos));
-    }
   };
 
   const handleSave = async () => {
@@ -75,7 +34,6 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
 
   const thStyle = { padding: "11px 14px", textAlign: "center", fontWeight: 700, color: BLUE.primary, fontSize: 11.5, borderBottom: `1px solid ${BLUE.border}`, minWidth: 110, whiteSpace: "nowrap", letterSpacing: 0.3 };
   const tdStyle = (idx) => ({ textAlign: "center", borderBottom: `1px solid ${BLUE.border}`, padding: "10px 8px", background: idx % 2 === 0 ? "#fff" : "#f8faff" });
-  const ramoTieneDoc = (r, doc) => tipoPersona === "Natural" ? r.documentos?.[doc] : r.documentos?.[`J_${doc}`];
   const btnTP = (tp) => ({
     padding: "7px 18px", borderRadius: 8,
     border: `1.5px solid ${tipoPersona === tp ? BLUE.primary : BLUE.border}`,
@@ -83,13 +41,19 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
     color: tipoPersona === tp ? "#fff" : BLUE.text,
     fontSize: 13, fontWeight: 600, cursor: "pointer",
   });
+  const cellBtnStyle = (activo) => ({
+    width: "100%", padding: "6px 0", border: "none", cursor: "pointer",
+    background: "transparent", borderRadius: 6,
+    color: activo ? "#16a34a" : "#d1d5db",
+    fontSize: activo ? 18 : 14, fontWeight: 700, lineHeight: 1,
+  });
 
   return (
     <div>
       <div style={S.pageHeader}>
         <div>
           <div style={S.pageTitle}>Ramos de Seguros</div>
-          <div style={S.pageSub}>Configura qué documentos requiere cada ramo</div>
+          <div style={S.pageSub}>Haz clic en una celda de la tabla para marcar o quitar un documento</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ display: "flex", gap: 6 }}>
@@ -124,12 +88,12 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
               <th style={{ ...thStyle, minWidth: 80 }}>ACCIONES</th>
               <th style={{ ...thStyle, textAlign: "left", minWidth: 180, position: "sticky", left: 0, background: BLUE.light, zIndex: 2 }}>RAMO</th>
               {docsMostrar.map((doc) => (
-                <th key={doc} style={thStyle}>
+                <th key={doc.id} style={thStyle}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                    <span>{doc}</span>
+                    <span>{doc.nombre}</span>
                     <button
-                      title="Eliminar documento"
-                      onClick={() => eliminarDoc(doc)}
+                      title="Eliminar documento del catálogo"
+                      onClick={() => onDeleteDocumento(doc.id)}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 13, lineHeight: 1, padding: "0 2px", fontWeight: 700 }}
                     >
                       x
@@ -153,7 +117,7 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
                   <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
                     <button
                       style={S.btn("ghost")}
-                      title="Editar"
+                      title="Editar nombre / descripción"
                       onClick={() => {
                         setEditItem(r);
                         setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false, documentos: { ...(r.documentos || {}) } });
@@ -175,13 +139,20 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
                     </span>
                   </div>
                 </td>
-                {docsMostrar.map((doc) => (
-                  <td key={doc} style={tdStyle(idx)}>
-                    {ramoTieneDoc(r, doc)
-                      ? <span style={{ color: "#16a34a", fontSize: 18, fontWeight: 700 }}>✓</span>
-                      : <span style={{ color: "#d1d5db" }}>—</span>}
-                  </td>
-                ))}
+                {docsMostrar.map((doc) => {
+                  const activo = ramoTieneDoc(r, doc);
+                  return (
+                    <td key={doc.id} style={tdStyle(idx)}>
+                      <button
+                        title={activo ? `Quitar ${doc.nombre}` : `Exigir ${doc.nombre}`}
+                        onClick={() => onToggleDocumento(r, claveDoc(doc.nombre, tipoPersona))}
+                        style={cellBtnStyle(activo)}
+                      >
+                        {activo ? "✓" : "—"}
+                      </button>
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -192,7 +163,6 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
         <Modal
           title={editItem ? `Editar — ${editItem.nombre}` : "Nuevo Ramo"}
           onClose={() => { setShowForm(false); setEditItem(null); }}
-          wide
           footer={
             <>
               <button style={S.btn("secondary")} onClick={() => { setShowForm(false); setEditItem(null); }}>Cancelar</button>
@@ -210,34 +180,15 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete }) => {
             <label style={S.label}>Descripción</label>
             <input style={S.input} value={form.descripcion} onChange={(e) => set("descripcion", e.target.value)} />
           </div>
-          <div style={{ ...S.formGroup, display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={form.activo} onChange={(e) => set("activo", e.target.checked)} style={{ width: 16, height: 16, accentColor: BLUE.primary }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: BLUE.text }}>Ramo activo</span>
           </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: BLUE.primary, letterSpacing: 0.5, marginBottom: 8 }}>DOCUMENTOS PERSONA NATURAL</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {docsNatural.map((doc) => (
-                <label key={doc} style={{ display: "flex", alignItems: "center", gap: 8, background: form.documentos[doc] ? "#f0fdf4" : BLUE.light, border: `1px solid ${form.documentos[doc] ? "#bbf7d0" : BLUE.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
-                  <input type="checkbox" checked={!!form.documentos[doc]} onChange={() => toggleDoc(doc, "Natural")} style={{ width: 15, height: 15, accentColor: "#16a34a" }} />
-                  <span style={{ fontSize: 12.5, color: form.documentos[doc] ? "#16a34a" : BLUE.text, fontWeight: form.documentos[doc] ? 600 : 400 }}>{doc}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#7c3aed", letterSpacing: 0.5, marginBottom: 8 }}>DOCUMENTOS PERSONA JURÍDICA</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {docsJuridica.map((doc) => (
-                <label key={doc} style={{ display: "flex", alignItems: "center", gap: 8, background: form.documentos[`J_${doc}`] ? "#faf5ff" : BLUE.light, border: `1px solid ${form.documentos[`J_${doc}`] ? "#e9d5ff" : BLUE.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
-                  <input type="checkbox" checked={!!form.documentos[`J_${doc}`]} onChange={() => toggleDoc(doc, "Jurídica")} style={{ width: 15, height: 15, accentColor: "#7c3aed" }} />
-                  <span style={{ fontSize: 12.5, color: form.documentos[`J_${doc}`] ? "#7c3aed" : BLUE.text, fontWeight: form.documentos[`J_${doc}`] ? 600 : 400 }}>{doc}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {!editItem && (
+            <p style={{ fontSize: 12, color: "#6b87b0", marginTop: 16 }}>
+              Los documentos que exige este ramo se marcan después, directo en la tabla.
+            </p>
+          )}
         </Modal>
       )}
 

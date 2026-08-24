@@ -143,6 +143,7 @@ export default function App() {
 
   const [agentes, setAgentes] = useState([]);
   const [ramos, setRamos] = useState([]);
+  const [documentosCatalogo, setDocumentosCatalogo] = useState([]);
   const [aseguradoras, setAseguradoras] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [interesados, setInteresados] = useState([]);
@@ -193,7 +194,7 @@ export default function App() {
     if (!loggedIn) return;
     const cargar = async () => {
       setLoading(true);
-      const [{ data: rms }, { data: asgs }, { data: cls }, { data: ints }, { data: cots }, { data: pols }, { data: agts }] = await Promise.all([
+      const [{ data: rms }, { data: asgs }, { data: cls }, { data: ints }, { data: cots }, { data: pols }, { data: agts }, { data: docs }] = await Promise.all([
         supabase.from("ramos").select("*").order("nombre"),
         supabase.from("aseguradoras").select("*").order("nombre"),
         supabase.from("clientes").select("*").order("nombre"),
@@ -201,10 +202,12 @@ export default function App() {
         supabase.from("cotizaciones").select("*").order("created_at", { ascending: false }),
         supabase.from("polizas").select("*").order("created_at", { ascending: false }),
         supabase.from("agentes").select("*").order("nombre"),
+        supabase.from("ramos_documentos").select("*").order("nombre"),
       ]);
       if (rms) setRamos(rms);
       if (asgs) setAseguradoras(asgs);
       if (agts) setAgentes(agts);
+      if (docs) setDocumentosCatalogo(docs);
       if (cls) setClientes(cls.map((c) => ({ ...c, tipoDocumento: c.tipo_documento, tipoPersona: c.tipo_persona, nombreContacto: c.nombre_contacto, telefonoContacto: c.telefono_contacto })));
       if (ints) setInteresados(ints.map(mapInteresado));
       if (cots) setCotizaciones(cots.map(mapCotizacion));
@@ -457,6 +460,25 @@ export default function App() {
     setRamos((prev) => prev.filter((x) => x.id !== id));
   };
 
+  // ─── Documento requerido por ramo (toggle directo desde la tabla) ────────
+  const toggleRamoDocumento = async (ramo, key) => {
+    const documentos = { ...(ramo.documentos || {}), [key]: !ramo.documentos?.[key] };
+    await supabase.from("ramos").update({ documentos }).eq("id", ramo.id);
+    setRamos((prev) => prev.map((x) => x.id === ramo.id ? { ...x, documentos } : x));
+  };
+
+  // ─── CRUD Catálogo de documentos (antes en localStorage) ─────────────────
+  const addDocumento = async (nombre, tipoPersona) => {
+    const { data, error } = await supabase.from("ramos_documentos")
+      .insert([{ nombre, tipo_persona: tipoPersona }]).select().single();
+    if (error) { console.error("addDocumento error:", error); return; }
+    if (data) setDocumentosCatalogo((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+  };
+  const deleteDocumento = async (id) => {
+    await supabase.from("ramos_documentos").delete().eq("id", id);
+    setDocumentosCatalogo((prev) => prev.filter((x) => x.id !== id));
+  };
+
   // ─── CRUD Aseguradoras ────────────────────────────────────────────────────
   const addAseguradora = async (a) => {
     const { data } = await supabase.from("aseguradoras").insert([{ nombre: a.nombre, activo: a.activo }]).select().single();
@@ -566,7 +588,13 @@ export default function App() {
   const renderConfigTab = () => {
     switch (configTab) {
       case "ramos":
-        return <RamosPage ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo} />;
+        return (
+          <RamosPage
+            ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo}
+            documentosCatalogo={documentosCatalogo} onToggleDocumento={toggleRamoDocumento}
+            onAddDocumento={addDocumento} onDeleteDocumento={deleteDocumento}
+          />
+        );
       case "aseguradoras":
         return <AseguradorasPage aseguradoras={aseguradoras} onAdd={addAseguradora} onEdit={editAseguradora} onDelete={deleteAseguradora} />;
       case "comerciales":
