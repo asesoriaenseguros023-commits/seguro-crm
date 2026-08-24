@@ -69,7 +69,47 @@ export const S = {
     color: done ? "#16a34a" : active ? "#fff" : BLUE.primary,
     border: `1px solid ${done ? "#bbf7d0" : active ? BLUE.primary : BLUE.border}`,
   }),
+  // ─── Inicio (tarjetas de sección) ───────────────────────────────────────────
+  homeWrap: { maxWidth: 760, margin: "48px auto 0", textAlign: "center" },
+  homeTitle: { fontSize: 22, fontWeight: 700, color: BLUE.text },
+  homeSub: { fontSize: 13.5, color: "#6b87b0", marginTop: 6, marginBottom: 32 },
+  homeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px,1fr))", gap: 16 },
+  homeCard: { background: "#fff", borderRadius: 14, padding: "30px 18px", border: `2px solid ${BLUE.border}`, cursor: "pointer", transition: "border-color 0.15s, background 0.15s", textAlign: "center" },
+  homeCardIcon: { width: 46, height: 46, borderRadius: 12, background: BLUE.light, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", color: BLUE.primary },
+  homeCardLabel: { fontSize: 14.5, fontWeight: 700, color: BLUE.text },
+  // ─── Sub-pestañas dentro de una sección (CRM Seguros / Configuraciones) ─────
+  subTabBar: { display: "flex", gap: 2, marginBottom: 20, borderBottom: `1px solid ${BLUE.border}`, flexWrap: "wrap" },
+  subTabBtn: (active) => ({
+    padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: "transparent",
+    border: "none", borderBottom: active ? `2px solid ${BLUE.primary}` : "2px solid transparent",
+    color: active ? BLUE.primary : "#6b87b0", marginBottom: -1, fontFamily: "inherit",
+  }),
 };
+
+// ─── NAVEGACIÓN (secciones del inicio y sub-pestañas) ────────────────────────
+export const SECCIONES = [
+  { id: "crm",       label: "CRM Seguros",      icon: "users",    adminOnly: false },
+  { id: "soat",      label: "Seguimiento SOAT", icon: "shield",   adminOnly: false },
+  { id: "arriendos", label: "Arriendos",        icon: "home",     adminOnly: true },
+  { id: "config",    label: "Configuraciones",  icon: "settings", adminOnly: true },
+];
+
+export const SUBTABS_CRM = [
+  { id: "dashboard",    label: "Dashboard" },
+  { id: "clientes",     label: "Clientes" },
+  { id: "interesados",  label: "Leads" },
+  { id: "cotizaciones", label: "Cotizaciones" },
+  { id: "polizas",      label: "Pólizas" },
+  { id: "renovaciones", label: "Renovaciones" },
+  { id: "reportes",     label: "Reportes" },
+];
+
+export const SUBTABS_CONFIG = [
+  { id: "ramos",         label: "Ramos de Seguros" },
+  { id: "aseguradoras",  label: "Aseguradoras" },
+  { id: "comerciales",   label: "Comerciales" },
+  { id: "configuracion", label: "Agentes" },
+];
 
 // ─── SOAT ────────────────────────────────────────────────────────────────────
 export const FASES_SOAT = [

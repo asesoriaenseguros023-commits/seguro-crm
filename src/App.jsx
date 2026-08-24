@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { S, BLUE, ROL_ADMIN, ROL_AGENTE } from "./constants.js";
+import { S, BLUE, ROL_ADMIN, ROL_AGENTE, SECCIONES, SUBTABS_CRM, SUBTABS_CONFIG } from "./constants.js";
 import { mapInteresado, mapCotizacion, mapPoliza, esAdmin, today } from "./helpers.js";
 import { FontLoader, LoadingScreen } from "./components/Modal.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
@@ -21,7 +21,7 @@ import ComercialPage from "./pages/Comerciales.jsx";
 import ArriendosPage from "./pages/Arriendos.jsx";
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
-const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile, onClose }) => {
+const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, isMobile, onClose }) => {
   const initials = userName
     ? userName.split(" ").slice(0, 2).map((w) => w[0]).join("")
     : "U";
@@ -31,6 +31,8 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
     : S.sidebar;
 
   const handleNav = (id) => { onNav(id); if (isMobile) onClose(); };
+  const handleLogo = () => { onLogo(); if (isMobile) onClose(); };
+  const visibles = SECCIONES.filter((s) => !s.adminOnly || esAdmin(userRol));
 
   return (
     <>
@@ -38,7 +40,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
         <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 299 }} />
       )}
       <div style={sidebarStyle}>
-        <div style={S.sbLogo}>
+        <div style={{ ...S.sbLogo, cursor: "pointer" }} onClick={handleLogo}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover" }} />
             <div>
@@ -48,39 +50,12 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
           </div>
         </div>
         <div style={S.sbNav}>
-          <div style={S.sbSection}>Principal</div>
-          {[
-            { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-            { id: "clientes", label: "Clientes", icon: "users" },
-            { id: "interesados", label: "Leads", icon: "document" },
-            { id: "cotizaciones", label: "Cotizaciones", icon: "tag" },
-            { id: "polizas", label: "Pólizas", icon: "shield" },
-            { id: "renovaciones", label: "Renovaciones", icon: "bell" },
-            { id: "soat", label: "Seguimiento SOAT", icon: "shield" },
-            { id: "reportes", label: "Reportes", icon: "chart" },
-          ].map((i) => (
-            <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
-              <Icon name={i.icon} size={16} />{i.label}
+          <div style={S.sbSection}>Secciones</div>
+          {visibles.map((s) => (
+            <div key={s.id} style={S.sbItem(current === s.id)} onClick={() => handleNav(s.id)}>
+              <Icon name={s.icon} size={16} />{s.label}
             </div>
           ))}
-          {esAdmin(userRol) && (
-            <>
-              <div style={S.sbSection}>Administración</div>
-              {[
-                { id: "ramos", label: "Ramos de Seguros", icon: "tag" },
-                { id: "aseguradoras", label: "Aseguradoras", icon: "shield" },
-                { id: "comerciales", label: "Comerciales", icon: "users" },
-              ].map((i) => (
-                <div key={i.id} style={S.sbItem(current === i.id)} onClick={() => handleNav(i.id)}>
-                  <Icon name={i.icon} size={16} />{i.label}
-                </div>
-              ))}
-              <div style={S.sbSection}>Personal</div>
-              <div style={S.sbItem(current === "arriendos")} onClick={() => handleNav("arriendos")}>
-                <Icon name="home" size={16} />Arriendos
-              </div>
-            </>
-          )}
         </div>
         <div style={S.sbBottom}>
           <div style={{ padding: "4px 12px 8px" }}>
@@ -106,13 +81,7 @@ const Sidebar = ({ current, onNav, onLogout, userName, userRol, isOpen, isMobile
 };
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
-const Topbar = ({ page, userRol, isMobile, onToggleSidebar }) => {
-  const labels = {
-    dashboard: "Dashboard", clientes: "Clientes", interesados: "Leads",
-    cotizaciones: "Cotizaciones", polizas: "Pólizas", renovaciones: "Renovaciones",
-    soat: "Seguimiento SOAT", comerciales: "Comerciales", ramos: "Ramos de Seguros",
-    aseguradoras: "Aseguradoras", reportes: "Reportes", arriendos: "Arriendos",
-  };
+const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
   const [ahora, setAhora] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setAhora(new Date()), 1000);
@@ -133,7 +102,7 @@ const Topbar = ({ page, userRol, isMobile, onToggleSidebar }) => {
             </svg>
           </button>
         )}
-        <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{labels[page] || page}</div>
+        <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{title}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, fontSize: 12, color: "#6b87b0" }}>
         {!isMobile && (
@@ -157,7 +126,9 @@ const Topbar = ({ page, userRol, isMobile, onToggleSidebar }) => {
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [page, setPage] = useState("dashboard");
+  const [seccion, setSeccion] = useState("inicio");
+  const [crmTab, setCrmTab] = useState("dashboard");
+  const [configTab, setConfigTab] = useState("ramos");
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState("");
   const [userRol, setUserRol] = useState(ROL_AGENTE);
@@ -537,15 +508,16 @@ export default function App() {
   if (!loggedIn) return <LoginPage onLogin={handleLogin} />;
   if (loading) return <><FontLoader /><LoadingScreen /></>;
 
-  const handleNav = (p) => {
-    if ((p === "ramos" || p === "arriendos") && !esAdmin(userRol)) return;
-    setPage(p);
+  const handleNav = (id) => {
+    const s = SECCIONES.find((x) => x.id === id);
+    if (s?.adminOnly && !esAdmin(userRol)) return;
+    setSeccion(id);
   };
 
-  const renderPage = () => {
-    switch (page) {
+  const renderCrmTab = () => {
+    switch (crmTab) {
       case "dashboard":
-        return <Dashboard interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} userName={userName} onNav={handleNav} />;
+        return <Dashboard interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} userName={userName} onNav={setCrmTab} />;
       case "clientes":
         return <ClientesPage clientes={clientes} onAdd={addCliente} onEdit={editCliente} onDelete={deleteCliente} userRol={userRol} />;
       case "interesados":
@@ -584,18 +556,21 @@ export default function App() {
             onUpdatePoliza={(id, changes) => setPolizas((prev) => prev.map((p) => p.id === id ? { ...p, ...changes } : p))}
           />
         );
-      case "soat":
-        return <SoatPage showConfirm={showConfirm} />;
-      case "comerciales":
-        return <ComercialPage showConfirm={showConfirm} />;
       case "reportes":
         return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
+      default:
+        return null;
+    }
+  };
+
+  const renderConfigTab = () => {
+    switch (configTab) {
       case "ramos":
-        return esAdmin(userRol) ? <RamosPage ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo} /> : null;
+        return <RamosPage ramos={ramos} onAdd={addRamo} onEdit={editRamo} onDelete={deleteRamo} />;
       case "aseguradoras":
-        return esAdmin(userRol) ? <AseguradorasPage aseguradoras={aseguradoras} onAdd={addAseguradora} onEdit={editAseguradora} onDelete={deleteAseguradora} /> : null;
-      case "arriendos":
-        return esAdmin(userRol) ? <ArriendosPage /> : null;
+        return <AseguradorasPage aseguradoras={aseguradoras} onAdd={addAseguradora} onEdit={editAseguradora} onDelete={deleteAseguradora} />;
+      case "comerciales":
+        return <ComercialPage showConfirm={showConfirm} />;
       case "configuracion":
         return <ConfiguracionPage agentes={agentes} polizas={polizas} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} />;
       default:
@@ -603,20 +578,85 @@ export default function App() {
     }
   };
 
+  const renderContent = () => {
+    if (seccion === "inicio") {
+      const visibles = SECCIONES.filter((s) => !s.adminOnly || esAdmin(userRol));
+      return (
+        <div style={S.homeWrap}>
+          <div style={S.homeTitle}>Hola, {userName || "Usuario"}</div>
+          <div style={S.homeSub}>Elige un módulo</div>
+          <div style={S.homeGrid}>
+            {visibles.map((s) => (
+              <div
+                key={s.id} style={S.homeCard} onClick={() => setSeccion(s.id)}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = BLUE.primary; e.currentTarget.style.background = BLUE.light; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = BLUE.border; e.currentTarget.style.background = "#fff"; }}
+              >
+                <div style={S.homeCardIcon}><Icon name={s.icon} size={22} /></div>
+                <div style={S.homeCardLabel}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (seccion === "crm") {
+      return (
+        <div>
+          <div style={S.subTabBar}>
+            {SUBTABS_CRM.map((t) => (
+              <button key={t.id} style={S.subTabBtn(crmTab === t.id)} onClick={() => setCrmTab(t.id)}>{t.label}</button>
+            ))}
+          </div>
+          {renderCrmTab()}
+        </div>
+      );
+    }
+
+    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} />;
+
+    if (seccion === "arriendos") return esAdmin(userRol) ? <ArriendosPage /> : null;
+
+    if (seccion === "config") {
+      if (!esAdmin(userRol)) return null;
+      return (
+        <div>
+          <div style={S.subTabBar}>
+            {SUBTABS_CONFIG.map((t) => (
+              <button key={t.id} style={S.subTabBtn(configTab === t.id)} onClick={() => setConfigTab(t.id)}>{t.label}</button>
+            ))}
+          </div>
+          {renderConfigTab()}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const seccionLabel = SECCIONES.find((s) => s.id === seccion)?.label || "Inicio";
+  const subTabLabel = seccion === "crm"
+    ? SUBTABS_CRM.find((t) => t.id === crmTab)?.label
+    : seccion === "config"
+      ? SUBTABS_CONFIG.find((t) => t.id === configTab)?.label
+      : null;
+  const topbarTitle = subTabLabel ? `${seccionLabel} · ${subTabLabel}` : seccionLabel;
+
   return (
     <>
       <FontLoader />
       <ConfirmDialog confirmState={confirmState} onConfirm={handleConfirm} />
       <div style={S.app}>
         <Sidebar
-          current={page} onNav={handleNav} onLogout={handleLogout}
+          current={seccion} onNav={handleNav} onLogo={() => setSeccion("inicio")} onLogout={handleLogout}
           userName={userName} userRol={userRol}
           isOpen={sidebarOpen} isMobile={isMobile}
           onClose={() => setSidebarOpen(false)}
         />
         <div style={{ ...S.main, marginLeft: isMobile ? 0 : undefined }}>
-          <Topbar page={page} userRol={userRol} isMobile={isMobile} onToggleSidebar={() => setSidebarOpen(o => !o)} />
-          <div style={{ ...S.content, padding: isMobile ? "14px 12px" : "20px 16px" }}>{renderPage()}</div>
+          <Topbar title={topbarTitle} userRol={userRol} isMobile={isMobile} onToggleSidebar={() => setSidebarOpen(o => !o)} />
+          <div style={{ ...S.content, padding: isMobile ? "14px 12px" : "20px 16px" }}>{renderContent()}</div>
         </div>
       </div>
     </>
