@@ -1116,7 +1116,6 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
     .filter((p) => (!filtroInmueble || p.inmuebleId === filtroInmueble) && (!filtroArrendatario || p.arrendatarioId === filtroArrendatario))
     .sort((a, b) => b.fechaPago.localeCompare(a.fechaPago));
   const totalFiltrado = pagosFiltrados.reduce((s, p) => s + (p.valor || 0), 0);
-  const promedioFiltrado = pagosFiltrados.length ? totalFiltrado / pagosFiltrados.length : 0;
   const hayFiltro = filtroInmueble || filtroArrendatario;
   const LIMITE = 20;
 
@@ -1216,7 +1215,6 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
             <StatCard label="Total recaudado" value={fmt(totalFiltrado)} />
             <StatCard label="Pagos registrados" value={pagosFiltrados.length} />
-            <StatCard label="Promedio por pago" value={fmt(promedioFiltrado)} />
             {estadoFiltroCiclo ? (
               <StatCard
                 label="Estado actual"
