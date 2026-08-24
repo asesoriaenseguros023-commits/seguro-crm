@@ -1229,15 +1229,11 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
           </div>
 
           {pagosFiltrados.slice(0, LIMITE).map((p) => (
-            <div key={p.id} style={cardS}>
-              <div style={cardRowS}>
-                <span style={cardLabelS}>Fecha de pago</span>
-                <span style={{ fontWeight: 700, color: BLUE.primary }}>{fmt(p.valor)} · {fmtDate(p.fechaPago)}</span>
-              </div>
-              <div style={cardRowS}>
-                <span style={cardLabelS}>Período</span>
-                <span style={{ fontSize: 12.5 }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</span>
-              </div>
+            <div key={p.id} style={{ ...cardS, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 12.5, color: BLUE.text }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</span>
+              <span style={{ fontWeight: 700, color: BLUE.primary, fontSize: 13, whiteSpace: "nowrap" }}>
+                {fmt(p.valor)} <span style={{ fontWeight: 400, color: "#9aa8c7", fontSize: 11.5 }}>· {fmtDate(p.fechaPago)}</span>
+              </span>
             </div>
           ))}
           {pagosFiltrados.length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>No hay pagos para este filtro.</div>}
