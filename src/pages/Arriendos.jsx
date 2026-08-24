@@ -1063,7 +1063,6 @@ const ESTADO_CICLO_INFO = {
 
 const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
   const isMobile = useIsMobile();
-  const [filtroInmueble, setFiltroInmueble] = useState("");
   const [filtroArrendatario, setFiltroArrendatario] = useState("");
 
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
@@ -1096,17 +1095,15 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
       return a.estado.tipo === "mora" ? b.estado.dias - a.estado.dias : a.estado.dias - b.estado.dias;
     });
 
-  // El filtro de arrendatario ancla también su inmueble actual, para poder
-  // mostrar el estado (mora/próximo/al día) igual que si filtraras por inmueble.
+  // El inmueble que arrienda el arrendatario elegido, para mostrar su
+  // tarjeta (canon, día de pago, estado) junto con sus pagos.
   const inmuebleDelArrendatario = filtroArrendatario ? inmuebles.find((i) => i.arrendatarioId === filtroArrendatario) : null;
-  const inmuebleParaEstado = filtroInmueble ? inmuebles.find((i) => i.id === filtroInmueble) : inmuebleDelArrendatario;
-  const estadoFiltroCiclo = inmuebleParaEstado ? calcularEstadoPago(inmuebleParaEstado, pagos) : null;
+  const estadoFiltroCiclo = inmuebleDelArrendatario ? calcularEstadoPago(inmuebleDelArrendatario, pagos) : null;
 
   const pagosFiltrados = pagos
-    .filter((p) => (!filtroInmueble || p.inmuebleId === filtroInmueble) && (!filtroArrendatario || p.arrendatarioId === filtroArrendatario))
+    .filter((p) => !filtroArrendatario || p.arrendatarioId === filtroArrendatario)
     .sort((a, b) => b.fechaPago.localeCompare(a.fechaPago));
   const totalFiltrado = pagosFiltrados.reduce((s, p) => s + (p.valor || 0), 0);
-  const hayFiltro = filtroInmueble || filtroArrendatario;
   const LIMITE = 20;
 
   return (
@@ -1187,35 +1184,49 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
         </div>
       )}
 
-      <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 10 }}>Buscar pagos por inmueble o arrendatario</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text, marginBottom: 10 }}>Buscar pagos por arrendatario</div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select style={{ ...S.select, maxWidth: 240 }} value={filtroInmueble} onChange={(e) => { setFiltroInmueble(e.target.value); setFiltroArrendatario(""); }}>
-          <option value="">Filtrar por inmueble…</option>
-          {inmuebles.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
-        </select>
-        <select style={{ ...S.select, maxWidth: 240 }} value={filtroArrendatario} onChange={(e) => { setFiltroArrendatario(e.target.value); setFiltroInmueble(""); }}>
+        <select style={{ ...S.select, maxWidth: 240 }} value={filtroArrendatario} onChange={(e) => setFiltroArrendatario(e.target.value)}>
           <option value="">Filtrar por arrendatario…</option>
           {arrendatarios.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
         </select>
-        {hayFiltro && (
-          <button style={S.btn("ghost")} onClick={() => { setFiltroInmueble(""); setFiltroArrendatario(""); }}>Limpiar filtros</button>
+        {filtroArrendatario && (
+          <button style={S.btn("ghost")} onClick={() => setFiltroArrendatario("")}>Limpiar filtro</button>
         )}
       </div>
 
-      {hayFiltro && (
+      {filtroArrendatario && (
         <>
+          {inmuebleDelArrendatario ? (
+            <div style={{ ...cardS, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 15 }}>{inmuebleDelArrendatario.nombre}</div>
+                  {inmuebleDelArrendatario.direccion && <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{inmuebleDelArrendatario.direccion}</div>}
+                </div>
+                <span style={S.chip(estadoFiltroCiclo ? ESTADO_CICLO_INFO[estadoFiltroCiclo.tipo].color : "#16a34a")}>
+                  {estadoFiltroCiclo ? ESTADO_CICLO_INFO[estadoFiltroCiclo.tipo].label(estadoFiltroCiclo) : "Al día"}
+                </span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Canon</span>
+                <span style={{ fontSize: 12.5 }}>
+                  {fmt(inmuebleDelArrendatario.valorCanonBase)}
+                  {inmuebleDelArrendatario.tieneAdministracion ? ` + ${fmt(inmuebleDelArrendatario.valorAdministracion)} admin.` : ""}
+                </span>
+              </div>
+              <div style={cardRowS}>
+                <span style={cardLabelS}>Día de pago</span>
+                <span style={{ fontSize: 12.5 }}>Día {inmuebleDelArrendatario.diaVencimientoPago}</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ ...cardS, color: "#aaa", fontSize: 13, marginBottom: 16 }}>Este arrendatario no tiene inmueble asignado.</div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
             <StatCard label="Total recaudado" value={fmt(totalFiltrado)} />
             <StatCard label="Pagos registrados" value={pagosFiltrados.length} />
-            {estadoFiltroCiclo ? (
-              <StatCard
-                label="Estado actual"
-                value={estadoFiltroCiclo.tipo === "mora" ? `En mora (${estadoFiltroCiclo.dias} d)` : `Vence en ${estadoFiltroCiclo.dias} d`}
-                color={estadoFiltroCiclo.tipo === "mora" ? "#dc2626" : "#f59e0b"}
-              />
-            ) : (
-              <StatCard label="Estado actual" value="Al día" color="#16a34a" />
-            )}
           </div>
 
           {pagosFiltrados.slice(0, LIMITE).map((p) => (
