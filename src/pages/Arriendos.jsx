@@ -13,7 +13,6 @@ const TABS = [
   { id: "pagos", label: "Pagos" },
   { id: "alertas", label: "Alertas" },
   { id: "arrendadores", label: "Arrendadores" },
-  { id: "movimientos", label: "Movimientos", proximamente: true },
 ];
 
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "", fechaInicioArriendo: "" };
