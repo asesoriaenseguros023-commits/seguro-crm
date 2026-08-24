@@ -462,7 +462,22 @@ const parseISO = (s) => { const [y, m, d] = s.split("-").map(Number); return new
 const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const sumarDias = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return toISO(d); };
 // Fin de un período que arranca en `iso` y dura exactamente un mes calendario.
-const finDeUnMes = (iso) => { const d = parseISO(iso); d.setMonth(d.getMonth() + 1); d.setDate(d.getDate() - 1); return toISO(d); };
+// OJO con setMonth()+setDate(-1) a secas: para días 29-31 que no existen en
+// el mes siguiente, el desborde de setMonth() ya avanza más de lo debido
+// (ej. 31 ene: setMonth(feb) desborda a marzo porque feb solo tiene 28,
+// y restar 1 día después no alcanza a corregirlo — daba 2 mar en vez de
+// 28 feb). Si el día no existe en el mes siguiente, el fin del período es
+// directamente el último día de ese mes, sin restar nada más.
+const finDeUnMes = (iso) => {
+  const d = parseISO(iso);
+  const anio = d.getFullYear(), mes = d.getMonth(), dia = d.getDate();
+  const mesSig = mes + 1;
+  const ultimoDiaMesSig = new Date(anio, mesSig + 1, 0).getDate();
+  if (dia > ultimoDiaMesSig) return toISO(new Date(anio, mesSig, ultimoDiaMesSig));
+  const fin = new Date(anio, mesSig, dia);
+  fin.setDate(fin.getDate() - 1);
+  return toISO(fin);
+};
 
 const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit, onDelete, onAsignarNumero }) => {
   const isMobile = useIsMobile();
