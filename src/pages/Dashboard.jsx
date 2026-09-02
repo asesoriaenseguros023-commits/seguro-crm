@@ -1,5 +1,5 @@
-import { S, BLUE } from "../constants.js";
-import { fmt, fmtDate } from "../helpers.js";
+import { S, BLUE, ESTADOS_COT } from "../constants.js";
+import { fmt, fmtDate, estadoCotColor2 } from "../helpers.js";
 
 const toISODash = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -28,8 +28,17 @@ const Dashboard = ({ interesados, cotizaciones, polizas }) => {
   const leadsMes = interesados.filter((i) => enEsteMes(i.fechaRegistro)).length;
   const leadsMesAnt = interesados.filter((i) => enMesAnterior(i.fechaRegistro)).length;
 
-  const cotizacionesMes = cotizaciones.filter((c) => enEsteMes(c.fechaCotizacion)).length;
-  const cotizacionesMesAnt = cotizaciones.filter((c) => enMesAnterior(c.fechaCotizacion)).length;
+  // Una cotización con póliza ya registrada cambió de fase (ahora es una
+  // venta, cuenta en "Pólizas emitidas") — no debe sumar acá también, sería
+  // contarla dos veces.
+  const cotizacionesActivas = cotizaciones.filter((c) => !(c.accion === "Póliza Emitida" && c.numeroPolizaEmitida));
+  const cotizacionesMesArr = cotizacionesActivas.filter((c) => enEsteMes(c.fechaCotizacion));
+  const cotizacionesMes = cotizacionesMesArr.length;
+  const cotizacionesMesAnt = cotizacionesActivas.filter((c) => enMesAnterior(c.fechaCotizacion)).length;
+  const porEstado = ["Pendiente", ...ESTADOS_COT].map((estado) => ({
+    estado,
+    cantidad: cotizacionesMesArr.filter((c) => (c.estado || "Pendiente") === estado).length,
+  }));
 
   const polizasMes = polizas.filter((p) => enEsteMes(p.fechaEmision)).sort((a, b) => (b.fechaEmision || "").localeCompare(a.fechaEmision || ""));
   const polizasMesAnt = polizas.filter((p) => enMesAnterior(p.fechaEmision));
@@ -57,6 +66,25 @@ const Dashboard = ({ interesados, cotizaciones, polizas }) => {
           color={variacionPrima === null ? "#7c3aed" : variacionPrima >= 0 ? "#16a34a" : "#dc2626"}
           sub={variacionPrima === null ? "sin dato del mes anterior" : `${variacionPrima >= 0 ? "↑" : "↓"} ${Math.abs(variacionPrima)}% vs. mes anterior`}
         />
+      </div>
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b87b0", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>
+        Cotizaciones del mes por estado
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 28 }}>
+        {cotizacionesMes === 0 ? (
+          <div style={{ fontSize: 13, color: "#aaa" }}>Sin cotizaciones registradas este mes todavía.</div>
+        ) : (
+          porEstado.map(({ estado, cantidad }) => (
+            <div key={estado} style={{
+              display: "flex", alignItems: "center", gap: 8, background: "#fff",
+              border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "10px 16px",
+            }}>
+              <span style={{ fontSize: 18, fontWeight: 800, color: estadoCotColor2(estado) }}>{cantidad}</span>
+              <span style={{ fontSize: 12.5, color: "#555" }}>{estado}</span>
+            </div>
+          ))
+        )}
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 700, color: "#6b87b0", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>

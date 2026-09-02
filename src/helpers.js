@@ -79,6 +79,7 @@ export const mapCotizacion = (c) => ({
   primaEmitida: c.prima_emitida,
   ivaEmitida: c.iva_emitida,
   gastosEmitida: c.gastos_emitida,
+  descuentoEmitida: c.descuento_emitida,
   totalPagoEmitida: c.total_pago_emitida,
 });
 

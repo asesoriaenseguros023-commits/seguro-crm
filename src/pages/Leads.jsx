@@ -352,11 +352,12 @@ export const PolizaEmitidaModal = ({ cot, aseguradoras, onSave, onClose }) => {
     primaEmitida: cot.primaEmitida || "",
     ivaEmitida: cot.ivaEmitida || "",
     gastosEmitida: cot.gastosEmitida || "",
+    descuentoEmitida: cot.descuentoEmitida || "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [saving, setSaving] = useState(false);
 
-  const totalPagoEmitida = (parseFloat(form.primaEmitida) || 0) + (parseFloat(form.ivaEmitida) || 0) + (parseFloat(form.gastosEmitida) || 0);
+  const totalPagoEmitida = (parseFloat(form.primaEmitida) || 0) + (parseFloat(form.ivaEmitida) || 0) + (parseFloat(form.gastosEmitida) || 0) - (parseFloat(form.descuentoEmitida) || 0);
 
   const handleSave = async () => { setSaving(true); await onSave({ ...form, totalPagoEmitida: totalPagoEmitida || "" }); setSaving(false); };
 
@@ -399,6 +400,10 @@ export const PolizaEmitidaModal = ({ cot, aseguradoras, onSave, onClose }) => {
         <div style={S.formGroup}>
           <label style={S.label}>Gastos</label>
           <input style={S.input} type="number" value={form.gastosEmitida} onChange={(e) => set("gastosEmitida", e.target.value)} placeholder="0" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Descuento</label>
+          <input style={S.input} type="number" value={form.descuentoEmitida} onChange={(e) => set("descuentoEmitida", e.target.value)} placeholder="0" />
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Total Pago</label>

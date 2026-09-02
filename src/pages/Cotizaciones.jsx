@@ -23,12 +23,16 @@ const CotizacionesPage = ({
   const [actionError, setActionError] = useState("");
 
   const cotizacionesFiltradas = useMemo(() => {
-    const base = esAdmin(userRol)
+    const base = (esAdmin(userRol)
       ? cotizaciones
-      : cotizaciones.filter((c) => c.agenteId === agenteActualId);
+      : cotizaciones.filter((c) => c.agenteId === agenteActualId)
+    // Una cotización con póliza ya registrada cambió de fase — de aquí en
+    // adelante vive en el módulo Pólizas, no tiene sentido seguir
+    // mostrándola en Cotizaciones (pedido explícito del usuario).
+    ).filter((c) => !(c.accion === "Póliza Emitida" && c.numeroPolizaEmitida));
     return base.filter((c) => {
       if (!q) return true;
-      if (busquedaModo === "poliza") return (c.numeroPolizaEmitida || "").toLowerCase().includes(q.toLowerCase());
+      if (busquedaModo === "ramo") return c.ramo?.toLowerCase().includes(q.toLowerCase());
       return c.clienteNombre?.toLowerCase().includes(q.toLowerCase());
     });
   }, [cotizaciones, q, busquedaModo, userRol, agenteActualId]);
@@ -69,7 +73,7 @@ const CotizacionesPage = ({
 
       <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
-          {[["cliente", "Cliente"], ["poliza", "N° Póliza"]].map(([modo, label]) => (
+          {[["cliente", "Cliente"], ["ramo", "Ramo"]].map(([modo, label]) => (
             <button key={modo} onClick={() => { setBusquedaModo(modo); setQ(""); }}
               style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
               {label}
@@ -80,7 +84,7 @@ const CotizacionesPage = ({
           <Icon name="search" size={16} />
           <input
             style={S.searchInput}
-            placeholder={busquedaModo === "poliza" ? "Número de póliza…" : "Nombre del cliente…"}
+            placeholder={busquedaModo === "ramo" ? "Nombre del ramo…" : "Nombre del cliente…"}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -146,11 +150,14 @@ const CotizacionesPage = ({
                   </select>
                   <div style={{ display: "flex", gap: 4 }}>
                     {c.accion === "Póliza Emitida" && (
+                      // Una vez registrada (numeroPolizaEmitida presente) la
+                      // fila desaparece de esta lista, así que si se ve el
+                      // botón acá siempre es para registrarla por primera vez.
                       <button
                         style={{ ...S.btn("success"), padding: "5px 10px", fontSize: 12 }}
                         onClick={() => setEditModal(c)}
                       >
-                        {c.numeroPolizaEmitida ? "Ver Póliza" : "Registrar Póliza"}
+                        Registrar Póliza
                       </button>
                     )}
                     <button
@@ -162,22 +169,6 @@ const CotizacionesPage = ({
                     </button>
                   </div>
                 </div>
-
-                {c.accion === "Póliza Emitida" && c.numeroPolizaEmitida && (
-                  <div style={{
-                    background: "#f0fdf4", borderLeft: "3px solid #16a34a",
-                    padding: "10px 18px 10px 24px",
-                    display: "grid", gridTemplateColumns: "repeat(6, 1fr)",
-                    gap: 8, fontSize: 12,
-                  }}>
-                    <div><span style={{ color: "#aaa", display: "block" }}>N° Póliza</span><strong>{c.numeroPolizaEmitida}</strong></div>
-                    <div><span style={{ color: "#aaa", display: "block" }}>Aseguradora</span>{c.aseguradoraEmitida}</div>
-                    <div><span style={{ color: "#aaa", display: "block" }}>Prima</span>{c.primaEmitida || 0}</div>
-                    <div><span style={{ color: "#aaa", display: "block" }}>IVA</span>{c.ivaEmitida || 0}</div>
-                    <div><span style={{ color: "#aaa", display: "block" }}>Gastos</span>{c.gastosEmitida || 0}</div>
-                    <div><span style={{ color: "#aaa", display: "block" }}>Total Pago</span><strong style={{ color: "#16a34a" }}>{c.totalPagoEmitida || 0}</strong></div>
-                  </div>
-                )}
               </div>
             );
           })

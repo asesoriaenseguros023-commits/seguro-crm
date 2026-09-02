@@ -393,7 +393,8 @@ export default function App() {
       numero_poliza_emitida: f.numeroPolizaEmitida,
       aseguradora_emitida: f.aseguradoraEmitida,
       prima_emitida: f.primaEmitida, iva_emitida: f.ivaEmitida,
-      gastos_emitida: f.gastosEmitida, total_pago_emitida: f.totalPagoEmitida,
+      gastos_emitida: f.gastosEmitida, descuento_emitida: f.descuentoEmitida,
+      total_pago_emitida: f.totalPagoEmitida,
     }).eq("id", f.id);
     setCotizaciones((prev) => prev.map((x) => x.id === f.id ? { ...x, ...f } : x));
 
@@ -410,7 +411,7 @@ export default function App() {
           cotizacion_id: f.id, cliente_nombre: f.clienteNombre, cliente_telefono: f.clienteTelefono,
           numero: f.numeroPolizaEmitida, ramo: f.ramo, aseguradora: f.aseguradoraEmitida,
           prima: f.primaEmitida, iva: f.ivaEmitida, gastos_expedicion: f.gastosEmitida,
-          total_pago: f.totalPagoEmitida, fecha_emision: today(),
+          descuento: f.descuentoEmitida, total_pago: f.totalPagoEmitida, fecha_emision: today(),
           vigencia_inicio: vigenciaInicio, vigencia_fin: vigenciaFin, estado: "Activa",
         }]).select().single();
         if (error) console.error("Error creando póliza:", error);
