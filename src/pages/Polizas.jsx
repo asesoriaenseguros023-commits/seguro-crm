@@ -7,17 +7,21 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 
 const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showConfirm }) => {
   const [q, setQ] = useState("");
+  const [busquedaModo, setBusquedaModo] = useState("poliza");
   const [filtroRamo, setFiltroRamo] = useState("Todos");
-  const [filtroEstado, setFiltroEstado] = useState("Todos");
-  const [filtroAnio, setFiltroAnio] = useState("Todos");
-  const [filtroMes, setFiltroMes] = useState("Todos");
+  // Por defecto: mes en curso y solo activas — así esta pantalla muestra
+  // "lo que está pasando ahora" en vez de duplicar lo que ya cubre
+  // Renovaciones (vencimientos). "Todos" sigue disponible en los selects.
+  const [filtroEstado, setFiltroEstado] = useState("Activa");
+  const [filtroAnio, setFiltroAnio] = useState(() => String(new Date().getFullYear()));
+  const [filtroMes, setFiltroMes] = useState(() => MESES[new Date().getMonth()]);
 
   const polizasPorRol = esAdmin(userRol)
     ? polizas
     : polizas.filter((p) => p.agenteId === agenteActualId);
 
   const anios = useMemo(() => {
-    const s = new Set();
+    const s = new Set([String(new Date().getFullYear())]);
     polizasPorRol.forEach((p) => {
       const f = p.fechaEmision || p.vigenciaInicio;
       if (f) s.add(f.substring(0, 4));
@@ -30,9 +34,9 @@ const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showCo
       polizasPorRol.filter((p) => {
         const matchQ =
           !q ||
-          p.numero?.toLowerCase().includes(q.toLowerCase()) ||
-          p.clienteNombre?.toLowerCase().includes(q.toLowerCase()) ||
-          p.aseguradora?.toLowerCase().includes(q.toLowerCase());
+          (busquedaModo === "cliente"
+            ? p.clienteNombre?.toLowerCase().includes(q.toLowerCase())
+            : p.numero?.toLowerCase().includes(q.toLowerCase()));
         const fe = p.fechaEmision || p.vigenciaInicio || "";
         const matchAnio = filtroAnio === "Todos" || fe.startsWith(filtroAnio);
         const matchMes =
@@ -46,7 +50,7 @@ const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showCo
           matchMes
         );
       }),
-    [polizasPorRol, q, filtroRamo, filtroEstado, filtroAnio, filtroMes]
+    [polizasPorRol, q, busquedaModo, filtroRamo, filtroEstado, filtroAnio, filtroMes]
   );
 
   return (
@@ -61,12 +65,21 @@ const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showCo
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={S.searchBar}>
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
+          {[["poliza", "N° Póliza"], ["cliente", "Cliente"]].map(([modo, label]) => (
+            <button key={modo} onClick={() => { setBusquedaModo(modo); setQ(""); }}
+              style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ ...S.searchBar, flex: 1, minWidth: 200 }}>
           <Icon name="search" size={16} />
           <input
             style={S.searchInput}
-            placeholder="Buscar póliza, cliente, aseguradora…"
+            placeholder={busquedaModo === "cliente" ? "Nombre del cliente…" : "Número de póliza…"}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -86,11 +99,12 @@ const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showCo
         <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
           {["Todos","Activa","Vencida","Cancelada"].map((e) => <option key={e}>{e}</option>)}
         </select>
+        </div>
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 50px" }}>
-          <span>N° Póliza</span><span>Cliente</span><span>Ramo</span><span>Aseguradora</span>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 50px" }}>
+          <span>#</span><span>N° Póliza</span><span>Cliente</span><span>Ramo</span><span>Aseguradora</span>
           <span>Prima</span><span>Emitida</span><span>Vence</span><span>Estado</span><span></span>
         </div>
         {filtered.length === 0 ? (
@@ -98,15 +112,16 @@ const PolizasPage = ({ polizas, ramos, onDelete, userRol, agenteActualId, showCo
             No se encontraron pólizas
           </div>
         ) : (
-          filtered.map((p) => {
+          filtered.map((p, idx) => {
             const dias = diasParaVencer(p.vigenciaFin);
             return (
               <div
                 key={p.id}
-                style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 50px" }}
+                style={{ ...S.tableRow, gridTemplateColumns: "36px 1.4fr 1.4fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 50px" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = BLUE.light)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "")}
               >
+                <div style={{ fontWeight: 700, color: "#bbb", fontSize: 12 }}>{idx + 1}</div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{p.numero || "—"}</div>
                 <div style={{ fontSize: 13 }}>{p.clienteNombre || "—"}</div>
                 <span style={S.chip(BLUE.primary)}>{p.ramo || "—"}</span>
