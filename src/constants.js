@@ -101,7 +101,6 @@ export const SUBTABS_CRM = [
   { id: "cotizaciones", label: "Cotizaciones" },
   { id: "polizas",      label: "Pólizas" },
   { id: "renovaciones", label: "Renovaciones" },
-  { id: "reportes",     label: "Reportes" },
 ];
 
 export const SUBTABS_CONFIG = [

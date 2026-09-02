@@ -15,7 +15,6 @@ import CotizacionesPage from "./pages/Cotizaciones.jsx";
 import PolizasPage from "./pages/Polizas.jsx";
 import RenovacionesPage from "./pages/Renovaciones.jsx";
 import SoatPage from "./pages/SOAT.jsx";
-import ReportesPage from "./pages/Reportes.jsx";
 import RamosPage from "./pages/Ramos.jsx";
 import AseguradorasPage from "./pages/Aseguradoras.jsx";
 import ConfiguracionPage from "./pages/Configuracion.jsx";
@@ -613,8 +612,6 @@ export default function App() {
             onUpdatePoliza={(id, changes) => setPolizas((prev) => prev.map((p) => p.id === id ? { ...p, ...changes } : p))}
           />
         );
-      case "reportes":
-        return <ReportesPage polizas={polizas} ramos={ramos} clientes={clientes} />;
       default:
         return null;
     }
