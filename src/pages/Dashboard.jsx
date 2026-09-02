@@ -1,151 +1,86 @@
 import { S, BLUE } from "../constants.js";
-import { fmt, fmtDate, diasParaVencer } from "../helpers.js";
-import Icon from "../components/Icon.jsx";
+import { fmt, fmtDate } from "../helpers.js";
 
-const Dashboard = ({ interesados, cotizaciones, polizas, onNav }) => {
-  const activas = polizas.filter((p) => p.estado === "Activa");
-  const primaTotal = activas.reduce((s, p) => s + Number(p.prima || 0), 0);
-  const proxVencer = polizas.filter(
-    (p) =>
-      p.estado === "Activa" &&
-      diasParaVencer(p.vigenciaFin) <= 30 &&
-      diasParaVencer(p.vigenciaFin) >= 0
-  );
-  const urgentes = proxVencer.filter((p) => diasParaVencer(p.vigenciaFin) <= 7);
-  const cotPendientes = cotizaciones.filter((c) => c.estado === "Pendiente");
+const toISODash = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const StatCard = ({ label, value, color, sub }) => (
+  <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px", borderTop: `3px solid ${color || BLUE.primary}`, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
+    <div style={S.statNum}>{value}</div>
+    <div style={S.statLabel}>{label}</div>
+    {sub && <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 5 }}>{sub}</div>}
+  </div>
+);
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+// Dashboard = gestión del mes en curso (leads, cotizaciones, ventas). Nada
+// de vencimientos/renovaciones aquí a propósito — eso vive en Renovaciones,
+// mostrarlo también aquí era duplicar la misma información dos veces.
+const Dashboard = ({ interesados, cotizaciones, polizas }) => {
+  const hoy = new Date();
+  const inicioMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-01`;
+  const inicioMesAnterior = toISODash(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1));
+  const finMesAnterior = toISODash(new Date(hoy.getFullYear(), hoy.getMonth(), 0));
+
+  const enEsteMes = (fecha) => !!fecha && fecha >= inicioMes;
+  const enMesAnterior = (fecha) => !!fecha && fecha >= inicioMesAnterior && fecha <= finMesAnterior;
+
+  const leadsMes = interesados.filter((i) => enEsteMes(i.fechaRegistro)).length;
+  const leadsMesAnt = interesados.filter((i) => enMesAnterior(i.fechaRegistro)).length;
+
+  const cotizacionesMes = cotizaciones.filter((c) => enEsteMes(c.fechaCotizacion)).length;
+  const cotizacionesMesAnt = cotizaciones.filter((c) => enMesAnterior(c.fechaCotizacion)).length;
+
+  const polizasMes = polizas.filter((p) => enEsteMes(p.fechaEmision)).sort((a, b) => (b.fechaEmision || "").localeCompare(a.fechaEmision || ""));
+  const polizasMesAnt = polizas.filter((p) => enMesAnterior(p.fechaEmision));
+  const primaMes = polizasMes.reduce((s, p) => s + Number(p.prima || 0), 0);
+  const primaMesAnt = polizasMesAnt.reduce((s, p) => s + Number(p.prima || 0), 0);
+  const variacionPrima = primaMesAnt > 0 ? Math.round(((primaMes - primaMesAnt) / primaMesAnt) * 100) : null;
+
+  const subComparativo = (actual, anterior) =>
+    anterior === 0 ? "sin dato del mes anterior" : `${actual >= anterior ? "↑" : "↓"} vs. ${anterior} el mes pasado`;
 
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <div style={S.pageTitle}>
-          Bienvenido al entorno de Gestión de Pólizas de Asesoría en Seguros Tocancipá
-        </div>
-        <div style={S.pageSub}>Vista de información de negocio</div>
+        <div style={S.pageTitle}>Gestión de {MESES[hoy.getMonth()]}</div>
+        <div style={S.pageSub}>Leads, cotizaciones y ventas del mes en curso</div>
       </div>
 
-      {urgentes.length > 0 && (
-        <div style={S.alertBox("#dc2626")}>
-          <Icon name="warning" size={18} />
-          <div style={{ fontSize: 13.5, color: "#dc2626" }}>
-            <strong>
-              {urgentes.length} póliza{urgentes.length > 1 ? "s" : ""}
-            </strong>{" "}
-            vence{urgentes.length === 1 ? "" : "n"} en los próximos 7 días.{" "}
-            <span
-              style={{ cursor: "pointer", textDecoration: "underline" }}
-              onClick={() => onNav("renovaciones")}
-            >
-              Ver renovaciones →
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 14,
-          marginBottom: 14,
-        }}
-      >
-        <div style={S.statCard(BLUE.primary)}>
-          <div style={S.statNum}>{interesados.length}</div>
-          <div style={S.statLabel}>Leads</div>
-        </div>
-        <div style={S.statCard("#f59e0b")}>
-          <div style={S.statNum}>{cotPendientes.length}</div>
-          <div style={S.statLabel}>Cotizaciones Pendientes</div>
-        </div>
-        <div style={S.statCard("#16a34a")}>
-          <div style={S.statNum}>{activas.length}</div>
-          <div style={S.statLabel}>Pólizas Activas</div>
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 28 }}>
+        <StatCard label="Leads nuevos" value={leadsMes} color={BLUE.primary} sub={subComparativo(leadsMes, leadsMesAnt)} />
+        <StatCard label="Cotizaciones registradas" value={cotizacionesMes} color="#f59e0b" sub={subComparativo(cotizacionesMes, cotizacionesMesAnt)} />
+        <StatCard label="Pólizas emitidas" value={polizasMes.length} color="#16a34a" sub={subComparativo(polizasMes.length, polizasMesAnt.length)} />
+        <StatCard
+          label="Prima vendida"
+          value={fmt(primaMes)}
+          color={variacionPrima === null ? "#7c3aed" : variacionPrima >= 0 ? "#16a34a" : "#dc2626"}
+          sub={variacionPrima === null ? "sin dato del mes anterior" : `${variacionPrima >= 0 ? "↑" : "↓"} ${Math.abs(variacionPrima)}% vs. mes anterior`}
+        />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 14,
-          marginBottom: 24,
-        }}
-      >
-        <div style={S.statCard("#dc2626")}>
-          <div style={S.statNum}>{proxVencer.length}</div>
-          <div style={S.statLabel}>Por Vencer (30d)</div>
-        </div>
-        <div style={S.statCard("#7c3aed")}>
-          <div style={S.statNum}>{fmt(primaTotal)}</div>
-          <div style={S.statLabel}>Prima Total Activa</div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 700,
-          color: "#6b87b0",
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
-          marginBottom: 12,
-        }}
-      >
-        Pólizas por Vencer
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b87b0", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>
+        Pólizas emitidas este mes
       </div>
       <div style={S.tableWrap}>
-        {proxVencer.length === 0 ? (
-          <div
-            style={{ padding: 32, textAlign: "center", color: "#aaa", fontSize: 14 }}
-          >
-            No hay pólizas por vencer en los próximos 30 días
+        {polizasMes.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center", color: "#aaa", fontSize: 14 }}>
+            Todavía no se ha emitido ninguna póliza este mes
           </div>
         ) : (
           <>
-            <div
-              style={{
-                ...S.tableHead,
-                gridTemplateColumns: "1.5fr 1.2fr 1fr 1fr 80px",
-              }}
-            >
-              <span>Póliza / Cliente</span>
-              <span>Ramo</span>
-              <span>Vence</span>
-              <span>Prima</span>
-              <span>Días</span>
+            <div style={{ ...S.tableHead, gridTemplateColumns: "1.5fr 1.2fr 1.2fr 1fr 1fr" }}>
+              <span>Cliente</span><span>Ramo</span><span>Aseguradora</span><span>Prima</span><span>Emitida</span>
             </div>
-            {proxVencer
-              .sort(
-                (a, b) =>
-                  diasParaVencer(a.vigenciaFin) - diasParaVencer(b.vigenciaFin)
-              )
-              .map((p) => {
-                const dias = diasParaVencer(p.vigenciaFin);
-                return (
-                  <div
-                    key={p.id}
-                    style={{
-                      ...S.tableRow,
-                      gridTemplateColumns: "1.5fr 1.2fr 1fr 1fr 80px",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>
-                        {p.numero}
-                      </div>
-                      <div style={{ color: "#888", fontSize: 12 }}>
-                        {p.clienteNombre}
-                      </div>
-                    </div>
-                    <span style={S.chip(BLUE.primary)}>{p.ramo || p.tipo || "—"}</span>
-                    <div style={{ fontSize: 13 }}>{fmtDate(p.vigenciaFin)}</div>
-                    <div style={{ fontSize: 13 }}>{fmt(p.prima)}</div>
-                    <span style={S.chip(dias <= 7 ? "#dc2626" : "#d97706")}>
-                      {dias}d
-                    </span>
-                  </div>
-                );
-              })}
+            {polizasMes.map((p) => (
+              <div key={p.id} style={{ ...S.tableRow, gridTemplateColumns: "1.5fr 1.2fr 1.2fr 1fr 1fr" }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{p.clienteNombre || "—"}</div>
+                <span style={S.chip(BLUE.primary)}>{p.ramo || "—"}</span>
+                <div style={{ fontSize: 12.5, color: "#555" }}>{p.aseguradora || "—"}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{fmt(p.prima || 0)}</div>
+                <div style={{ fontSize: 12.5 }}>{fmtDate(p.fechaEmision)}</div>
+              </div>
+            ))}
           </>
         )}
       </div>
