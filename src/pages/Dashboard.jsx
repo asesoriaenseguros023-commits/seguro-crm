@@ -25,8 +25,11 @@ const Dashboard = ({ interesados, cotizaciones, polizas }) => {
   const enEsteMes = (fecha) => !!fecha && fecha >= inicioMes;
   const enMesAnterior = (fecha) => !!fecha && fecha >= inicioMesAnterior && fecha <= finMesAnterior;
 
-  const leadsMes = interesados.filter((i) => enEsteMes(i.fechaRegistro)).length;
-  const leadsMesAnt = interesados.filter((i) => enMesAnterior(i.fechaRegistro)).length;
+  // Un lead ya enviado a cotización cambió de fase — no cuenta acá, mismo
+  // criterio que el resto del funnel (evitar contar lo mismo dos veces).
+  const leadsActivos = interesados.filter((i) => !i.envioOficina);
+  const leadsMes = leadsActivos.filter((i) => enEsteMes(i.fechaRegistro)).length;
+  const leadsMesAnt = leadsActivos.filter((i) => enMesAnterior(i.fechaRegistro)).length;
 
   // Una cotización con póliza ya registrada cambió de fase (ahora es una
   // venta, cuenta en "Pólizas emitidas") — no debe sumar acá también, sería
