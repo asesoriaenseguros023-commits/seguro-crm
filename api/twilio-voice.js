@@ -17,13 +17,6 @@ export default async function handler(req, res) {
   const signature = req.headers["x-twilio-signature"];
   const url = `https://${req.headers["x-forwarded-host"] || req.headers.host}${req.url}`;
   const valid = twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, signature, url, req.body || {});
-  // DEBUG temporal: quitar una vez se confirme por qué falla la firma.
-  console.log("twilio-voice debug", JSON.stringify({
-    valid, url, hasSignature: !!signature, host: req.headers.host,
-    xForwardedHost: req.headers["x-forwarded-host"], reqUrl: req.url,
-    bodyType: typeof req.body, bodyKeys: req.body ? Object.keys(req.body) : null,
-    hasAuthToken: !!process.env.TWILIO_AUTH_TOKEN,
-  }));
   if (!valid) return res.status(403).send("Firma inválida");
 
   const twiml = new twilio.twiml.VoiceResponse();
