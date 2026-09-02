@@ -1,6 +1,5 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
 import { fmt, fmtDate, diasParaVencer, esAdmin } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
@@ -8,18 +7,19 @@ import Modal from "../components/Modal.jsx";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, onUpdatePoliza }) => {
+const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, onDecisionRenovacion }) => {
   // Todo anclado al reloj/fecha real del sistema, nunca un valor fijo — por
   // defecto solo el mes en curso, no un rango de días como antes.
   const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
   const [mes, setMes] = useState(() => MESES[new Date().getMonth()]);
-  const [soloVencidas, setSoloVencidas] = useState(false);
+  const [vista, setVista] = useState("porVencer"); // porVencer | vencidas | cotiza | noInteres
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [preview, setPreview] = useState([]);
   const [q, setQ] = useState("");
   const [busquedaModo, setBusquedaModo] = useState("cliente");
+  const [avisoYaExiste, setAvisoYaExiste] = useState(null);
 
   const polizasPorRol = esAdmin(userRol)
     ? polizas
@@ -37,10 +37,16 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
 
   const cantidadMes = polizasPorRol.filter((p) => p.estado === "Activa" && enMesSeleccionado(p)).length;
   const cantidadVencidas = polizasPorRol.filter((p) => p.estado === "Vencida").length;
+  const cantidadCotiza = polizasPorRol.filter((p) => p.decisionRenovacion === "Cliente Cotiza").length;
+  const cantidadNoInteres = polizasPorRol.filter((p) => p.decisionRenovacion === "Cliente No Interesado").length;
 
   const candidates = polizasPorRol
     .filter((p) => {
-      const matchFiltro = soloVencidas ? p.estado === "Vencida" : p.estado === "Activa" && enMesSeleccionado(p);
+      const matchFiltro =
+        vista === "vencidas" ? p.estado === "Vencida"
+        : vista === "cotiza" ? p.decisionRenovacion === "Cliente Cotiza"
+        : vista === "noInteres" ? p.decisionRenovacion === "Cliente No Interesado"
+        : p.estado === "Activa" && enMesSeleccionado(p);
       const matchQ =
         !q ||
         (busquedaModo === "poliza"
@@ -153,33 +159,30 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 20 }}>
-        <div
-          onClick={() => setSoloVencidas(false)}
-          style={{
-            background: "#fff", borderRadius: 12, padding: "18px 20px", cursor: "pointer",
-            borderTop: `3px solid ${BLUE.primary}`, boxShadow: !soloVencidas ? `0 4px 12px ${BLUE.primary}30` : "0 1px 6px rgba(26,86,219,0.08)",
-            outline: !soloVencidas ? `1.5px solid ${BLUE.primary}` : "none",
-          }}
-        >
-          <div style={S.statNum}>{cantidadMes}</div>
-          <div style={S.statLabel}>Por vencer — {mes} {anio}</div>
-        </div>
-        <div
-          onClick={() => setSoloVencidas(true)}
-          style={{
-            background: "#fff", borderRadius: 12, padding: "18px 20px", cursor: "pointer",
-            borderTop: "3px solid #dc2626", boxShadow: soloVencidas ? "0 4px 12px #dc262630" : "0 1px 6px rgba(26,86,219,0.08)",
-            outline: soloVencidas ? "1.5px solid #dc2626" : "none",
-          }}
-        >
-          <div style={{ ...S.statNum, color: "#dc2626" }}>{cantidadVencidas}</div>
-          <div style={S.statLabel}>Vencidas</div>
-        </div>
+        {[
+          { key: "porVencer", label: `Por vencer — ${mes} ${anio}`, valor: cantidadMes, color: BLUE.primary },
+          { key: "vencidas", label: "Vencidas", valor: cantidadVencidas, color: "#dc2626" },
+          { key: "cotiza", label: "Cliente Cotiza", valor: cantidadCotiza, color: "#16a34a" },
+          { key: "noInteres", label: "Cliente No Interesado", valor: cantidadNoInteres, color: "#6b7280" },
+        ].map((c) => (
+          <div
+            key={c.key}
+            onClick={() => setVista(c.key)}
+            style={{
+              background: "#fff", borderRadius: 12, padding: "18px 20px", cursor: "pointer",
+              borderTop: `3px solid ${c.color}`, boxShadow: vista === c.key ? `0 4px 12px ${c.color}30` : "0 1px 6px rgba(26,86,219,0.08)",
+              outline: vista === c.key ? `1.5px solid ${c.color}` : "none",
+            }}
+          >
+            <div style={{ ...S.statNum, color: c.color }}>{c.valor}</div>
+            <div style={S.statLabel}>{c.label}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-          {!soloVencidas && (
+          {vista === "porVencer" && (
             <>
               <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={anio} onChange={(e) => setAnio(e.target.value)}>
                 {anios.map((a) => <option key={a}>{a}</option>)}
@@ -219,9 +222,9 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
           {candidates.map((p, idx) => {
             const d = diasParaVencer(p.vigenciaFin);
             const urgColor =
-              soloVencidas ? "#dc2626" : d <= 7 ? "#dc2626" : d <= 15 ? "#d97706" : BLUE.primary;
+              vista === "vencidas" ? "#dc2626" : d <= 7 ? "#dc2626" : d <= 15 ? "#d97706" : BLUE.primary;
             const decisionColor =
-              { "Cliente renueva": "#16a34a", "Cliente no renueva": "#dc2626" }[p.decisionRenovacion] || "#6b7280";
+              { "Cliente Cotiza": "#16a34a", "Cliente No Interesado": "#dc2626" }[p.decisionRenovacion] || "#6b7280";
             return (
               <div
                 key={p.id}
@@ -249,8 +252,9 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
                   value={p.decisionRenovacion || ""}
                   onChange={async (e) => {
                     const val = e.target.value;
-                    await supabase.from("polizas").update({ decision_renovacion: val }).eq("id", p.id);
-                    onUpdatePoliza(p.id, { decisionRenovacion: val });
+                    if (!val) return;
+                    const res = await onDecisionRenovacion(p, val);
+                    if (res?.yaExistia) setAvisoYaExiste(p.clienteNombre || "este cliente");
                   }}
                   style={{
                     fontSize: 11.5, padding: "5px 8px", borderRadius: 8,
@@ -259,8 +263,8 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
                   }}
                 >
                   <option value="">— Decisión —</option>
-                  <option value="Cliente renueva">Cliente renueva</option>
-                  <option value="Cliente no renueva">Cliente no renueva</option>
+                  <option value="Cliente Cotiza">Cliente Cotiza</option>
+                  <option value="Cliente No Interesado">Cliente No Interesado</option>
                 </select>
               </div>
             );
@@ -332,6 +336,18 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
             </div>
           )}
         </Modal>
+      )}
+
+      {avisoYaExiste && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }} onClick={() => setAvisoYaExiste(null)}>
+          <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 380, padding: "24px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: BLUE.text, marginBottom: 8 }}>Ya está en cotización</div>
+            <p style={{ fontSize: 13.5, color: "#555", marginBottom: 18 }}>
+              <strong>{avisoYaExiste}</strong> ya tiene una cotización creada por esta renovación — no se creó una nueva, pero el cambio quedó guardado.
+            </p>
+            <button style={{ ...S.btn("primary"), width: "100%", justifyContent: "center" }} onClick={() => setAvisoYaExiste(null)}>Entendido</button>
+          </div>
+        </div>
       )}
     </div>
   );

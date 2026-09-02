@@ -438,6 +438,33 @@ export default function App() {
     return {};
   };
 
+  // ─── Decisión de renovación ───────────────────────────────────────────────
+  // "Cliente Cotiza" crea una cotización nueva a partir de la póliza que
+  // vence, y la liga (polizas.cotizacion_renovacion_id) para no duplicarla
+  // si se vuelve a seleccionar la misma decisión — en ese caso solo avisa
+  // que ya existe (yaExistia: true), sin dejar de guardar el cambio.
+  const marcarDecisionRenovacion = async (poliza, decision) => {
+    if (decision !== "Cliente Cotiza" || poliza.cotizacionRenovacionId) {
+      const { error } = await supabase.from("polizas").update({ decision_renovacion: decision }).eq("id", poliza.id);
+      if (error) return { error: error.message };
+      setPolizas((prev) => prev.map((p) => p.id === poliza.id ? { ...p, decisionRenovacion: decision } : p));
+      return decision === "Cliente Cotiza" ? { yaExistia: true } : {};
+    }
+    const { data: cot, error: errCot } = await supabase.from("cotizaciones").insert([{
+      cliente_nombre: poliza.clienteNombre, cliente_telefono: poliza.clienteTelefono,
+      agente_id: poliza.agenteId, ramo: poliza.ramo, aseguradora: poliza.aseguradora,
+      fecha_cotizacion: today(), estado: "Pendiente", accion: "En Curso",
+      notas: `Renovación de póliza ${poliza.numero || ""}`.trim(),
+    }]).select().single();
+    if (errCot) return { error: errCot.message };
+    const { error: errPol } = await supabase.from("polizas")
+      .update({ decision_renovacion: decision, cotizacion_renovacion_id: cot.id }).eq("id", poliza.id);
+    if (errPol) return { error: errPol.message };
+    setCotizaciones((prev) => [mapCotizacion(cot), ...prev]);
+    setPolizas((prev) => prev.map((p) => p.id === poliza.id ? { ...p, decisionRenovacion: decision, cotizacionRenovacionId: cot.id } : p));
+    return { creada: true };
+  };
+
   // ─── Emitir póliza ────────────────────────────────────────────────────────
   const emitirPoliza = async ({ cotizacion, interesado, fechaEmision, vigenciaInicio, vigenciaFin, ramoId, notas }) => {
     const ramo = ramos.find((r) => r.id === ramoId);
@@ -610,7 +637,7 @@ export default function App() {
           <RenovacionesPage
             polizas={polizas} userRol={userRol} agenteActualId={agenteActualId}
             onImportPolizas={importPolizas}
-            onUpdatePoliza={(id, changes) => setPolizas((prev) => prev.map((p) => p.id === id ? { ...p, ...changes } : p))}
+            onDecisionRenovacion={marcarDecisionRenovacion}
           />
         );
       default:

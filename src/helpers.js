@@ -94,6 +94,7 @@ export const mapPoliza = (p) => ({
   fechaEmision: p.fecha_emision,
   ramoId: p.ramo_id,
   decisionRenovacion: p.decision_renovacion || "",
+  cotizacionRenovacionId: p.cotizacion_renovacion_id || null,
 });
 
 // ─── SOAT helpers ─────────────────────────────────────────────────────────────
