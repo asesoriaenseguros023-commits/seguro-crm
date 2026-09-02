@@ -1,5 +1,13 @@
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 import { ROL_ADMIN } from "./constants.js";
+import { supabase } from "./supabase.js";
+
+// Token de la sesión activa de Supabase, para llamar endpoints de /api/*.js
+// que exigen autenticación (comerciales, twilio-token, etc.).
+export const authHeaders = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+};
 
 export const fmt = (n) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);

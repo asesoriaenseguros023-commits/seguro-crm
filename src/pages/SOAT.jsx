@@ -72,7 +72,7 @@ const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
   );
 };
 
-const SoatPage = ({ showConfirm }) => {
+const SoatPage = ({ showConfirm, onCall }) => {
   const [clientes, setClientes] = useState([]);
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
@@ -603,6 +603,12 @@ const SoatPage = ({ showConfirm }) => {
                   <div style={{ fontSize: 11.5, color: "#888", marginTop: 2 }}>
                     {c.telefono || "—"}{c.placa ? ` · ${c.placa}` : ""}
                     {c.historial?.length > 0 && <span style={{ marginLeft: 6, color: "#aaa" }}>({c.historial.length} llam.)</span>}
+                    {c.telefono && (
+                      <button onClick={(e) => { e.stopPropagation(); onCall(c.telefono, c.nombre); }}
+                        style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 6, color: BLUE.primary }} title="Llamar">
+                        <Icon name="phone" size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#555" }}>{fmtAnioMes(c.anioMes)}</div>
@@ -729,7 +735,15 @@ const SoatPage = ({ showConfirm }) => {
               <div>
                 <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>{modal.nombre || "Cliente"}</div>
                 <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 13, color: "#888", flexWrap: "wrap" }}>
-                  {modal.telefono && <span>{modal.telefono}</span>}
+                  {modal.telefono && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      {modal.telefono}
+                      <button onClick={() => onCall(modal.telefono, modal.nombre)}
+                        style={{ ...S.btn("ghost"), padding: "2px 6px", color: BLUE.primary }} title="Llamar">
+                        <Icon name="phone" size={13} />
+                      </button>
+                    </span>
+                  )}
                   {modal.placa && <span>Placa: {modal.placa}</span>}
                   <span>{modal.intentos || 0} intento{modal.intentos !== 1 ? "s" : ""}</span>
                   <span style={{ ...(() => { const f = FM_SOAT[modal.fase]; return { background: f?.bg, color: f?.text, padding: "1px 10px", borderRadius: 12, fontWeight: 700, fontSize: 12 }; })() }}>

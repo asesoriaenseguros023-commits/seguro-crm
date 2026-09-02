@@ -4,6 +4,8 @@ import { S, BLUE, ROL_AGENTE, SECCIONES, SUBTABS_CRM, SUBTABS_CONFIG } from "./c
 import { mapInteresado, mapCotizacion, mapPoliza, esAdmin, today } from "./helpers.js";
 import { FontLoader, LoadingScreen } from "./components/Modal.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
+import SoftphoneWidget from "./components/SoftphoneWidget.jsx";
+import { useSoftphone } from "./hooks/useSoftphone.js";
 import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -135,6 +137,7 @@ export default function App() {
   const [agenteActualId, setAgenteActualId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const softphone = useSoftphone();
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
@@ -648,7 +651,7 @@ export default function App() {
       );
     }
 
-    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} />;
+    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} onCall={softphone.startCall} />;
 
     if (seccion === "arriendos") return esAdmin(userRol) ? <ArriendosPage /> : null;
 
@@ -681,6 +684,7 @@ export default function App() {
     <>
       <FontLoader />
       <ConfirmDialog confirmState={confirmState} onConfirm={handleConfirm} />
+      <SoftphoneWidget {...softphone} />
       <div style={S.app}>
         <Sidebar
           current={seccion} onNav={handleNav} onLogo={() => setSeccion("inicio")} onLogout={handleLogout}

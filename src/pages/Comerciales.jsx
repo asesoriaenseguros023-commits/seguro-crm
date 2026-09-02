@@ -1,15 +1,8 @@
 import { useState, useEffect } from "react";
 import { S, BLUE } from "../constants.js";
-import { supabase } from "../supabase.js";
+import { authHeaders } from "../helpers.js";
 
 const API = "/api/comerciales";
-
-// El endpoint ahora exige sesión de Admin — le mandamos el token de la
-// sesión activa de Supabase en cada llamada.
-const authHeaders = async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
-};
 
 const ComercialPage = ({ showConfirm }) => {
   const [agentes, setAgentes] = useState([]);
