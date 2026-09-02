@@ -11,6 +11,7 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState({ nombre: "", descripcion: "", activo: true });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   // Panel de documentos: guarda solo el id, no una copia del ramo — así, al
@@ -21,10 +22,13 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
   const docsPanelRamo = ramos.find((r) => r.id === docsPanelId) || null;
 
   const handleSave = async () => {
+    if (!form.nombre.trim()) { setFormError("El nombre del ramo es obligatorio."); return; }
+    setFormError("");
     setSaving(true);
-    if (editItem) { await onEdit({ ...editItem, ...form }); setEditItem(null); setShowForm(false); }
-    else { await onAdd({ ...form, documentos: {} }); setShowForm(false); setForm({ nombre: "", descripcion: "", activo: true }); }
+    const res = editItem ? await onEdit({ ...editItem, ...form }) : await onAdd({ ...form, documentos: {} });
     setSaving(false);
+    if (res?.error) { setFormError(res.error); return; }
+    setEditItem(null); setShowForm(false); setForm({ nombre: "", descripcion: "", activo: true });
   };
 
   const contarDocs = (r, tp) => {
@@ -60,7 +64,7 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
         </div>
         <button
           style={S.btn("primary")}
-          onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", descripcion: "", activo: true }); }}
+          onClick={() => { setShowForm(true); setEditItem(null); setForm({ nombre: "", descripcion: "", activo: true }); setFormError(""); }}
         >
           <Icon name="plus" size={16} />Nuevo Ramo
         </button>
@@ -95,7 +99,7 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
               </button>
               <button
                 style={S.btn("ghost")} title="Editar"
-                onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false }); setShowForm(true); }}
+                onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false }); setShowForm(true); setFormError(""); }}
               >
                 <Icon name="edit" size={14} />
               </button>
@@ -188,6 +192,11 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
             </>
           }
         >
+          {formError && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#dc2626", marginBottom: 14 }}>
+              {formError}
+            </div>
+          )}
           <div style={S.formGroup}>
             <label style={S.label}>Nombre del Ramo *</label>
             <input style={S.input} value={form.nombre} onChange={(e) => set("nombre", e.target.value)} placeholder="Ej. SOAT, Vida, Automóvil" autoFocus />

@@ -456,13 +456,20 @@ export default function App() {
   };
 
   // ─── CRUD Ramos ───────────────────────────────────────────────────────────
+  // Antes se descartaba el error del insert: si fallaba (nombre vacío,
+  // constraint, etc.) el modal se cerraba igual sin avisar nada — el ramo
+  // simplemente no quedaba creado y no había ninguna pista de por qué.
   const addRamo = async (r) => {
-    const { data } = await supabase.from("ramos").insert([{ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo, documentos: r.documentos || {} }]).select().single();
-    if (data) setRamos((prev) => [...prev, data]);
+    const { data, error } = await supabase.from("ramos").insert([{ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo, documentos: r.documentos || {} }]).select().single();
+    if (error) return { error: error.message };
+    setRamos((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    return { data };
   };
   const editRamo = async (r) => {
-    await supabase.from("ramos").update({ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo, documentos: r.documentos || {} }).eq("id", r.id);
-    setRamos((prev) => prev.map((x) => x.id === r.id ? { ...x, ...r } : x));
+    const { error } = await supabase.from("ramos").update({ nombre: r.nombre, descripcion: r.descripcion, activo: r.activo, documentos: r.documentos || {} }).eq("id", r.id);
+    if (error) return { error: error.message };
+    setRamos((prev) => prev.map((x) => x.id === r.id ? { ...x, ...r } : x).sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    return {};
   };
   const deleteRamo = async (id) => {
     await supabase.from("ramos").delete().eq("id", id);
