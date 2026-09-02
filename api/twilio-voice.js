@@ -25,7 +25,9 @@ export default async function handler(req, res) {
   if (!e164) {
     twiml.say({ language: "es-MX" }, "No se pudo determinar el número a marcar.");
   } else {
-    twiml.dial({ callerId: process.env.TWILIO_CALLER_ID, timeout: 30 }).number(e164);
+    // Graba desde que el cliente contesta (no timbrado), un canal por
+    // lado (agente/cliente separados) — pedido explícito del usuario.
+    twiml.dial({ callerId: process.env.TWILIO_CALLER_ID, timeout: 30, record: "record-from-answer-dual" }).number(e164);
   }
 
   res.setHeader("Content-Type", "text/xml");
