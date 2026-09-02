@@ -201,6 +201,39 @@ const SoatPage = ({ showConfirm, softphone }) => {
     setReproduciendo({ sid, url: URL.createObjectURL(blob) });
   };
 
+  // Reusado en "Registrar llamada" e "Historial" — el usuario lo quiere visible en ambas pestañas.
+  // Función normal (no componente) a propósito, para no recrear un tipo de
+  // componente nuevo en cada render.
+  const renderRegistroTecnico = (clienteId) => (
+    llamadasTecnicas[clienteId]?.length > 0 && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <label style={lblS}>Registro técnico (Twilio)</label>
+        {llamadasTecnicas[clienteId].map(l => {
+          const est = ESTADOS_LLAMADA[l.estado] || { label: l.estado || "En curso…", color: "#6b87b0" };
+          const mins = l.duracion_seg != null ? `${Math.floor(l.duracion_seg / 60)}:${String(l.duracion_seg % 60).padStart(2, "0")}` : null;
+          return (
+            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px", background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8 }}>
+              <span style={{ ...S.chip(est.color) }}>{est.label}</span>
+              {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
+              <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO")}</span>
+              {l.grabacion_sid && (
+                reproduciendo?.sid === l.grabacion_sid ? (
+                  reproduciendo.url
+                    ? <audio controls autoPlay src={reproduciendo.url} style={{ height: 28, marginLeft: "auto" }} />
+                    : <span style={{ marginLeft: "auto", color: "#6b87b0" }}>Cargando…</span>
+                ) : (
+                  <button onClick={() => reproducirGrabacion(l.grabacion_sid)} style={{ ...S.btn("ghost"), marginLeft: "auto", padding: "3px 10px", fontSize: 12 }}>
+                    Escuchar grabación
+                  </button>
+                )
+              )}
+            </div>
+          );
+        })}
+      </div>
+    )
+  );
+
   const handleCloseModal = () => {
     if (modal?.fase === "no_interes" && !modal?.motivoNoCompra) {
       setModalCloseError("Debes seleccionar un motivo de no compra antes de cerrar.");
@@ -887,36 +920,10 @@ const SoatPage = ({ showConfirm, softphone }) => {
               )}
               {activeTab === "llamada" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {renderRegistroTecnico(modal.id)}
                   <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", fontSize: 12.5, color: BLUE.text }}>
                     Intento #{(modal.intentos || 0) + 1} · Agente: <strong>{modal.agente}</strong>
                   </div>
-                  {llamadasTecnicas[modal.id]?.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <label style={lblS}>Registro técnico (Twilio)</label>
-                      {llamadasTecnicas[modal.id].map(l => {
-                        const est = ESTADOS_LLAMADA[l.estado] || { label: l.estado || "En curso…", color: "#6b87b0" };
-                        const mins = l.duracion_seg != null ? `${Math.floor(l.duracion_seg / 60)}:${String(l.duracion_seg % 60).padStart(2, "0")}` : null;
-                        return (
-                          <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px", background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8 }}>
-                            <span style={{ ...S.chip(est.color) }}>{est.label}</span>
-                            {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
-                            <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO")}</span>
-                            {l.grabacion_sid && (
-                              reproduciendo?.sid === l.grabacion_sid ? (
-                                reproduciendo.url
-                                  ? <audio controls autoPlay src={reproduciendo.url} style={{ height: 28, marginLeft: "auto" }} />
-                                  : <span style={{ marginLeft: "auto", color: "#6b87b0" }}>Cargando…</span>
-                              ) : (
-                                <button onClick={() => reproducirGrabacion(l.grabacion_sid)} style={{ ...S.btn("ghost"), marginLeft: "auto", padding: "3px 10px", fontSize: 12 }}>
-                                  Escuchar grabación
-                                </button>
-                              )
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                     <div style={{ gridColumn: "1/-1" }}>
                       <label style={lblS}>Resultado de la llamada *</label>
@@ -974,6 +981,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
               )}
               {activeTab === "historial" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {renderRegistroTecnico(modal.id)}
                   {(!modal.historial || modal.historial.length === 0) && (
                     <div style={{ textAlign: "center", color: "#aaa", padding: 40, fontSize: 14 }}>Sin llamadas registradas aún.</div>
                   )}
