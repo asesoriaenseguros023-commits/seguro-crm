@@ -132,7 +132,6 @@ export const mapSoat = (r) => ({
   motivoNoCompra: r.motivo_no_compra || "",
   notas: r.notas || "",
   historial: r.historial || [],
-  whatsapp: r.whatsapp || false,
 });
 
 export const toSoatRow = (c) => ({
@@ -150,7 +149,6 @@ export const toSoatRow = (c) => ({
   motivo_no_compra: c.motivoNoCompra,
   notas: c.notas,
   historial: c.historial || [],
-  whatsapp: c.whatsapp || false,
 });
 
 // ─── Arriendos helpers ─────────────────────────────────────────────────────
