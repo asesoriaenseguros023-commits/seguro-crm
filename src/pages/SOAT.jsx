@@ -72,7 +72,7 @@ const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
   );
 };
 
-const SoatPage = ({ showConfirm, onCall }) => {
+const SoatPage = ({ showConfirm, softphone }) => {
   const [clientes, setClientes] = useState([]);
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
@@ -154,6 +154,14 @@ const SoatPage = ({ showConfirm, onCall }) => {
     setModal(c); setActiveTab("info");
     setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
     setCallLogError(""); setModalCloseError("");
+  };
+
+  // Al llamar, abre el detalle directo en "Registrar llamada" — así el
+  // agente ya queda listo para anotar el resultado apenas cuelgue.
+  const iniciarLlamada = (c) => {
+    openModal(c);
+    setActiveTab("llamada");
+    softphone.startCall(c.telefono, c.nombre);
   };
 
   const handleCloseModal = () => {
@@ -604,7 +612,7 @@ const SoatPage = ({ showConfirm, onCall }) => {
                     {c.telefono || "—"}{c.placa ? ` · ${c.placa}` : ""}
                     {c.historial?.length > 0 && <span style={{ marginLeft: 6, color: "#aaa" }}>({c.historial.length} llam.)</span>}
                     {c.telefono && (
-                      <button onClick={(e) => { e.stopPropagation(); onCall(c.telefono, c.nombre); }}
+                      <button onClick={(e) => { e.stopPropagation(); iniciarLlamada(c); }}
                         style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 6, color: BLUE.primary }} title="Llamar">
                         <Icon name="phone" size={12} />
                       </button>
@@ -738,7 +746,7 @@ const SoatPage = ({ showConfirm, onCall }) => {
                   {modal.telefono && (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                       {modal.telefono}
-                      <button onClick={() => onCall(modal.telefono, modal.nombre)}
+                      <button onClick={() => iniciarLlamada(modal)}
                         style={{ ...S.btn("ghost"), padding: "2px 6px", color: BLUE.primary }} title="Llamar">
                         <Icon name="phone" size={13} />
                       </button>
@@ -753,6 +761,33 @@ const SoatPage = ({ showConfirm, onCall }) => {
               </div>
               <button onClick={handleCloseModal} style={{ background: "transparent", border: "none", color: "#aaa", fontSize: 24, cursor: "pointer", padding: "0 4px" }}>×</button>
             </div>
+            {softphone.status !== "idle" && softphone.callee?.telefono === modal.telefono && (
+              <div style={{
+                margin: "16px 28px 0", padding: "12px 16px", borderRadius: 10,
+                background: softphone.status === "error" ? "#fef2f2" : BLUE.light,
+                border: `1px solid ${softphone.status === "error" ? "#fecaca" : BLUE.border}`,
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Icon name="phone" size={15} />
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: softphone.status === "error" ? "#dc2626" : BLUE.text }}>
+                    {softphone.status === "error"
+                      ? (softphone.errorMessage || "No se pudo completar la llamada.")
+                      : softphone.status === "in-call"
+                        ? `En llamada · ${String(Math.floor(softphone.durationSec / 60)).padStart(2, "0")}:${String(softphone.durationSec % 60).padStart(2, "0")}`
+                        : softphone.status === "ringing" ? "Timbrando…" : "Conectando…"}
+                  </span>
+                </div>
+                {softphone.status !== "error" && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={softphone.toggleMute} style={{ ...S.btn(softphone.muted ? "primary" : "secondary"), padding: "5px 12px", fontSize: 12.5 }}>
+                      {softphone.muted ? "Silenciado" : "Silenciar"}
+                    </button>
+                    <button onClick={softphone.hangup} style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 12.5 }}>Colgar</button>
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", padding: "16px 28px 0", borderBottom: `1px solid ${BLUE.border}`, gap: 4 }}>
               {[["info","Información"],["llamada","Registrar llamada"],["historial",`Historial (${modal.historial?.length || 0})`]].map(([t, l]) => (
                 <button key={t} onClick={() => setActiveTab(t)}

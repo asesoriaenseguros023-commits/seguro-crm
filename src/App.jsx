@@ -651,7 +651,7 @@ export default function App() {
       );
     }
 
-    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} onCall={softphone.startCall} />;
+    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} />;
 
     if (seccion === "arriendos") return esAdmin(userRol) ? <ArriendosPage /> : null;
 
