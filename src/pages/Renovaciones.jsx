@@ -19,6 +19,7 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
   const [importMsg, setImportMsg] = useState("");
   const [preview, setPreview] = useState([]);
   const [q, setQ] = useState("");
+  const [busquedaModo, setBusquedaModo] = useState("cliente");
 
   const polizasPorRol = esAdmin(userRol)
     ? polizas
@@ -42,10 +43,9 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
       const matchFiltro = soloVencidas ? p.estado === "Vencida" : p.estado === "Activa" && enMesSeleccionado(p);
       const matchQ =
         !q ||
-        p.numero?.toLowerCase().includes(q.toLowerCase()) ||
-        p.clienteNombre?.toLowerCase().includes(q.toLowerCase()) ||
-        p.aseguradora?.toLowerCase().includes(q.toLowerCase()) ||
-        p.ramo?.toLowerCase().includes(q.toLowerCase());
+        (busquedaModo === "poliza"
+          ? p.numero?.toLowerCase().includes(q.toLowerCase())
+          : p.clienteNombre?.toLowerCase().includes(q.toLowerCase()));
       return matchFiltro && matchQ;
     })
     .sort((a, b) => diasParaVencer(a.vigenciaFin) - diasParaVencer(b.vigenciaFin));
@@ -152,44 +152,57 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <button
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 20 }}>
+        <div
           onClick={() => setSoloVencidas(false)}
           style={{
-            padding: "7px 16px", borderRadius: 20,
-            border: `1.5px solid ${!soloVencidas ? BLUE.primary : BLUE.border}`,
-            background: !soloVencidas ? BLUE.light : "#fff",
-            color: !soloVencidas ? BLUE.primary : "#555",
-            fontSize: 13, fontWeight: 600, cursor: "pointer",
+            background: "#fff", borderRadius: 12, padding: "18px 20px", cursor: "pointer",
+            borderTop: `3px solid ${BLUE.primary}`, boxShadow: !soloVencidas ? `0 4px 12px ${BLUE.primary}30` : "0 1px 6px rgba(26,86,219,0.08)",
+            outline: !soloVencidas ? `1.5px solid ${BLUE.primary}` : "none",
           }}
         >
-          Por vencer <span style={{ color: !soloVencidas ? BLUE.primary : "#aaa" }}>({cantidadMes})</span>
-        </button>
-        {!soloVencidas && (
-          <>
-            <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={anio} onChange={(e) => setAnio(e.target.value)}>
-              {anios.map((a) => <option key={a}>{a}</option>)}
-            </select>
-            <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={mes} onChange={(e) => setMes(e.target.value)}>
-              {MESES.map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </>
-        )}
-        <button
+          <div style={S.statNum}>{cantidadMes}</div>
+          <div style={S.statLabel}>Por vencer — {mes} {anio}</div>
+        </div>
+        <div
           onClick={() => setSoloVencidas(true)}
           style={{
-            padding: "7px 16px", borderRadius: 20,
-            border: `1.5px solid ${soloVencidas ? "#dc2626" : BLUE.border}`,
-            background: soloVencidas ? "#fef2f2" : "#fff",
-            color: soloVencidas ? "#dc2626" : "#555",
-            fontSize: 13, fontWeight: 600, cursor: "pointer",
+            background: "#fff", borderRadius: 12, padding: "18px 20px", cursor: "pointer",
+            borderTop: "3px solid #dc2626", boxShadow: soloVencidas ? "0 4px 12px #dc262630" : "0 1px 6px rgba(26,86,219,0.08)",
+            outline: soloVencidas ? "1.5px solid #dc2626" : "none",
           }}
         >
-          Vencidas <span style={{ color: soloVencidas ? "#dc2626" : "#aaa" }}>({cantidadVencidas})</span>
-        </button>
-        <div style={{ ...S.searchBar, marginLeft: "auto" }}>
+          <div style={{ ...S.statNum, color: "#dc2626" }}>{cantidadVencidas}</div>
+          <div style={S.statLabel}>Vencidas</div>
+        </div>
+      </div>
+
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          {!soloVencidas && (
+            <>
+              <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={anio} onChange={(e) => setAnio(e.target.value)}>
+                {anios.map((a) => <option key={a}>{a}</option>)}
+              </select>
+              <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={mes} onChange={(e) => setMes(e.target.value)}>
+                {MESES.map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
+          {[["cliente", "Cliente"], ["poliza", "Póliza"]].map(([modo, label]) => (
+            <button key={modo} onClick={() => { setBusquedaModo(modo); setQ(""); }}
+              style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={S.searchBar}>
           <Icon name="search" size={16} />
-          <input style={S.searchInput} placeholder="Buscar póliza, cliente, ramo…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input style={S.searchInput}
+            placeholder={busquedaModo === "poliza" ? "Número de póliza…" : "Nombre del cliente…"}
+            value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 
@@ -199,12 +212,11 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
         </div>
       ) : (
         <div style={S.tableWrap}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1fr 1.2fr 1.4fr 0.9fr 0.9fr 0.9fr 1fr 1.1fr 0.8fr 150px" }}>
-            <span>Fecha</span><span>Póliza</span><span>Tomador</span><span>Prima</span>
-            <span>Iva</span><span>Gastos</span><span>Total Pago</span><span>Compañía</span>
-            <span>Ramo</span><span>Decisión</span>
+          <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1fr 1.2fr 1.4fr 1fr 1.1fr 0.8fr 150px" }}>
+            <span>#</span><span>Fecha</span><span>Póliza</span><span>Tomador</span>
+            <span>Total Pago</span><span>Compañía</span><span>Ramo</span><span>Decisión</span>
           </div>
-          {candidates.map((p) => {
+          {candidates.map((p, idx) => {
             const d = diasParaVencer(p.vigenciaFin);
             const urgColor =
               soloVencidas ? "#dc2626" : d <= 7 ? "#dc2626" : d <= 15 ? "#d97706" : BLUE.primary;
@@ -215,21 +227,19 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
                 key={p.id}
                 style={{
                   ...S.tableRow,
-                  gridTemplateColumns: "1fr 1.2fr 1.4fr 0.9fr 0.9fr 0.9fr 1fr 1.1fr 0.8fr 150px",
+                  gridTemplateColumns: "36px 1fr 1.2fr 1.4fr 1fr 1.1fr 0.8fr 150px",
                   borderLeft: `3px solid ${urgColor}`,
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = BLUE.light)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "")}
               >
+                <div style={{ fontWeight: 700, color: "#bbb", fontSize: 12 }}>{idx + 1}</div>
                 <div style={{ fontSize: 12.5 }}>{fmtDate(p.vigenciaFin)}</div>
                 <div style={{ fontWeight: 600, fontSize: 12.5 }}>{p.numero}</div>
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 600 }}>{p.clienteNombre}</div>
                   {p.clienteTelefono && <div style={{ fontSize: 11, color: "#888" }}>{p.clienteTelefono}</div>}
                 </div>
-                <div style={{ fontSize: 12.5 }}>{fmt(p.prima || 0)}</div>
-                <div style={{ fontSize: 12.5 }}>{fmt(p.iva || 0)}</div>
-                <div style={{ fontSize: 12.5 }}>{fmt(p.gastosExpedicion || 0)}</div>
                 <div style={{ fontSize: 12.5, fontWeight: 600 }}>
                   {fmt(p.totalPago || (Number(p.prima || 0) + Number(p.iva || 0) + Number(p.gastosExpedicion || 0)))}
                 </div>
