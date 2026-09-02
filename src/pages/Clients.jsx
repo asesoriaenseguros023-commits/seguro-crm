@@ -17,6 +17,7 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState(FORM_VACIO);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -34,14 +35,16 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
     [clientes, q]
   );
 
-  const resetForm = () => { setForm(FORM_VACIO); setShowForm(false); setEditItem(null); };
+  const resetForm = () => { setForm(FORM_VACIO); setShowForm(false); setEditItem(null); setFormError(""); };
 
   const handleSave = async () => {
-    if (!form.nombre) return;
+    if (!form.nombre) { setFormError("El nombre es obligatorio."); return; }
+    setFormError("");
     setSaving(true);
-    if (editItem) { await onEdit({ ...editItem, ...form }); setEditItem(null); }
-    else { await onAdd(form); resetForm(); }
+    const res = editItem ? await onEdit({ ...editItem, ...form }) : await onAdd(form);
     setSaving(false);
+    if (res?.error) { setFormError(res.error); return; }
+    resetForm();
   };
 
   const downloadTemplate = () => {
@@ -88,6 +91,7 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
 
   const openEdit = (c) => {
     setEditItem(c);
+    setFormError("");
     setForm({
       tipoPersona: c.tipoPersona || "Natural", nombre: c.nombre || "",
       email: c.email || "", celular: c.celular || "", documento: c.documento || "",
@@ -110,7 +114,7 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
             <input type="file" accept=".csv,.xlsx" style={{ display: "none" }} onChange={handleImport} disabled={importing} />
           </label>
           <button style={S.btn("secondary")} onClick={downloadTemplate}>Bajar Template</button>
-          <button style={S.btn("primary")} onClick={() => setShowForm(true)}>
+          <button style={S.btn("primary")} onClick={() => { setShowForm(true); setFormError(""); }}>
             <Icon name="plus" size={16} />Nuevo Cliente
           </button>
         </div>
@@ -208,6 +212,11 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
             </>
           }
         >
+          {formError && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#dc2626", marginBottom: 14 }}>
+              {formError}
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
             <div style={{ ...S.formGroup, gridColumn: "1/-1" }}>
               <label style={S.label}>Tipo de Persona *</label>

@@ -300,18 +300,24 @@ export default function App() {
       documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion,
       notas: f.notas,
     }]).select().single();
-    if (error) { console.error("addCliente error:", error); return; }
-    if (data) setClientes((prev) => [...prev, { ...data, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto, tipoDocumento: data.tipo_documento }]);
+    if (error) return { error: error.message };
+    setClientes((prev) => [...prev, { ...data, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto, tipoDocumento: data.tipo_documento }]);
+    return { data };
   };
 
+  // Antes no revisaba el error de Supabase: el estado local se actualizaba
+  // igual aunque el update real hubiera fallado, mostrando un cambio que
+  // nunca quedó guardado en la base.
   const editCliente = async (f) => {
-    await supabase.from("clientes").update({
+    const { error } = await supabase.from("clientes").update({
       nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono,
       tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto,
       documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion,
       notas: f.notas,
     }).eq("id", f.id);
+    if (error) return { error: error.message };
     setClientes((prev) => prev.map((x) => x.id === f.id ? { ...x, ...f, tipoPersona: f.tipoPersona, nombreContacto: f.nombreContacto, telefonoContacto: f.telefonoContacto, tipoDocumento: f.tipoDocumento } : x));
+    return {};
   };
 
   const deleteCliente = async (id) => {

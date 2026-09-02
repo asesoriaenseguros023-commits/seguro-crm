@@ -150,30 +150,31 @@ export const InteresadoForm = ({ initial, ramos, clientes, onSave, onClose }) =>
           const docsRamo = ramoObj?.documentos
             ? Object.entries(ramoObj.documentos).filter(([, v]) => v).map(([k]) => k)
             : [];
-          const todosCompletos = docsRamo.length > 0 && docsRamo.every((d) => form.documentosChecklist[d] === "Sí");
-          const bloqueado = docsRamo.length > 0 && !todosCompletos;
+          // Ya no bloquea el checkbox — solo avisa qué falta. El agente puede
+          // enviar a cotización con documentos incompletos si así lo decide.
+          const faltantes = docsRamo.filter((d) => form.documentosChecklist[d] !== "Sí");
+          const incompleto = faltantes.length > 0;
           return (
             <div style={{
               gridColumn: "1/-1", display: "flex", alignItems: "center", gap: 12,
-              background: form.envioOficina ? "#f0fdf4" : bloqueado ? "#fafafa" : BLUE.light,
-              border: `1px solid ${form.envioOficina ? "#bbf7d0" : bloqueado ? "#e5e7eb" : BLUE.border}`,
-              borderRadius: 10, padding: "12px 16px", opacity: bloqueado ? 0.6 : 1,
+              background: form.envioOficina ? "#f0fdf4" : incompleto ? "#fffbeb" : BLUE.light,
+              border: `1px solid ${form.envioOficina ? "#bbf7d0" : incompleto ? "#fde68a" : BLUE.border}`,
+              borderRadius: 10, padding: "12px 16px",
             }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: bloqueado ? "not-allowed" : "pointer", flex: 1 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
                 <input
                   type="checkbox"
                   checked={form.envioOficina}
-                  onChange={(e) => !bloqueado && set("envioOficina", e.target.checked)}
-                  disabled={bloqueado}
-                  style={{ width: 18, height: 18, accentColor: "#16a34a", cursor: bloqueado ? "not-allowed" : "pointer" }}
+                  onChange={(e) => set("envioOficina", e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: "#16a34a", cursor: "pointer" }}
                 />
                 <div>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: form.envioOficina ? "#16a34a" : bloqueado ? "#aaa" : BLUE.text }}>
-                    {form.envioOficina ? "Enviado a cotización" : "Enviado a cotización"}
+                  <span style={{ fontSize: 14, fontWeight: 600, color: form.envioOficina ? "#16a34a" : BLUE.text }}>
+                    Enviado a cotización
                   </span>
-                  {bloqueado && (
-                    <div style={{ fontSize: 11.5, color: "#f59e0b", marginTop: 2 }}>
-                      <Icon name="warning" size={12} /> Completa todos los documentos primero
+                  {incompleto && (
+                    <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 2 }}>
+                      <Icon name="warning" size={12} /> Documentos faltantes: {faltantes.join(", ")}
                     </div>
                   )}
                 </div>
