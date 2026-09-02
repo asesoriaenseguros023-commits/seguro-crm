@@ -12,6 +12,7 @@ const FORM_VACIO = {
 
 const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
   const [q, setQ] = useState("");
+  const [busquedaModo, setBusquedaModo] = useState("nombre");
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
@@ -24,15 +25,12 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
 
   const clientesFiltrados = useMemo(
     () =>
-      clientes.filter(
-        (c) =>
-          !q ||
-          c.nombre?.toLowerCase().includes(q.toLowerCase()) ||
-          c.email?.toLowerCase().includes(q.toLowerCase()) ||
-          c.documento?.includes(q) ||
-          c.celular?.includes(q)
-      ),
-    [clientes, q]
+      clientes.filter((c) => {
+        if (!q) return true;
+        if (busquedaModo === "documento") return (c.documento || "").includes(q.trim());
+        return c.nombre?.toLowerCase().includes(q.toLowerCase());
+      }),
+    [clientes, q, busquedaModo]
   );
 
   const resetForm = () => { setForm(FORM_VACIO); setShowForm(false); setEditItem(null); setFormError(""); };
@@ -126,12 +124,20 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
+          {[["nombre", "Nombre"], ["documento", "Documento"]].map(([modo, label]) => (
+            <button key={modo} onClick={() => { setBusquedaModo(modo); setQ(""); }}
+              style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={S.searchBar}>
           <Icon name="search" size={16} />
           <input
             style={S.searchInput}
-            placeholder="Buscar por nombre, email, documento, celular…"
+            placeholder={busquedaModo === "documento" ? "Número de documento…" : "Nombre del cliente…"}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -139,7 +145,8 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "0.7fr 1.8fr 1.2fr 1fr 1fr 0.8fr 100px" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 0.6fr 1.8fr 1.2fr 1fr 1fr 0.8fr 100px" }}>
+          <span>#</span>
           <span>Tipo</span><span>Nombre</span><span>Celular / Email</span>
           <span>Documento</span><span>Ciudad</span><span>Contacto</span><span>Acciones</span>
         </div>
@@ -148,32 +155,30 @@ const ClientesPage = ({ clientes, onAdd, onEdit, onDelete, userRol }) => {
             No hay clientes registrados
           </div>
         ) : (
-          clientesFiltrados.map((c) => (
+          clientesFiltrados.map((c, idx) => (
             <div
               key={c.id}
-              style={{ ...S.tableRow, gridTemplateColumns: "0.7fr 1.8fr 1.2fr 1fr 1fr 0.8fr 100px" }}
+              style={{ ...S.tableRow, padding: "7px 18px", gridTemplateColumns: "36px 0.6fr 1.8fr 1.2fr 1fr 1fr 0.8fr 100px" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = BLUE.light)}
               onMouseLeave={(e) => (e.currentTarget.style.background = "")}
             >
-              <span style={S.chip(c.tipoPersona === "Jurídica" ? "#7c3aed" : BLUE.primary)}>
+              <div style={{ fontWeight: 700, color: "#bbb", fontSize: 12 }}>{idx + 1}</div>
+              <span style={{ ...S.chip(c.tipoPersona === "Jurídica" ? "#7c3aed" : BLUE.primary), fontSize: 11 }}>
                 {c.tipoPersona === "Jurídica" ? "J" : "N"}
               </span>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{c.nombre}</div>
+                <div style={{ fontWeight: 600, fontSize: 12.5 }}>{c.nombre}</div>
                 {c.tipoPersona === "Jurídica" && c.nombreContacto && (
-                  <div style={{ fontSize: 11.5, color: "#888" }}>Cto: {c.nombreContacto}</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>Cto: {c.nombreContacto}</div>
                 )}
               </div>
               <div>
-                <div style={{ fontSize: 13 }}>{c.celular || c.telefono || "—"}</div>
-                {c.tipoPersona === "Jurídica" && c.telefonoContacto && (
-                  <div style={{ fontSize: 11.5, color: "#7c3aed" }}>Cto: {c.telefonoContacto}</div>
-                )}
-                <div style={{ fontSize: 11.5, color: "#888" }}>{c.email || ""}</div>
+                <div style={{ fontSize: 12.5 }}>{c.celular || c.telefono || "—"}</div>
+                <div style={{ fontSize: 11, color: "#888" }}>{c.email || ""}</div>
               </div>
-              <div style={{ fontSize: 13 }}>{c.tipoDocumento}: {c.documento || "—"}</div>
-              <div style={{ fontSize: 13, color: "#555" }}>{c.ciudad || "—"}</div>
-              <div style={{ fontSize: 12.5, color: "#555" }}>
+              <div style={{ fontSize: 12.5 }}>{c.tipoDocumento}: {c.documento || "—"}</div>
+              <div style={{ fontSize: 12.5, color: "#555" }}>{c.ciudad || "—"}</div>
+              <div style={{ fontSize: 12, color: "#555" }}>
                 {c.tipoPersona === "Jurídica" ? (c.telefonoContacto || "—") : "—"}
               </div>
               <div style={{ display: "flex", gap: 4 }}>
