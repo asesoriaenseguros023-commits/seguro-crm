@@ -6,8 +6,14 @@ import { fmt, fmtDate, diasParaVencer, esAdmin } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
 const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, onUpdatePoliza }) => {
-  const [filtro, setFiltro] = useState("30");
+  // Todo anclado al reloj/fecha real del sistema, nunca un valor fijo — por
+  // defecto solo el mes en curso, no un rango de días como antes.
+  const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
+  const [mes, setMes] = useState(() => MESES[new Date().getMonth()]);
+  const [soloVencidas, setSoloVencidas] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
@@ -18,21 +24,22 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
     ? polizas
     : polizas.filter((p) => p.agenteId === agenteActualId);
 
-  const getCount = (val) =>
-    polizasPorRol.filter((p) => {
-      const d = diasParaVencer(p.vigenciaFin);
-      return val === "vencidas"
-        ? p.estado === "Vencida"
-        : p.estado === "Activa" && d >= 0 && d <= parseInt(val);
-    }).length;
+  const anios = Array.from(new Set([
+    String(new Date().getFullYear()),
+    ...polizasPorRol.map((p) => (p.vigenciaFin || "").substring(0, 4)).filter(Boolean),
+  ])).sort().reverse();
+
+  const enMesSeleccionado = (p) => {
+    const f = p.vigenciaFin || "";
+    return f.startsWith(anio) && f.substring(5, 7) === String(MESES.indexOf(mes) + 1).padStart(2, "0");
+  };
+
+  const cantidadMes = polizasPorRol.filter((p) => p.estado === "Activa" && enMesSeleccionado(p)).length;
+  const cantidadVencidas = polizasPorRol.filter((p) => p.estado === "Vencida").length;
 
   const candidates = polizasPorRol
     .filter((p) => {
-      const d = diasParaVencer(p.vigenciaFin);
-      const matchFiltro =
-        filtro === "vencidas"
-          ? p.estado === "Vencida"
-          : p.estado === "Activa" && d >= 0 && d <= parseInt(filtro);
+      const matchFiltro = soloVencidas ? p.estado === "Vencida" : p.estado === "Activa" && enMesSeleccionado(p);
       const matchQ =
         !q ||
         p.numero?.toLowerCase().includes(q.toLowerCase()) ||
@@ -146,21 +153,40 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        {[["7","7 días"],["15","15 días"],["30","30 días"],["60","60 días"],["vencidas","Vencidas"]].map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => setFiltro(val)}
-            style={{
-              padding: "7px 16px", borderRadius: 20,
-              border: `1.5px solid ${filtro === val ? BLUE.primary : BLUE.border}`,
-              background: filtro === val ? BLUE.light : "#fff",
-              color: filtro === val ? BLUE.primary : "#555",
-              fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            {label} <span style={{ color: filtro === val ? BLUE.primary : "#aaa" }}>({getCount(val)})</span>
-          </button>
-        ))}
+        <button
+          onClick={() => setSoloVencidas(false)}
+          style={{
+            padding: "7px 16px", borderRadius: 20,
+            border: `1.5px solid ${!soloVencidas ? BLUE.primary : BLUE.border}`,
+            background: !soloVencidas ? BLUE.light : "#fff",
+            color: !soloVencidas ? BLUE.primary : "#555",
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Por vencer <span style={{ color: !soloVencidas ? BLUE.primary : "#aaa" }}>({cantidadMes})</span>
+        </button>
+        {!soloVencidas && (
+          <>
+            <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={anio} onChange={(e) => setAnio(e.target.value)}>
+              {anios.map((a) => <option key={a}>{a}</option>)}
+            </select>
+            <select style={{ ...S.select, width: "auto", padding: "7px 12px" }} value={mes} onChange={(e) => setMes(e.target.value)}>
+              {MESES.map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </>
+        )}
+        <button
+          onClick={() => setSoloVencidas(true)}
+          style={{
+            padding: "7px 16px", borderRadius: 20,
+            border: `1.5px solid ${soloVencidas ? "#dc2626" : BLUE.border}`,
+            background: soloVencidas ? "#fef2f2" : "#fff",
+            color: soloVencidas ? "#dc2626" : "#555",
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Vencidas <span style={{ color: soloVencidas ? "#dc2626" : "#aaa" }}>({cantidadVencidas})</span>
+        </button>
         <div style={{ ...S.searchBar, marginLeft: "auto" }}>
           <Icon name="search" size={16} />
           <input style={S.searchInput} placeholder="Buscar póliza, cliente, ramo…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -181,7 +207,7 @@ const RenovacionesPage = ({ polizas, userRol, agenteActualId, onImportPolizas, o
           {candidates.map((p) => {
             const d = diasParaVencer(p.vigenciaFin);
             const urgColor =
-              filtro === "vencidas" ? "#dc2626" : d <= 7 ? "#dc2626" : d <= 15 ? "#d97706" : BLUE.primary;
+              soloVencidas ? "#dc2626" : d <= 7 ? "#dc2626" : d <= 15 ? "#d97706" : BLUE.primary;
             const decisionColor =
               { "Cliente renueva": "#16a34a", "Cliente no renueva": "#dc2626" }[p.decisionRenovacion] || "#6b7280";
             return (
