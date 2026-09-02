@@ -429,9 +429,12 @@ const InteresadosPage = ({
   const [showCotizacion, setShowCotizacion] = useState(null);
 
   const interesadosFiltrados = useMemo(() => {
-    const base = esAdmin(userRol)
+    const base = (esAdmin(userRol)
       ? interesados
-      : interesados.filter((i) => i.agenteId === agenteActualId);
+      : interesados.filter((i) => i.agenteId === agenteActualId)
+    // Ya se cotizó (envioOficina) — cambió de fase, ya no es un lead
+    // pendiente de gestionar. Mismo criterio que cotizaciones -> pólizas.
+    ).filter((i) => !i.envioOficina);
     return base.filter(
       (i) =>
         !q ||
@@ -474,9 +477,9 @@ const InteresadosPage = ({
       </div>
 
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 100px 1.6fr 1fr 140px 150px 1fr" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 100px 1.6fr 1fr 140px 1fr" }}>
           <span>#</span><span>Fecha</span><span>Cliente</span><span>Tipo Seguro</span>
-          <span>Estado Docs</span><span>Enviado a Cotización</span><span>Acciones</span>
+          <span>Estado Docs</span><span>Acciones</span>
         </div>
         {interesadosFiltrados.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: "#aaa" }}>
@@ -522,11 +525,6 @@ const InteresadosPage = ({
                     <span style={{ fontSize: 12, color: "#ccc" }}>—</span>
                   )}
                 </div>
-                <div>
-                  {i.envioOficina
-                    ? <span style={S.badge("#16a34a")}>Si</span>
-                    : <span style={S.badge("#6b7280")}>No</span>}
-                </div>
                 <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
                   <button style={S.btn("ghost")} onClick={() => setEditInteresado(i)}>
                     <Icon name="edit" size={14} />
@@ -536,9 +534,9 @@ const InteresadosPage = ({
                       <Icon name="trash" size={14} />
                     </button>
                   )}
-                  {i.envioOficina ? (
-                    <span style={{ ...S.badge("#16a34a"), fontSize: 11.5, whiteSpace: "nowrap" }}>En Cotización</span>
-                  ) : docsDelRamo.length === 0 ? (
+                  {/* i.envioOficina siempre es false acá — las filas con
+                      envioOficina ya se filtraron fuera de la lista. */}
+                  {docsDelRamo.length === 0 ? (
                     <span style={{ ...S.badge(BLUE.primary), fontSize: 11.5, whiteSpace: "nowrap" }}>Llamar al Cliente</span>
                   ) : !todosCompletos ? (
                     <span style={{ ...S.badge("#f59e0b"), fontSize: 11.5, whiteSpace: "nowrap" }}>Pendiente Docs</span>
