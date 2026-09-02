@@ -432,6 +432,18 @@ export default function App() {
       if (errPol) return { error: errPol.message };
       setPolizas((prev) => prev.filter((p) => p.id !== polizaLigada.id));
     }
+    // Pólizas cuya renovación generó ESTA cotización (Renovaciones ->
+    // "Cliente Cotiza"): esas pólizas son reales, no se borran — solo se
+    // suelta la referencia para poder borrar la cotización sin violar la
+    // foreign key polizas_cotizacion_renovacion_id_fkey.
+    const polizasRenovacion = polizas.filter((p) => p.cotizacionRenovacionId === id);
+    if (polizasRenovacion.length > 0) {
+      const { error: errRen } = await supabase.from("polizas")
+        .update({ cotizacion_renovacion_id: null }).in("id", polizasRenovacion.map((p) => p.id));
+      if (errRen) return { error: errRen.message };
+      setPolizas((prev) => prev.map((p) =>
+        polizasRenovacion.some((pr) => pr.id === p.id) ? { ...p, cotizacionRenovacionId: null } : p));
+    }
     const { error } = await supabase.from("cotizaciones").delete().eq("id", id);
     if (error) return { error: error.message };
     setCotizaciones((prev) => prev.filter((x) => x.id !== id));
