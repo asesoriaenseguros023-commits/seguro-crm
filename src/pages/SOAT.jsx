@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
 import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
-import { parseDateSoat, mapSoat, toSoatRow } from "../helpers.js";
+import { parseDateSoat, mapSoat, toSoatRow, authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -102,6 +102,9 @@ const SoatPage = ({ showConfirm, softphone }) => {
   const [exportBases, setExportBases] = useState([]);
   const [exportEstados, setExportEstados] = useState(FASES_SOAT.map(f => f.id));
   const fileRef = useRef();
+  // Estado técnico de llamadas Twilio (estado/duración/grabación), por cliente
+  const [llamadasTecnicas, setLlamadasTecnicas] = useState({});
+  const [reproduciendo, setReproduciendo] = useState(null); // { sid, url } o "cargando:<sid>"
 
   // ─── Carga inicial + realtime ────────────────────────────────────────────
   useEffect(() => {
@@ -126,10 +129,27 @@ const SoatPage = ({ showConfirm, softphone }) => {
           setClientes(p => p.filter(x => x.id !== payload.old.id));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "agentes" }, cargarAgentes)
+      .on("postgres_changes", { event: "*", schema: "public", table: "soat_llamadas" }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        setLlamadasTecnicas(p => {
+          const lista = (p[row.cliente_id] || []).filter(l => l.id !== row.id);
+          return { ...p, [row.cliente_id]: [row, ...lista].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5) };
+        });
+      })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
+
+  // Trae las últimas llamadas técnicas de este cliente al abrir su detalle
+  // (el realtime de arriba solo empuja cambios nuevos, no el historial ya
+  // existente).
+  const cargarLlamadasTecnicas = async (clienteId) => {
+    const { data } = await supabase.from("soat_llamadas").select("*")
+      .eq("cliente_id", clienteId).order("created_at", { ascending: false }).limit(5);
+    if (data) setLlamadasTecnicas(p => ({ ...p, [clienteId]: data }));
+  };
 
 
   // ─── Update campo ─────────────────────────────────────────────────────────
@@ -154,6 +174,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
     setModal(c); setActiveTab("info");
     setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
     setCallLogError(""); setModalCloseError("");
+    cargarLlamadasTecnicas(c.id);
   };
 
   // Al llamar, abre el detalle directo en "Registrar llamada" — así el
@@ -161,7 +182,24 @@ const SoatPage = ({ showConfirm, softphone }) => {
   const iniciarLlamada = (c) => {
     openModal(c);
     setActiveTab("llamada");
-    softphone.startCall(c.telefono, c.nombre);
+    softphone.startCall(c.telefono, c.nombre, c.id);
+  };
+
+  const ESTADOS_LLAMADA = {
+    completed: { label: "Contestada", color: "#16a34a" },
+    "no-answer": { label: "No contestó", color: "#f59e0b" },
+    busy: { label: "Ocupado", color: "#f59e0b" },
+    failed: { label: "Falló", color: "#dc2626" },
+    canceled: { label: "Cancelada", color: "#6b7280" },
+  };
+
+  const reproducirGrabacion = async (sid) => {
+    if (reproduciendo?.sid === sid) return;
+    setReproduciendo({ sid, url: null });
+    const res = await fetch(`/api/twilio-recording-audio?sid=${sid}`, { headers: await authHeaders() });
+    if (!res.ok) { setReproduciendo(null); return; }
+    const blob = await res.blob();
+    setReproduciendo({ sid, url: URL.createObjectURL(blob) });
   };
 
   const handleCloseModal = () => {
@@ -871,6 +909,33 @@ const SoatPage = ({ showConfirm, softphone }) => {
                   <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", fontSize: 12.5, color: BLUE.text }}>
                     Intento #{(modal.intentos || 0) + 1} · Agente: <strong>{modal.agente}</strong>
                   </div>
+                  {llamadasTecnicas[modal.id]?.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <label style={lblS}>Registro técnico (Twilio)</label>
+                      {llamadasTecnicas[modal.id].map(l => {
+                        const est = ESTADOS_LLAMADA[l.estado] || { label: l.estado || "En curso…", color: "#6b87b0" };
+                        const mins = l.duracion_seg != null ? `${Math.floor(l.duracion_seg / 60)}:${String(l.duracion_seg % 60).padStart(2, "0")}` : null;
+                        return (
+                          <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px", background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8 }}>
+                            <span style={{ ...S.chip(est.color) }}>{est.label}</span>
+                            {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
+                            <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO")}</span>
+                            {l.grabacion_sid && (
+                              reproduciendo?.sid === l.grabacion_sid ? (
+                                reproduciendo.url
+                                  ? <audio controls autoPlay src={reproduciendo.url} style={{ height: 28, marginLeft: "auto" }} />
+                                  : <span style={{ marginLeft: "auto", color: "#6b87b0" }}>Cargando…</span>
+                              ) : (
+                                <button onClick={() => reproducirGrabacion(l.grabacion_sid)} style={{ ...S.btn("ghost"), marginLeft: "auto", padding: "3px 10px", fontSize: 12 }}>
+                                  Escuchar grabación
+                                </button>
+                              )
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                     <div style={{ gridColumn: "1/-1" }}>
                       <label style={lblS}>Resultado de la llamada *</label>

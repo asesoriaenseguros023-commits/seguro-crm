@@ -45,9 +45,9 @@ export function useSoftphone() {
     return () => clearTimeout(t);
   }, [status]);
 
-  const startCall = useCallback(async (telefono, nombre) => {
+  const startCall = useCallback(async (telefono, nombre, clienteId) => {
     if (status !== "idle") return; // una llamada a la vez
-    setCallee({ telefono, nombre });
+    setCallee({ telefono, nombre, clienteId });
     setStatus("requesting-token");
     try {
       const res = await fetch("/api/twilio-token", { headers: await authHeaders() });
@@ -61,7 +61,10 @@ export function useSoftphone() {
       device.on("error", (e) => goError(e?.message || "Error de Twilio."));
 
       setStatus("connecting");
-      const call = await device.connect({ params: { To: telefono } });
+      // ClienteId viaja como parámetro hasta el webhook de TwiML, que lo
+      // reenvía en los callbacks de estado/grabación para poder guardar
+      // el resultado técnico contra el cliente correcto.
+      const call = await device.connect({ params: { To: telefono, ClienteId: clienteId || "" } });
       callRef.current = call;
 
       call.on("ringing", () => setStatus((s) => (s === "in-call" ? s : "ringing")));

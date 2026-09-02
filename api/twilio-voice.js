@@ -25,9 +25,22 @@ export default async function handler(req, res) {
   if (!e164) {
     twiml.say({ language: "es-MX" }, "No se pudo determinar el número a marcar.");
   } else {
-    // Graba desde que el cliente contesta (no timbrado), un canal por
-    // lado (agente/cliente separados) — pedido explícito del usuario.
-    twiml.dial({ callerId: process.env.TWILIO_CALLER_ID, timeout: 30, record: "record-from-answer-dual" }).number(e164);
+    // El navegador manda ClienteId como parámetro de device.connect() — se
+    // reenvía en la query de los callbacks para poder ligar el resultado
+    // técnico (estado/duración/grabación) al cliente correcto en soat_llamadas.
+    const base = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+    const clienteId = encodeURIComponent(req.body?.ClienteId || "");
+    twiml.dial({
+      callerId: process.env.TWILIO_CALLER_ID,
+      timeout: 30,
+      // Graba desde que el cliente contesta (no timbrado), un canal por
+      // lado (agente/cliente separados) — pedido explícito del usuario.
+      record: "record-from-answer-dual",
+      recordingStatusCallback: `${base}/api/twilio-recording-status?clienteId=${clienteId}`,
+      recordingStatusCallbackEvent: "completed",
+      action: `${base}/api/twilio-call-status?clienteId=${clienteId}`,
+      method: "POST",
+    }).number(e164);
   }
 
   res.setHeader("Content-Type", "text/xml");
