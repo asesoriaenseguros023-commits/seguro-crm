@@ -3,7 +3,7 @@ import { supabase } from "../supabase.js";
 import { BLUE } from "../constants.js";
 import { FontLoader } from "../components/Modal.jsx";
 
-const ADMIN_EMAIL = "minchitas@gmail.com";
+export const ADMIN_EMAIL = "minchitas@gmail.com";
 
 const LoginPage = ({ onLogin }) => {
   const [pass, setPass] = useState("");

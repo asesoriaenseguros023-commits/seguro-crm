@@ -2,15 +2,24 @@ import { useState, useMemo } from "react";
 import { S, BLUE, ESTADOS_COT, ACCIONES_COT } from "../constants.js";
 import { fmtDate, esAdmin, accionColor, estadoCotColor2 } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
+import { supabase } from "../supabase.js";
 import { PolizaEmitidaModal } from "./Leads.jsx";
+import { ADMIN_EMAIL } from "./Login.jsx";
 
 const CotizacionesPage = ({
   cotizaciones, interesados, aseguradoras,
   onEditCotizacion, onDeleteCotizacion,
-  userRol, agenteActualId, showConfirm,
+  userRol, agenteActualId,
 }) => {
   const [q, setQ] = useState("");
   const [editModal, setEditModal] = useState(null);
+  // Borrar una cotización con póliza ligada (activa) exige contraseña —
+  // porque implica borrar también esa póliza en cascada, no solo la cotización.
+  const [delPasswordFor, setDelPasswordFor] = useState(null);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const cotizacionesFiltradas = useMemo(() => {
     const base = esAdmin(userRol)
@@ -29,6 +38,21 @@ const CotizacionesPage = ({
     await onEditCotizacion({ ...cot, ...changes });
   };
 
+  const confirmarBorrado = async () => {
+    if (!passwordInput) return;
+    setDeleting(true);
+    const { error: authError } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password: passwordInput });
+    if (authError) {
+      setPasswordError("Contraseña incorrecta.");
+      setDeleting(false);
+      return;
+    }
+    const res = await onDeleteCotizacion(delPasswordFor.id);
+    setDeleting(false);
+    setDelPasswordFor(null);
+    if (res?.error) setActionError(res.error);
+  };
+
   return (
     <div>
       <div style={S.pageHeader}>
@@ -37,6 +61,12 @@ const CotizacionesPage = ({
           <div style={S.pageSub}>{cotizacionesFiltradas.length} cotizaciones registradas</div>
         </div>
       </div>
+
+      {actionError && (
+        <div style={{ ...S.alertBox("#dc2626"), marginBottom: 16 }}>
+          <span style={{ fontSize: 13.5, color: "#dc2626", fontWeight: 600 }}>{actionError}</span>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
         <div style={S.searchBar}>
@@ -119,14 +149,7 @@ const CotizacionesPage = ({
                     <button
                       style={{ ...S.btn("ghost"), color: "#dc2626" }}
                       title="Eliminar"
-                      onClick={async () => {
-                        const ok = await showConfirm(
-                          `¿Eliminar esta cotización de ${c.clienteNombre || "este cliente"}?`,
-                          "Esta acción no se puede deshacer."
-                        );
-                        if (!ok) return;
-                        await onDeleteCotizacion(c.id);
-                      }}
+                      onClick={() => { setActionError(""); setPasswordInput(""); setPasswordError(""); setDelPasswordFor(c); }}
                     >
                       <Icon name="trash" size={14} />
                     </button>
@@ -164,6 +187,35 @@ const CotizacionesPage = ({
           }}
           onClose={() => setEditModal(null)}
         />
+      )}
+
+      {delPasswordFor && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }}
+          onClick={() => !deleting && setDelPasswordFor(null)}>
+          <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 400, padding: "28px 32px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: BLUE.text, marginBottom: 8 }}>Eliminar cotización</div>
+            <p style={{ fontSize: 13.5, color: "#555", marginBottom: 16 }}>
+              ¿Eliminar la cotización de <strong>{delPasswordFor.clienteNombre || "este cliente"}</strong>? Esta acción no se puede deshacer.
+              Escribe la contraseña para confirmar.
+            </p>
+            <input
+              type="password" autoFocus style={S.input} value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && confirmarBorrado()}
+              placeholder="Contraseña"
+            />
+            {passwordError && (
+              <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 8 }}>{passwordError}</div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+              <button style={S.btn("secondary")} onClick={() => setDelPasswordFor(null)} disabled={deleting}>Cancelar</button>
+              <button style={{ ...S.btn("danger"), opacity: deleting ? 0.6 : 1 }} onClick={confirmarBorrado} disabled={deleting || !passwordInput}>
+                {deleting ? "Eliminando…" : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

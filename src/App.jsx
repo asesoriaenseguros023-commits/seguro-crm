@@ -420,9 +420,22 @@ export default function App() {
     }
   };
 
+  // Si la cotización tiene una póliza ligada (accion "Póliza Emitida"), hay
+  // que borrar esa póliza primero — cotizaciones.id tiene una foreign key
+  // desde polizas.cotizacion_id sin cascade, así que borrar la cotización
+  // sola siempre fallaba (409) y el error quedaba silenciado, dando la
+  // impresión de que sí borró cuando en realidad seguía intacta en la base.
   const deleteCotizacion = async (id) => {
-    await supabase.from("cotizaciones").delete().eq("id", id);
+    const polizaLigada = polizas.find((p) => p.cotizacionId === id);
+    if (polizaLigada) {
+      const { error: errPol } = await supabase.from("polizas").delete().eq("id", polizaLigada.id);
+      if (errPol) return { error: errPol.message };
+      setPolizas((prev) => prev.filter((p) => p.id !== polizaLigada.id));
+    }
+    const { error } = await supabase.from("cotizaciones").delete().eq("id", id);
+    if (error) return { error: error.message };
     setCotizaciones((prev) => prev.filter((x) => x.id !== id));
+    return {};
   };
 
   // ─── Emitir póliza ────────────────────────────────────────────────────────
