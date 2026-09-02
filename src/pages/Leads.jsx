@@ -417,6 +417,7 @@ const InteresadosPage = ({
   userRol, agenteActualId,
 }) => {
   const [q, setQ] = useState("");
+  const [busquedaModo, setBusquedaModo] = useState("nombre");
   const [showFormInteresado, setShowFormInteresado] = useState(false);
   const [editInteresado, setEditInteresado] = useState(null);
   const [delInteresado, setDelInteresado] = useState(null);
@@ -429,11 +430,9 @@ const InteresadosPage = ({
     return base.filter(
       (i) =>
         !q ||
-        i.nombre?.toLowerCase().includes(q.toLowerCase()) ||
-        i.telefono?.includes(q) ||
-        i.email?.toLowerCase().includes(q.toLowerCase())
+        (busquedaModo === "telefono" ? i.telefono?.includes(q.trim()) : i.nombre?.toLowerCase().includes(q.toLowerCase()))
     );
-  }, [interesados, q, userRol, agenteActualId]);
+  }, [interesados, q, busquedaModo, userRol, agenteActualId]);
 
   const handleSaveInteresado = async (form) => {
     if (editInteresado) { await onEditInteresado({ ...editInteresado, ...form }); setEditInteresado(null); }
@@ -452,10 +451,20 @@ const InteresadosPage = ({
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
+          {[["nombre", "Nombre"], ["telefono", "Teléfono"]].map(([modo, label]) => (
+            <button key={modo} onClick={() => { setBusquedaModo(modo); setQ(""); }}
+              style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={S.searchBar}>
           <Icon name="search" size={16} />
-          <input style={S.searchInput} placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input style={S.searchInput}
+            placeholder={busquedaModo === "telefono" ? "Número de teléfono…" : "Nombre del lead…"}
+            value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 

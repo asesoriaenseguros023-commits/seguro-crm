@@ -12,6 +12,7 @@ const CotizacionesPage = ({
   userRol, agenteActualId,
 }) => {
   const [q, setQ] = useState("");
+  const [busquedaModo, setBusquedaModo] = useState("cliente");
   const [editModal, setEditModal] = useState(null);
   // Borrar una cotización con póliza ligada (activa) exige contraseña —
   // porque implica borrar también esa póliza en cascada, no solo la cotización.
@@ -25,14 +26,12 @@ const CotizacionesPage = ({
     const base = esAdmin(userRol)
       ? cotizaciones
       : cotizaciones.filter((c) => c.agenteId === agenteActualId);
-    return base.filter(
-      (c) =>
-        !q ||
-        c.clienteNombre?.toLowerCase().includes(q.toLowerCase()) ||
-        c.ramo?.toLowerCase().includes(q.toLowerCase()) ||
-        c.numeroPolizaEmitida?.toLowerCase().includes(q.toLowerCase())
-    );
-  }, [cotizaciones, q, userRol, agenteActualId]);
+    return base.filter((c) => {
+      if (!q) return true;
+      if (busquedaModo === "poliza") return (c.numeroPolizaEmitida || "").toLowerCase().includes(q.toLowerCase());
+      return c.clienteNombre?.toLowerCase().includes(q.toLowerCase());
+    });
+  }, [cotizaciones, q, busquedaModo, userRol, agenteActualId]);
 
   const handleSave = async (cot, changes) => {
     await onEditCotizacion({ ...cot, ...changes });
@@ -68,12 +67,20 @@ const CotizacionesPage = ({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", width: "fit-content", border: `1px solid ${BLUE.border}` }}>
+          {[["cliente", "Cliente"], ["poliza", "N° Póliza"]].map(([modo, label]) => (
+            <button key={modo} onClick={() => { setBusquedaModo(modo); setQ(""); }}
+              style={{ padding: "6px 18px", fontSize: 13, fontWeight: busquedaModo === modo ? 700 : 400, background: busquedaModo === modo ? BLUE.primary : "#fff", color: busquedaModo === modo ? "#fff" : "#555", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={S.searchBar}>
           <Icon name="search" size={16} />
           <input
             style={S.searchInput}
-            placeholder="Buscar cliente, ramo, n° póliza…"
+            placeholder={busquedaModo === "poliza" ? "Número de póliza…" : "Nombre del cliente…"}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
