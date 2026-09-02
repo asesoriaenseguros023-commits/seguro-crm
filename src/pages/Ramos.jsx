@@ -70,49 +70,45 @@ const RamosPage = ({ ramos, onAdd, onEdit, onDelete, documentosCatalogo, onToggl
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-        {ramos.map((r) => (
-          <div
-            key={r.id}
-            style={{
-              background: "#fff", borderRadius: 12, padding: 18,
-              boxShadow: "0 1px 6px rgba(26,86,219,0.08)",
-              border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}`,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text }}>{r.nombre}</div>
+      <div style={S.tableWrap}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.3fr 1.6fr 1.2fr 0.8fr 140px" }}>
+          <span>#</span><span>Nombre</span><span>Descripción</span><span>Documentos</span><span>Estado</span><span>Acciones</span>
+        </div>
+        {ramos.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#aaa", fontSize: 14 }}>
+            No hay ramos. Agrega el primero.
+          </div>
+        ) : (
+          ramos.map((r, idx) => (
+            <div key={r.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.3fr 1.6fr 1.2fr 0.8fr 140px" }}>
+              <div style={{ fontWeight: 700, color: "#bbb", fontSize: 12 }}>{idx + 1}</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: BLUE.text }}>{r.nombre}</div>
+              <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{r.descripcion || "—"}</div>
+              <div style={{ fontSize: 11.5, color: "#9aa8c7" }}>
+                {contarDocs(r, "Natural")} Natural · {contarDocs(r, "Jurídica")} Jurídica
+              </div>
               <span style={S.chip(r.activo !== false ? "#16a34a" : "#6b7280")}>
                 {r.activo !== false ? "Activo" : "Inactivo"}
               </span>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  style={S.btn("ghost")} title="Documentos"
+                  onClick={() => { setDocsPanelId(r.id); setTipoPersona("Natural"); }}
+                >
+                  <Icon name="document" size={14} />
+                </button>
+                <button
+                  style={S.btn("ghost")} title="Editar"
+                  onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false }); setShowForm(true); setFormError(""); }}
+                >
+                  <Icon name="edit" size={14} />
+                </button>
+                <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar" onClick={() => setDelItem(r)}>
+                  <Icon name="trash" size={14} />
+                </button>
+              </div>
             </div>
-            {r.descripcion && <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 4 }}>{r.descripcion}</div>}
-            <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>
-              Documentos: {contarDocs(r, "Natural")} Natural · {contarDocs(r, "Jurídica")} Jurídica
-            </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-              <button
-                style={{ ...S.btn("secondary"), flex: 1, justifyContent: "center" }}
-                onClick={() => { setDocsPanelId(r.id); setTipoPersona("Natural"); }}
-              >
-                <Icon name="document" size={14} />Documentos
-              </button>
-              <button
-                style={S.btn("ghost")} title="Editar"
-                onClick={() => { setEditItem(r); setForm({ nombre: r.nombre, descripcion: r.descripcion || "", activo: r.activo !== false }); setShowForm(true); setFormError(""); }}
-              >
-                <Icon name="edit" size={14} />
-              </button>
-              <button style={{ ...S.btn("ghost"), color: "#dc2626" }} title="Eliminar" onClick={() => setDelItem(r)}>
-                <Icon name="trash" size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
-        {ramos.length === 0 && (
-          <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>
-            No hay ramos. Agrega el primero.
-          </div>
+          ))
         )}
       </div>
 
