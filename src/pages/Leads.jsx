@@ -146,13 +146,13 @@ export const InteresadoForm = ({ initial, ramos, clientes, onSave, onClose }) =>
         </div>
 
         {(() => {
-          const ramoObj = ramos.find((r) => r.nombre === form.tipoSeguro);
-          const docsRamo = ramoObj?.documentos
-            ? Object.entries(ramoObj.documentos).filter(([, v]) => v).map(([k]) => k)
-            : [];
-          // Ya no bloquea el checkbox — solo avisa qué falta. El agente puede
-          // enviar a cotización con documentos incompletos si así lo decide.
-          const faltantes = docsRamo.filter((d) => form.documentosChecklist[d] !== "Sí");
+          // Reusa docsDelRamo (ya filtrado Natural/Jurídica y sin el prefijo
+          // "J_") — antes esto recalculaba su propia lista con las llaves
+          // crudas del ramo, que nunca coincidían con lo que de verdad
+          // guarda el checklist, así que "faltantes" salía mal aunque todo
+          // estuviera marcado. Ya no bloquea el checkbox — solo avisa qué
+          // falta, el agente decide si envía a cotización de todas formas.
+          const faltantes = docsDelRamo.filter((d) => form.documentosChecklist[d] !== "Sí");
           const incompleto = faltantes.length > 0;
           return (
             <div style={{
