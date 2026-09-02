@@ -489,8 +489,17 @@ const InteresadosPage = ({
           interesadosFiltrados.map((i, idx) => {
             const cliente = clientes.find((c) => c.id === i.clienteId);
             const ramoObj = ramos.find((r) => r.nombre === i.tipoSeguro);
+            // Mismo criterio que InteresadoForm: hay que filtrar por
+            // Natural/Jurídica y quitar el prefijo "J_" antes de comparar.
+            // Antes esta lista comparaba las llaves crudas del ramo (con
+            // "J_") contra el checklist (sin "J_") — nunca hacían match, así
+            // que CUALQUIER lead de tipo Jurídica salía "Incompletos" sin
+            // importar qué tan marcado estuviera de verdad.
+            const esJuridica = cliente?.tipo_persona === "Jurídica";
             const docsDelRamo = ramoObj?.documentos
-              ? Object.entries(ramoObj.documentos).filter(([, v]) => v).map(([k]) => k)
+              ? Object.entries(ramoObj.documentos)
+                  .filter(([k, v]) => v && (esJuridica ? k.startsWith("J_") : !k.startsWith("J_")))
+                  .map(([k]) => (esJuridica ? k.slice(2) : k))
               : [];
             const checklist = i.documentosChecklist || {};
             const todosCompletos = docsDelRamo.length > 0 && docsDelRamo.every((d) => checklist[d] === "Sí");
