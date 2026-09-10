@@ -190,6 +190,10 @@ const SoatPage = ({ showConfirm, softphone }) => {
     busy: { label: "Ocupado", color: "#f59e0b" },
     failed: { label: "Falló", color: "#dc2626" },
     canceled: { label: "Cancelada", color: "#6b7280" },
+    // La detección de contestador (AMD) marcó que "contestó" un buzón, un
+    // celular apagado o hubo puro silencio — no una persona. La llamada se
+    // colgó sola y la grabación se descartó.
+    buzon: { label: "Buzón / sin respuesta", color: "#8b5cf6" },
   };
 
   const reproducirGrabacion = async (sid) => {

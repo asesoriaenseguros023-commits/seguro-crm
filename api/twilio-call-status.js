@@ -21,10 +21,18 @@ export default async function handler(req, res) {
   // porque la grabación se configuró a nivel de <Dial>, no del hijo.
   const callSid = req.body?.CallSid;
   if (clienteId && callSid) {
+    // Si AMD ya marcó esta llamada como buzón, no la pises con "completed":
+    // DialCallStatus llega "completed" porque la operadora dio señal de
+    // contestado aunque quien "contestó" fue el buzón / un celular apagado.
+    const { data: previa } = await supabase.from("soat_llamadas")
+      .select("estado").eq("call_sid", callSid).maybeSingle();
+    const estado = previa?.estado === "buzon"
+      ? "buzon"
+      : (req.body?.DialCallStatus || null);
     await supabase.from("soat_llamadas").upsert({
       cliente_id: clienteId,
       call_sid: callSid,
-      estado: req.body?.DialCallStatus || null,
+      estado,
       duracion_seg: req.body?.DialCallDuration ? Number(req.body.DialCallDuration) : null,
     }, { onConflict: "call_sid" });
   }

@@ -18,7 +18,20 @@ export default async function handler(req, res) {
   const callSid = req.body?.CallSid;
   const recordingSid = req.body?.RecordingSid;
   if (callSid && recordingSid) {
-    await supabase.from("soat_llamadas").update({ grabacion_sid: recordingSid }).eq("call_sid", callSid);
+    const { data: llamada } = await supabase.from("soat_llamadas")
+      .select("estado").eq("call_sid", callSid).maybeSingle();
+    if (llamada?.estado === "buzon") {
+      // Grabación del saludo del buzón / aire muerto: no sirve de nada.
+      // Se borra de Twilio y no se guarda el SID.
+      try {
+        const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+        await client.recordings(recordingSid).remove();
+      } catch {
+        // Ya pudo haberse borrado o no existir: sin problema.
+      }
+    } else {
+      await supabase.from("soat_llamadas").update({ grabacion_sid: recordingSid }).eq("call_sid", callSid);
+    }
   }
 
   return res.status(200).end();

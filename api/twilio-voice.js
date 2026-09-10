@@ -30,7 +30,8 @@ export default async function handler(req, res) {
     // técnico (estado/duración/grabación) al cliente correcto en soat_llamadas.
     const base = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
     const clienteId = encodeURIComponent(req.body?.ClienteId || "");
-    twiml.dial({
+    const parentSid = encodeURIComponent(req.body?.CallSid || "");
+    const dial = twiml.dial({
       callerId: process.env.TWILIO_CALLER_ID,
       timeout: 30,
       // Graba desde que el cliente contesta (no timbrado), un canal por
@@ -40,7 +41,28 @@ export default async function handler(req, res) {
       recordingStatusCallbackEvent: "completed",
       action: `${base}/api/twilio-call-status?clienteId=${clienteId}`,
       method: "POST",
-    }).number(e164);
+    });
+
+    // Detección de contestador (AMD). La operadora manda "answered" también
+    // cuando la llamada cae a buzón o el celular está apagado / sin señal —
+    // por eso salían llamadas "Contestadas" con grabación donde nadie habló.
+    // AMD escucha los primeros segundos y, si contestó una máquina o hubo
+    // silencio, avisa a twilio-amd-status.js para marcar la llamada como
+    // buzón y colgarla. Interruptor por env var TWILIO_AMD:
+    //   "off"         → sin AMD (comportamiento viejo, no cobra AMD)
+    //   "detect-only" → marca buzón pero no cuelga
+    //   otro / vacío  → marca buzón y cuelga
+    if (process.env.TWILIO_AMD === "off") {
+      dial.number(e164);
+    } else {
+      dial.number({
+        machineDetection: "Enable",
+        machineDetectionSilenceTimeout: 5000,
+        machineDetectionTimeout: 20,
+        amdStatusCallback: `${base}/api/twilio-amd-status?clienteId=${clienteId}&parentSid=${parentSid}`,
+        amdStatusCallbackMethod: "POST",
+      }, e164);
+    }
   }
 
   res.setHeader("Content-Type", "text/xml");
