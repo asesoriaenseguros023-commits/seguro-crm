@@ -86,10 +86,9 @@ const SoatPage = ({ showConfirm, softphone }) => {
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
   const [importDups, setImportDups] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
-  const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
+  const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
   const [filtroAlerta, setFiltroAlerta] = useState(false);
   const [showNoInteresDetail, setShowNoInteresDetail] = useState(false);
-  const [ilocWarning, setIlocWarning] = useState(false);
   const [callLogError, setCallLogError] = useState("");
   const [modalCloseError, setModalCloseError] = useState("");
   // Funnel
@@ -171,7 +170,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
 
   const openModal = (c) => {
     setModal(c); setActiveTab("info");
-    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
+    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
     setCallLogError(""); setModalCloseError("");
     cargarLlamadasTecnicas(c.id);
   };
@@ -254,19 +253,10 @@ const SoatPage = ({ showConfirm, softphone }) => {
       setCallLogError("Debes seleccionar un motivo de no compra.");
       return;
     }
-    if (callLog.resultado === "ilocalizable" && callLog.motivoIloc === "No contestó / Buzón") {
-      const fechasUnicas = [...new Set((modal.historial || []).map(h => h.fecha))];
-      if (fechasUnicas.length < 3) {
-        setIlocWarning(true);
-        return;
-      }
-    }
     setCallLogError("");
     const clearAccion = FASES_SIN_ACCION.includes(callLog.resultado);
     const entry = { fecha: new Date().toLocaleDateString("es-CO"), ...callLog, agente: modal.agente };
-    const motivoGuardar = callLog.resultado === "no_interes" ? callLog.motivo
-      : callLog.resultado === "ilocalizable" ? callLog.motivoIloc
-      : modal.motivoNoCompra;
+    const motivoGuardar = callLog.resultado === "no_interes" ? callLog.motivo : modal.motivoNoCompra;
     const updated = {
       ...modal,
       historial: [entry, ...(modal.historial || [])],
@@ -283,7 +273,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
       motivo_no_compra: updated.motivoNoCompra,
     }).eq("id", modal.id);
     setModal(updated);
-    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "", motivoIloc: "" });
+    setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
     setActiveTab("historial");
   };
 
@@ -692,7 +682,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
                 <div style={{ fontSize: 12, color: "#555" }}>{c.fechaVencimiento || "—"}</div>
                 <select value={c.fase} onChange={e => updateC(c.id, "fase", e.target.value)}
                   style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1.5px solid ${fase.color}`, background: fase.bg, color: fase.text, cursor: "pointer", outline: "none", fontWeight: 700, width: "100%" }}>
-                  {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  {FASES_SOAT.map(f => <option key={f.id} value={f.id} disabled={f.id === "ilocalizable"} title={f.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta por Twilio — el agente no lo puede elegir a mano" : undefined}>{f.label}</option>)}
                 </select>
                 <select value={c.agente} onChange={e => updateC(c.id, "agente", e.target.value)}
                   style={{ fontSize: 11.5, padding: "4px 8px", borderRadius: 6, border: `1px solid ${BLUE.border}`, background: "#fff", color: "#333", cursor: "pointer", outline: "none", width: "100%" }}>
@@ -745,7 +735,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
               <div>
                 <label style={lblS}>Fase</label>
                 <select value={editModal.fase} onChange={e => setEditModal(p => ({ ...p, fase: e.target.value, motivoNoCompra: "" }))} style={selS}>
-                  {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  {FASES_SOAT.map(f => <option key={f.id} value={f.id} disabled={f.id === "ilocalizable"} title={f.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta por Twilio — el agente no lo puede elegir a mano" : undefined}>{f.label}</option>)}
                 </select>
               </div>
               <div>
@@ -875,7 +865,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
                     <div>
                       <label style={lblS}>Fase actual</label>
                       <select value={modal.fase} onChange={e => { updateC(modal.id, "fase", e.target.value); setModal(p => ({ ...p, fase: e.target.value })); }} style={selS}>
-                        {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                        {FASES_SOAT.map(f => <option key={f.id} value={f.id} disabled={f.id === "ilocalizable"} title={f.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta por Twilio — el agente no lo puede elegir a mano" : undefined}>{f.label}</option>)}
                       </select>
                     </div>
                     {!FASES_SIN_ACCION.includes(modal.fase) && <>
@@ -933,7 +923,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
                       <label style={lblS}>Resultado de la llamada *</label>
                       <select value={callLog.resultado} onChange={e => setCallLog(p => ({ ...p, resultado: e.target.value }))} style={selS}>
                         <option value="">Selecciona el resultado...</option>
-                        {FASES_SOAT.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                        {FASES_SOAT.map(f => <option key={f.id} value={f.id} disabled={f.id === "ilocalizable"} title={f.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta por Twilio — el agente no lo puede elegir a mano" : undefined}>{f.label}</option>)}
                       </select>
                     </div>
                     {callLog.resultado === "no_interes" && (
@@ -942,15 +932,6 @@ const SoatPage = ({ showConfirm, softphone }) => {
                         <select value={callLog.motivo} onChange={e => { setCallLog(p => ({ ...p, motivo: e.target.value })); setCallLogError(""); }} style={{ ...selS, borderColor: !callLog.motivo ? "#fca5a5" : BLUE.border }}>
                           <option value="">— Selecciona un motivo —</option>
                           {MOTIVOS_SOAT.map(m => <option key={m}>{m}</option>)}
-                        </select>
-                      </div>
-                    )}
-                    {callLog.resultado === "ilocalizable" && (
-                      <div style={{ gridColumn: "1/-1" }}>
-                        <label style={lblS}>Motivo ilocalizable</label>
-                        <select value={callLog.motivoIloc} onChange={e => { setCallLog(p => ({ ...p, motivoIloc: e.target.value })); setCallLogError(""); }} style={selS}>
-                          <option value="">— Selecciona —</option>
-                          {MOTIVOS_ILOCALIZABLE.map(m => <option key={m}>{m}</option>)}
                         </select>
                       </div>
                     )}
@@ -1146,20 +1127,6 @@ const SoatPage = ({ showConfirm, softphone }) => {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Ilocalizable warning ────────────────────────────────────────────── */}
-      {ilocWarning && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }} onClick={() => setIlocWarning(false)}>
-          <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 420, padding: "28px 32px", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", textAlign: "center" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 42, marginBottom: 12 }}>⚠️</div>
-            <div style={{ fontWeight: 800, fontSize: 17, color: "#92400e", marginBottom: 10 }}>Llamadas insuficientes</div>
-            <div style={{ fontSize: 14, color: "#555", lineHeight: 1.6, marginBottom: 20 }}>
-              Recuerde que debe llamar más de <strong>3 veces en días diferentes</strong> antes de seleccionar "No contestó / Buzón" como motivo.
-            </div>
-            <button onClick={() => setIlocWarning(false)} style={{ ...S.btn("primary"), justifyContent: "center", width: "100%" }}>Entendido</button>
           </div>
         </div>
       )}
