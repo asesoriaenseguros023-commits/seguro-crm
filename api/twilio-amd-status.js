@@ -33,6 +33,12 @@ export default async function handler(req, res) {
   const parentSid = req.query.parentSid;
   const answeredBy = req.body?.AnsweredBy;
 
+  // Diagnóstico: AMD falla silenciosamente si Twilio clasifica mal (ej.
+  // buzón detectado como "human") — sin esto no hay forma de distinguir
+  // "AMD no corrió" de "AMD corrió y se equivocó" cuando una llamada queda
+  // en 'completed' sin colgar sola.
+  console.log("[twilio-amd-status]", { clienteId, parentSid, answeredBy });
+
   if (clienteId && parentSid && NO_HUMANO.has(answeredBy)) {
     // 1) Marca la llamada como buzón ANTES de colgar, para ganarle la
     //    carrera al callback de fin de <Dial> (twilio-call-status.js), que
