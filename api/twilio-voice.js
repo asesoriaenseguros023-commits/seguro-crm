@@ -41,13 +41,6 @@ export default async function handler(req, res) {
       recordingStatusCallbackEvent: "completed",
       action: `${base}/api/twilio-call-status?clienteId=${clienteId}`,
       method: "POST",
-      // Red de seguridad ante fallos de AMD (Twilio clasifica mal un buzón
-      // como "human" y por diseño no cuelga — pasó en una prueba real):
-      // tope duro de 3 minutos DE LLAMADA CONECTADA (no cuenta el timbrado)
-      // para que ninguna llamada quede corriendo indefinidamente y generando
-      // costo. Decisión del usuario, asumiendo el riesgo de cortar una
-      // conversación real que se alargue más de eso.
-      timeLimit: 180,
     });
 
     // Detección de contestador (AMD). La operadora manda "answered" también
