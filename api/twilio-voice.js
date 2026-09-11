@@ -41,6 +41,13 @@ export default async function handler(req, res) {
       recordingStatusCallbackEvent: "completed",
       action: `${base}/api/twilio-call-status?clienteId=${clienteId}`,
       method: "POST",
+      // Red de seguridad ante fallos de AMD (Twilio clasifica mal un buzón
+      // como "human" y por diseño no cuelga — pasó en una prueba real):
+      // tope duro de 3 minutos DE LLAMADA CONECTADA (no cuenta el timbrado)
+      // para que ninguna llamada quede corriendo indefinidamente y generando
+      // costo. Decisión del usuario, asumiendo el riesgo de cortar una
+      // conversación real que se alargue más de eso.
+      timeLimit: 180,
     });
 
     // Detección de contestador (AMD). La operadora manda "answered" también
@@ -59,6 +66,13 @@ export default async function handler(req, res) {
         machineDetection: "Enable",
         machineDetectionSilenceTimeout: 5000,
         machineDetectionTimeout: 20,
+        // AMD no se "entrena" (no es un modelo que aprenda de nuestros
+        // datos) — solo se puede ajustar por estos parámetros. Bajar
+        // SpeechEndThreshold es la recomendación oficial de Twilio para
+        // reducir "False Human" (buzón clasificado como persona) en
+        // saludos de buzón cortos — que fue justo lo que pasó en una
+        // prueba real (default 1200ms).
+        machineDetectionSpeechEndThreshold: 800,
         amdStatusCallback: `${base}/api/twilio-amd-status?clienteId=${clienteId}&parentSid=${parentSid}`,
         amdStatusCallbackMethod: "POST",
       }, e164);
