@@ -6,6 +6,8 @@ import { FontLoader, LoadingScreen } from "./components/Modal.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import SoftphoneWidget from "./components/SoftphoneWidget.jsx";
 import { useSoftphone } from "./hooks/useSoftphone.js";
+import UpdateBanner from "./components/UpdateBanner.jsx";
+import { useAppVersion } from "./hooks/useAppVersion.js";
 import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -137,6 +139,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const softphone = useSoftphone();
+  const appVersion = useAppVersion();
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
@@ -748,6 +751,7 @@ export default function App() {
       <FontLoader />
       <ConfirmDialog confirmState={confirmState} onConfirm={handleConfirm} />
       <SoftphoneWidget {...softphone} />
+      <UpdateBanner {...appVersion} />
       <div style={S.app}>
         <Sidebar
           current={seccion} onNav={handleNav} onLogo={() => setSeccion("inicio")} onLogout={handleLogout}
