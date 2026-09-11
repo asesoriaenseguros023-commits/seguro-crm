@@ -55,7 +55,19 @@ export function useSoftphone() {
       const { token } = await res.json();
 
       // Import dinámico: el SDK solo pesa si de verdad se hace una llamada.
-      const { Device } = await import("@twilio/voice-sdk");
+      // Si el CRM se redeployó mientras esta pestaña seguía abierta, el
+      // navegador sigue apuntando al chunk viejo (hash distinto al que ya
+      // está publicado) y este import falla con "Failed to fetch
+      // dynamically imported module". No hay nada que reintentar sin la
+      // versión nueva de la página, así que se recarga sola una vez.
+      const { Device } = await import("@twilio/voice-sdk").catch((e) => {
+        if (!sessionStorage.getItem("soat_reload_tras_deploy")) {
+          sessionStorage.setItem("soat_reload_tras_deploy", "1");
+          window.location.reload();
+        }
+        throw e;
+      });
+      sessionStorage.removeItem("soat_reload_tras_deploy");
       const device = new Device(token);
       deviceRef.current = device;
       device.on("error", (e) => goError(e?.message || "Error de Twilio."));
@@ -77,6 +89,7 @@ export function useSoftphone() {
       call.on("reject", goIdle);
       call.on("error", (e) => goError(e?.message || "Error en la llamada."));
     } catch (err) {
+      if (sessionStorage.getItem("soat_reload_tras_deploy")) return; // la página ya se está recargando
       goError(err?.message || "No se pudo iniciar la llamada.");
     }
   }, [status, goError, goIdle]);
