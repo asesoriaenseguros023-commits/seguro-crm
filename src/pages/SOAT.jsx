@@ -214,21 +214,44 @@ const SoatPage = ({ showConfirm, softphone }) => {
         {llamadasTecnicas[clienteId].map(l => {
           const est = ESTADOS_LLAMADA[l.estado] || { label: l.estado || "En curso…", color: "#6b87b0" };
           const mins = l.duracion_seg != null ? `${Math.floor(l.duracion_seg / 60)}:${String(l.duracion_seg % 60).padStart(2, "0")}` : null;
+          const ia = l.analisis_ia && !l.analisis_ia.error ? l.analisis_ia : null;
+          const iaColor = ia?.persona_real === "si" ? "#16a34a" : ia?.persona_real === "no" ? "#dc2626" : "#9ca3af";
+          const iaLabel = ia?.persona_real === "si" ? "Persona real" : ia?.persona_real === "no" ? "No era persona" : "Incierto";
           return (
-            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px", background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8 }}>
-              <span style={{ ...S.chip(est.color) }}>{est.label}</span>
-              {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
-              <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO")}</span>
-              {l.grabacion_sid && (
-                reproduciendo?.sid === l.grabacion_sid ? (
-                  reproduciendo.url
-                    ? <audio controls autoPlay src={reproduciendo.url} style={{ height: 28, marginLeft: "auto" }} />
-                    : <span style={{ marginLeft: "auto", color: "#6b87b0" }}>Cargando…</span>
-                ) : (
-                  <button onClick={() => reproducirGrabacion(l.grabacion_sid)} style={{ ...S.btn("ghost"), marginLeft: "auto", padding: "3px 10px", fontSize: 12 }}>
-                    Escuchar grabación
-                  </button>
-                )
+            <div key={l.id} style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px" }}>
+                <span style={{ ...S.chip(est.color) }}>{est.label}</span>
+                {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
+                <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO")}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                  {l.grabacion_sid && (
+                    reproduciendo?.sid === l.grabacion_sid ? (
+                      reproduciendo.url
+                        ? <audio controls autoPlay src={reproduciendo.url} style={{ height: 28 }} />
+                        : <span style={{ color: "#6b87b0" }}>Cargando…</span>
+                    ) : (
+                      <button onClick={() => reproducirGrabacion(l.grabacion_sid)} style={{ ...S.btn("ghost"), padding: "3px 10px", fontSize: 12 }}>
+                        Escuchar grabación
+                      </button>
+                    )
+                  )}
+                  {ia && <span style={{ ...S.chip(iaColor) }}>{iaLabel}</span>}
+                  {l.grabacion_sid && !l.analizado_en && <span style={{ color: "#6b87b0", fontSize: 11 }}>Analizando…</span>}
+                </div>
+              </div>
+              {ia && (
+                <div style={{ padding: "8px 10px", borderTop: `1px solid ${BLUE.border}`, background: "#f8faff", fontSize: 12, color: "#444" }}>
+                  <div style={{ marginBottom: 4 }}>{ia.resumen}</div>
+                  <div style={{ color: "#6b87b0", fontSize: 11.5 }}>
+                    Agente — cortesía: {ia.calidad_agente.cortesia} · info correcta: {ia.calidad_agente.informacion_correcta}
+                    {ia.calidad_agente.observaciones ? ` · ${ia.calidad_agente.observaciones}` : ""}
+                  </div>
+                </div>
+              )}
+              {l.analisis_ia?.error && (
+                <div style={{ padding: "6px 10px", borderTop: `1px solid ${BLUE.border}`, background: "#fef2f2", fontSize: 11.5, color: "#dc2626" }}>
+                  Análisis de IA falló para esta grabación.
+                </div>
               )}
             </div>
           );
