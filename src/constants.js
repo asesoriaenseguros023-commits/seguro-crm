@@ -118,6 +118,7 @@ export const FASES_SOAT = [
   { id: "compro",      label: "Compró",         color: "#8b5cf6", bg: "#ede9fe", text: "#5b21b6" },
   { id: "no_interes",  label: "No interesado",  color: "#ef4444", bg: "#fee2e2", text: "#991b1b" },
   { id: "ilocalizable",label: "Ilocalizable",   color: "#6b7280", bg: "#f3f4f6", text: "#374151" },
+  { id: "numero_equivocado", label: "Número equivocado", color: "#0891b2", bg: "#cffafe", text: "#155e75" },
 ];
 
 export const FM_SOAT = Object.fromEntries(FASES_SOAT.map(f => [f.id, f]));
@@ -128,7 +129,9 @@ export const MOTIVOS_SOAT = [
   "No le interesa renovar aún",
 ];
 
-export const MOTIVOS_ILOCALIZABLE = ["Número equivocado", "No contestó / Buzón"];
+// "Número equivocado" salió de acá — ahora es su propia fase (FASES_SOAT),
+// no un motivo dentro de Ilocalizable. Pedido explícito del usuario.
+export const MOTIVOS_ILOCALIZABLE = ["No contestó / Buzón"];
 
 export const ACCIONES_SOAT = ["Volver a llamar", "Escribir por WhatsApp"];
 

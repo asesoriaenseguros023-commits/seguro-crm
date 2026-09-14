@@ -364,6 +364,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
         "volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro",
         "ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion",
         "interesado":"interesado","compró":"compro",
+        "numero equivocado":"numero_equivocado","número equivocado":"numero_equivocado",
       };
       const parseAnioMes = (val) => {
         if (!val) return "";
@@ -525,7 +526,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
       return c.nombre.toLowerCase().includes(q);
     })();
     const mAlerta = !filtroAlerta || (() => {
-      if (["compro", "no_interes", "ilocalizable"].includes(c.fase)) return false;
+      if (["compro", "no_interes", "ilocalizable", "numero_equivocado"].includes(c.fase)) return false;
       const ref = fechaRefAlerta(c);
       if (!ref) return false;
       const d = parseDateSoat(ref);
@@ -542,6 +543,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
     compro:      clientes.filter(c => c.fase === "compro").length,
     noInteres:   clientes.filter(c => c.fase === "no_interes").length,
     ilocalizable:clientes.filter(c => c.fase === "ilocalizable").length,
+    numeroEquivocado: clientes.filter(c => c.fase === "numero_equivocado").length,
     proximos30:  clientes.filter(c => {
       if (!c.fechaVencimiento) return false;
       const d = parseDateSoat(c.fechaVencimiento);
@@ -559,10 +561,11 @@ const SoatPage = ({ showConfirm, softphone }) => {
     { label: "Compró",        key: "compro",       color: "#8b5cf6",    filter: "compro"     },
     { label: "No interesado", key: "noInteres",    color: "#ef4444",    filter: "no_interes" },
     { label: "Ilocalizable",  key: "ilocalizable", color: "#9ca3af",    filter: "ilocalizable"},
+    { label: "Número equivocado", key: "numeroEquivocado", color: "#0891b2", filter: "numero_equivocado"},
     { label: "Vencen ≤30d",   key: "proximos30",   color: "#dc2626",    filter: null         },
   ];
 
-  const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable"];
+  const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable", "numero_equivocado"];
   const alertaHoy = clientes.filter(c => {
     if (FASES_TERMINALES.includes(c.fase)) return false;
     const ref = fechaRefAlerta(c);
@@ -578,12 +581,13 @@ const SoatPage = ({ showConfirm, softphone }) => {
 
   const funnelData = useMemo(() => {
     const base = funnelClientes.length;
-    const gestionados = funnelClientes.filter(c => ["interesado","compro","ilocalizable","no_interes","en_gestion"].includes(c.fase)).length;
+    const gestionados = funnelClientes.filter(c => ["interesado","compro","ilocalizable","numero_equivocado","no_interes","en_gestion"].includes(c.fase)).length;
     const noInteres = funnelClientes.filter(c => c.fase === "no_interes").length;
     const compro = funnelClientes.filter(c => c.fase === "compro").length;
     const ilocalizable = funnelClientes.filter(c => c.fase === "ilocalizable").length;
+    const numeroEquivocado = funnelClientes.filter(c => c.fase === "numero_equivocado").length;
     const activos = funnelClientes.filter(c => ["en_gestion","interesado"].includes(c.fase)).length;
-    return { base, gestionados, noInteres, compro, ilocalizable, activos };
+    return { base, gestionados, noInteres, compro, ilocalizable, numeroEquivocado, activos };
   }, [funnelClientes]);
 
   // ─── Gestión diaria ───────────────────────────────────────────────────────
@@ -673,7 +677,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
       )}
 
       {/* ── Stats / Filtros ─────────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 10, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(9,1fr)", gap: 10, marginBottom: 20 }}>
         {STAT_CARDS.map(s => {
           const active = s.filter && filtroFase === s.filter;
           const clickable = !!s.filter;
@@ -1131,6 +1135,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
               })()}
               <FunnelBar label="Compró" value={funnelData.compro} total={funnelData.base} color="#8b5cf6" />
               <FunnelBar label="Ilocalizable" value={funnelData.ilocalizable} total={funnelData.base} color="#9ca3af" />
+              <FunnelBar label="Número equivocado" value={funnelData.numeroEquivocado} total={funnelData.base} color="#0891b2" />
               <FunnelBar label="Clientes activos (En gestión + Interesados)" value={funnelData.activos} total={funnelData.base} color="#10b981" />
             </div>
 
