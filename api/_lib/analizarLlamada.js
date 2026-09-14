@@ -31,14 +31,26 @@ async function transcribir(mp3Buffer) {
   return data.text || "";
 }
 
-const AnalisisSchema = z.object({
+export const AnalisisSchema = z.object({
   persona_real: z.enum(["si", "no", "incierto"]),
   razon: z.string().describe("Señal concreta de la transcripción en la que se basa (ej: conversación con turnos naturales, vs. mensaje grabado repetitivo o silencio sin habla)."),
   resumen: z.string().describe("Resumen breve de qué se habló en la llamada."),
   calidad_agente: z.object({
     cortesia: z.enum(["buena", "regular", "mala", "no_aplica"]),
     informacion_correcta: z.enum(["si", "no", "no_aplica"]),
-    observaciones: z.string(),
+    oportunidades_perdidas: z.array(z.string()).describe(
+      "Fallas comerciales CONCRETAS y con nombre propio — no genéricas. Ej: " +
+      "'Aceptó el \"lo pienso\" sin preguntar qué lo detiene', 'No fijó fecha/hora " +
+      "exacta de la próxima llamada, quedó en el aire', 'No manejó la objeción de " +
+      "precio, se quedó callado', 'No mencionó el descuento disponible'. Lista vacía " +
+      "solo si el agente de verdad no dejó nada sobre la mesa."
+    ),
+    observaciones: z.string().describe(
+      "Evaluación directa y retadora, como un coach de ventas exigente — nunca genérica " +
+      "ni condescendiente. Nombra la falla comercial específica en vez de decir 'podría " +
+      "mejorar' o 'buena atención'. Si hizo un buen cierre o manejo de objeción, " +
+      "reconócelo con el mismo nivel de detalle concreto."
+    ),
   }),
 });
 
@@ -47,13 +59,21 @@ async function analizarConClaude(transcripcion) {
     model: "claude-opus-5",
     max_tokens: 2048,
     system:
-      "Analizas transcripciones de llamadas de un call center de seguros en Colombia " +
-      "(Seguimiento SOAT). A partir de la transcripción, determina si de verdad contestó " +
-      "una persona real (no un buzón de voz, un mensaje grabado, o silencio/ruido sin " +
-      "habla humana interactiva), resume brevemente la llamada, y evalúa al agente " +
-      "(cortesía, si dio información correcta sobre el SOAT). Si la transcripción es " +
-      "demasiado corta o ambigua para decidir con confianza, usa 'incierto' / 'no_aplica' " +
-      "en vez de adivinar.",
+      "Eres un coach de ventas EXIGENTE que audita llamadas de un call center de seguros " +
+      "en Colombia (Seguimiento SOAT). No seas condescendiente ni genérico: si el agente " +
+      "se conformó con un 'te llamo después', 'lo pienso' o 'no tengo tiempo ahora' sin " +
+      "fijar fecha/hora concreta de seguimiento, sin manejar la objeción, o sin intentar " +
+      "cerrar un compromiso real, DILO explícitamente y con nombre propio del error — no " +
+      "lo suavices. Evita frases vacías como 'podría mejorar' o 'buena atención' sin " +
+      "sustancia: señala la falla comercial concreta. Si el agente sí hizo un buen " +
+      "trabajo cerrando o manejando objeciones, reconócelo también con el mismo nivel de " +
+      "detalle concreto — no minimices lo que hizo bien.\n\n" +
+      "A partir de la transcripción, determina también si de verdad contestó una persona " +
+      "real (no un buzón de voz, un mensaje grabado, o silencio/ruido sin habla humana " +
+      "interactiva) y resume brevemente la llamada. Si la transcripción es demasiado " +
+      "corta o ambigua para decidir con confianza sobre 'persona_real', usa 'incierto' " +
+      "en vez de adivinar — pero la evaluación comercial, cuando sí hubo conversación, " +
+      "debe ser siempre firme y específica, nunca genérica.",
     output_config: { effort: "low", format: zodOutputFormat(AnalisisSchema) },
     messages: [{ role: "user", content: `Transcripción de la llamada:\n\n${transcripcion || "(sin habla detectada — transcripción vacía)"}` }],
   });

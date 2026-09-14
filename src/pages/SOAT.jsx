@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
 import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
-import { parseDateSoat, mapSoat, toSoatRow, authHeaders } from "../helpers.js";
+import { parseDateSoat, mapSoat, toSoatRow, authHeaders, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
+import { generarInformeIA } from "../pdfReporteIA.js";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const fmtAnioMes = (s) => {
@@ -96,6 +97,13 @@ const SoatPage = ({ showConfirm, softphone }) => {
   const [funnelBases, setFunnelBases] = useState([]);
   // Gestión diaria
   const [showGestion, setShowGestion] = useState(false);
+  // Reporte IA
+  const [showReporteIA, setShowReporteIA] = useState(false);
+  const [reporteDesde, setReporteDesde] = useState("");
+  const [reporteHasta, setReporteHasta] = useState("");
+  const [reporteLoading, setReporteLoading] = useState(false);
+  const [reporteError, setReporteError] = useState("");
+  const [reporteData, setReporteData] = useState(null); // { llamadas, estadisticas, consolidado }
   // Export dialog
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportBases, setExportBases] = useState([]);
@@ -439,6 +447,32 @@ const SoatPage = ({ showConfirm, softphone }) => {
     setShowExportDialog(false);
   };
 
+  // ─── Reporte IA ─────────────────────────────────────────────────────────
+  const abrirReporteIA = () => {
+    const hoy = today();
+    setReporteDesde(hoy.slice(0, 8) + "01"); // primer día del mes en curso
+    setReporteHasta(hoy);
+    setReporteData(null);
+    setReporteError("");
+    setShowReporteIA(true);
+  };
+
+  const generarReporteIA = async () => {
+    if (!reporteDesde || !reporteHasta) return;
+    setReporteLoading(true);
+    setReporteError("");
+    try {
+      const params = new URLSearchParams({ desde: reporteDesde, hasta: reporteHasta });
+      const res = await fetch(`/api/soat-informe-ia?${params}`, { headers: await authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo generar el reporte.");
+      setReporteData(data);
+    } catch (err) {
+      setReporteError(err.message || "No se pudo generar el reporte.");
+    }
+    setReporteLoading(false);
+  };
+
   const fechaRefAlerta = (c) => c.fechaProxima || c.fechaVencimiento;
 
   // ─── Datos derivados ──────────────────────────────────────────────────────
@@ -552,6 +586,10 @@ const SoatPage = ({ showConfirm, softphone }) => {
           <button onClick={() => { setFunnelBases([]); setShowFunnel(true); }}
             style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
             Funnel
+          </button>
+          <button onClick={abrirReporteIA}
+            style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
+            Reporte IA
           </button>
           <button onClick={() => setShowGestion(true)}
             style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary }}>
@@ -1149,6 +1187,121 @@ const SoatPage = ({ showConfirm, softphone }) => {
                   })}
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Reporte IA ────────────────────────────────────────────────────────── */}
+      {showReporteIA && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowReporteIA(false)}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 900, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Reporte IA</div>
+                <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 3 }}>Análisis con IA de las llamadas grabadas en el periodo</div>
+              </div>
+              <button onClick={() => setShowReporteIA(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#aaa" }}>×</button>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+              <div>
+                <label style={lblS}>Desde</label>
+                <input type="date" value={reporteDesde} onChange={e => setReporteDesde(e.target.value)} style={inpS} />
+              </div>
+              <div>
+                <label style={lblS}>Hasta</label>
+                <input type="date" value={reporteHasta} onChange={e => setReporteHasta(e.target.value)} style={inpS} />
+              </div>
+              <button onClick={generarReporteIA} disabled={reporteLoading} style={{ ...S.btn("primary"), opacity: reporteLoading ? 0.6 : 1, cursor: reporteLoading ? "not-allowed" : "pointer" }}>
+                {reporteLoading ? "Generando…" : "Generar"}
+              </button>
+              {reporteData && (
+                <button onClick={() => generarInformeIA({ desde: reporteDesde, hasta: reporteHasta, ...reporteData })} style={S.btn("success")}>
+                  <Icon name="download" size={16} /> Descargar PDF
+                </button>
+              )}
+            </div>
+
+            {reporteError && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 16px", marginBottom: 16, fontSize: 13, color: "#dc2626" }}>
+                {reporteError}
+              </div>
+            )}
+
+            {reporteLoading && (
+              <div style={{ textAlign: "center", padding: 40, color: "#6b87b0" }}>Generando reporte — esto puede tardar unos segundos…</div>
+            )}
+
+            {reporteData && !reporteLoading && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+                  {[
+                    { label: "Llamadas analizadas", value: reporteData.estadisticas.total, color: BLUE.primary },
+                    { label: "Persona real", value: reporteData.estadisticas.personaReal, color: "#16a34a" },
+                    { label: "No era persona", value: reporteData.estadisticas.noPersona, color: "#dc2626" },
+                    { label: "Incierto", value: reporteData.estadisticas.incierto, color: "#9ca3af" },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 10, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+                      <div style={{ fontSize: 11, color: "#6b87b0", marginTop: 3, fontWeight: 600 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {reporteData.consolidado && (
+                  <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "16px 18px", marginBottom: 20 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text, marginBottom: 8 }}>Comentario consolidado</div>
+                    <div style={{ fontSize: 13, color: "#333", marginBottom: 12 }}>{reporteData.consolidado.resumen_ejecutivo}</div>
+                    {reporteData.consolidado.hallazgos?.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>Hallazgos</div>
+                        {reporteData.consolidado.hallazgos.map((h, i) => (
+                          <div key={i} style={{ fontSize: 12.5, color: "#555", marginBottom: 4 }}>• {h}</div>
+                        ))}
+                      </div>
+                    )}
+                    {reporteData.consolidado.recomendaciones?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#166534", marginBottom: 4 }}>Recomendaciones</div>
+                        {reporteData.consolidado.recomendaciones.map((r, i) => (
+                          <div key={i} style={{ fontSize: 12.5, color: "#555", marginBottom: 4 }}>• {r}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text, marginBottom: 10 }}>
+                  Detalle por llamada ({reporteData.llamadas.length})
+                </div>
+                {reporteData.llamadas.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "#aaa", padding: 30, fontSize: 13 }}>Sin llamadas analizadas en este periodo.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {reporteData.llamadas.map(l => {
+                      const color = l.persona_real === "si" ? "#16a34a" : l.persona_real === "no" ? "#dc2626" : "#9ca3af";
+                      const label = l.persona_real === "si" ? "Persona real" : l.persona_real === "no" ? "No era persona" : "Incierto";
+                      return (
+                        <div key={l.id} style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{l.cliente}</span>
+                            <span style={{ ...S.chip(color) }}>{label}</span>
+                            <span style={{ fontSize: 11, color: "#aaa", marginLeft: "auto" }}>{new Date(l.fecha).toLocaleString("es-CO")}</span>
+                          </div>
+                          <div style={{ fontSize: 12.5, color: "#444", marginBottom: 4 }}>{l.resumen}</div>
+                          {l.oportunidades_perdidas?.length > 0 && (
+                            <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 2 }}>
+                              {l.oportunidades_perdidas.map((o, i) => <div key={i}>⚠ {o}</div>)}
+                            </div>
+                          )}
+                          {l.observaciones && <div style={{ fontSize: 12, color: "#6b87b0", fontStyle: "italic" }}>{l.observaciones}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
