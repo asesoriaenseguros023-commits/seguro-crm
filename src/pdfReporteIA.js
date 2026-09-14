@@ -1,9 +1,12 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+// Colombia es UTC-5 fijo (sin horario de verano) — sin timeZone explícito,
+// toLocaleString usa la zona del equipo que genera el PDF, no Bogotá.
+const TZ = "America/Bogota";
 const fmtFechaHora = (iso) => {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("es-CO", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("es-CO", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
 const PERSONA_LABEL = { si: "Persona real", no: "No era persona", incierto: "Incierto" };
@@ -32,7 +35,7 @@ function construirInformeIA({ desde, hasta, estadisticas, consolidado, llamadas 
   y += 7;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(`Periodo: ${desde} al ${hasta}  ·  Generado: ${new Date().toLocaleString("es-CO")}`, marginX, y);
+  doc.text(`Periodo: ${desde} al ${hasta}  ·  Generado: ${new Date().toLocaleString("es-CO", { timeZone: TZ })}`, marginX, y);
   y += 8;
 
   // ── Estadísticas ─────────────────────────────────────────────────────

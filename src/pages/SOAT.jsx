@@ -233,7 +233,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
               <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px" }}>
                 <span style={{ ...S.chip(est.color) }}>{est.label}</span>
                 {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
-                <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO")}</span>
+                <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO", { timeZone: "America/Bogota" })}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
                   {l.grabacion_sid && (
                     reproduciendo?.sid === l.grabacion_sid ? (
@@ -1333,7 +1333,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
                             <span style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{l.cliente}</span>
                             <span style={{ ...S.chip(color) }}>{label}</span>
-                            <span style={{ fontSize: 11, color: "#aaa", marginLeft: "auto" }}>{new Date(l.fecha).toLocaleString("es-CO")}</span>
+                            <span style={{ fontSize: 11, color: "#aaa", marginLeft: "auto" }}>{new Date(l.fecha).toLocaleString("es-CO", { timeZone: "America/Bogota" })}</span>
                           </div>
                           <div style={{ fontSize: 12.5, color: "#444", marginBottom: 4 }}>{l.resumen}</div>
                           {l.oportunidades_perdidas?.length > 0 && (

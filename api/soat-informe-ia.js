@@ -37,7 +37,7 @@ const ConsolidadoSchema = z.object({
 async function generarConsolidado(llamadas) {
   if (llamadas.length === 0) return null;
   const texto = llamadas.map((l, i) =>
-    `${i + 1}. ${l.cliente} — ${new Date(l.fecha).toLocaleString("es-CO")} — persona_real: ${l.persona_real}\n` +
+    `${i + 1}. ${l.cliente} — ${new Date(l.fecha).toLocaleString("es-CO", { timeZone: "America/Bogota" })} — persona_real: ${l.persona_real}\n` +
     `   Resumen: ${l.resumen}\n` +
     `   Cortesía: ${l.cortesia} · Info correcta: ${l.informacion_correcta}\n` +
     (l.oportunidades_perdidas?.length ? `   Oportunidades perdidas: ${l.oportunidades_perdidas.join("; ")}\n` : "") +
@@ -68,16 +68,20 @@ export default async function handler(req, res) {
   const hasta = req.query.hasta;
   if (!desde || !hasta) return res.status(400).json({ error: "Faltan fechas desde/hasta" });
 
+  // Colombia es UTC-5 fijo, sin horario de verano — desde/hasta vienen como
+  // fecha de calendario en Bogotá (el date picker), así que se ancla el
+  // rango con ese offset explícito. Sin esto, Postgres las interpretaba en
+  // UTC y el rango quedaba corrido hasta 5 horas.
   const { data: filas, error } = await supabase
     .from("soat_llamadas")
     .select("id, created_at, analisis_ia, grabacion_sid, soat_clientes(nombre, telefono, placa)")
-    .gte("created_at", `${desde}T00:00:00`)
-    .lte("created_at", `${hasta}T23:59:59`)
+    .gte("created_at", `${desde}T00:00:00-05:00`)
+    .lte("created_at", `${hasta}T23:59:59-05:00`)
     .not("analisis_ia", "is", null)
     .order("created_at", { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
 
-  const llamadas = (filas || [])
+  const todas = (filas || [])
     .filter((f) => f.analisis_ia && !f.analisis_ia.error)
     .map((f) => ({
       id: f.id,
@@ -95,16 +99,22 @@ export default async function handler(req, res) {
       observaciones: f.analisis_ia.calidad_agente?.observaciones,
     }));
 
+  // Estadísticas sobre TODAS (da el panorama: cuántas de las contactadas
+  // fueron efectivas). El detalle y el consolidado, en cambio, solo con
+  // llamadas efectivas (persona_real="si") — pedido explícito del usuario:
+  // revisar buzón/no contestadas no aporta nada comercial y es gasto de
+  // tiempo revisando algo que ya no se puede accionar.
   const estadisticas = {
-    total: llamadas.length,
-    personaReal: llamadas.filter((l) => l.persona_real === "si").length,
-    noPersona: llamadas.filter((l) => l.persona_real === "no").length,
-    incierto: llamadas.filter((l) => l.persona_real === "incierto").length,
-    cortesiaBuena: llamadas.filter((l) => l.cortesia === "buena").length,
-    cortesiaRegular: llamadas.filter((l) => l.cortesia === "regular").length,
-    cortesiaMala: llamadas.filter((l) => l.cortesia === "mala").length,
+    total: todas.length,
+    personaReal: todas.filter((l) => l.persona_real === "si").length,
+    noPersona: todas.filter((l) => l.persona_real === "no").length,
+    incierto: todas.filter((l) => l.persona_real === "incierto").length,
+    cortesiaBuena: todas.filter((l) => l.cortesia === "buena").length,
+    cortesiaRegular: todas.filter((l) => l.cortesia === "regular").length,
+    cortesiaMala: todas.filter((l) => l.cortesia === "mala").length,
   };
 
+  const llamadas = todas.filter((l) => l.persona_real === "si");
   const consolidado = await generarConsolidado(llamadas);
 
   return res.status(200).json({ llamadas, estadisticas, consolidado });
