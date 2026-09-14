@@ -11,7 +11,9 @@ const PERSONA_LABEL = { si: "Persona real", no: "No era persona", incierto: "Inc
 // Reporte de análisis IA de llamadas (Seguimiento SOAT): estadísticas del
 // periodo, comentario consolidado de Claude, y detalle por llamada. Mismo
 // estilo autoTable/helvetica que generarCuentaCobro en pdfComprobante.js.
-export function generarInformeIA({ desde, hasta, estadisticas, consolidado, llamadas }) {
+// Construye el documento (compartido entre "abrir en pestaña" y "enviar por
+// correo" — no se genera dos veces con lógica separada).
+function construirInformeIA({ desde, hasta, estadisticas, consolidado, llamadas }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -125,6 +127,19 @@ export function generarInformeIA({ desde, hasta, estadisticas, consolidado, llam
     ]),
   });
 
+  return doc;
+}
+
+export function generarInformeIA(datos) {
+  const doc = construirInformeIA(datos);
   const blobUrl = doc.output("bloburl");
   window.open(blobUrl, "_blank");
+}
+
+// Para adjuntar por correo: el mismo PDF, como base64 puro (sin el prefijo
+// "data:application/pdf;base64,") — así lo pide el API de Resend.
+export function informeIABase64(datos) {
+  const doc = construirInformeIA(datos);
+  const dataUri = doc.output("datauristring");
+  return dataUri.split(",")[1];
 }

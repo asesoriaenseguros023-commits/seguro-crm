@@ -4,7 +4,7 @@ import { supabase } from "../supabase.js";
 import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
 import { parseDateSoat, mapSoat, toSoatRow, authHeaders, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
-import { generarInformeIA } from "../pdfReporteIA.js";
+import { generarInformeIA, informeIABase64 } from "../pdfReporteIA.js";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const fmtAnioMes = (s) => {
@@ -104,6 +104,9 @@ const SoatPage = ({ showConfirm, softphone }) => {
   const [reporteLoading, setReporteLoading] = useState(false);
   const [reporteError, setReporteError] = useState("");
   const [reporteData, setReporteData] = useState(null); // { llamadas, estadisticas, consolidado }
+  const [reporteEnviarA, setReporteEnviarA] = useState("bjosealejandro9@gmail.com");
+  const [reporteEnviando, setReporteEnviando] = useState(false);
+  const [reporteEnviarMsg, setReporteEnviarMsg] = useState({ text: "", type: "success" });
   // Export dialog
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportBases, setExportBases] = useState([]);
@@ -471,6 +474,32 @@ const SoatPage = ({ showConfirm, softphone }) => {
       setReporteError(err.message || "No se pudo generar el reporte.");
     }
     setReporteLoading(false);
+  };
+
+  const enviarReportePorCorreo = async () => {
+    if (!reporteData || !reporteEnviarA) return;
+    setReporteEnviando(true);
+    setReporteEnviarMsg({ text: "", type: "success" });
+    try {
+      const pdfBase64 = informeIABase64({ desde: reporteDesde, hasta: reporteHasta, ...reporteData });
+      const res = await fetch("/api/soat-enviar-reporte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({
+          to: reporteEnviarA,
+          subject: `Reporte IA SOAT — ${reporteDesde} al ${reporteHasta}`,
+          html: `<p>Adjunto el Reporte IA de Seguimiento SOAT del periodo ${reporteDesde} al ${reporteHasta}.</p>`,
+          pdfBase64,
+          filename: `reporte-ia-soat_${reporteDesde}_${reporteHasta}.pdf`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo enviar el correo.");
+      setReporteEnviarMsg({ text: `Enviado a ${reporteEnviarA}`, type: "success" });
+    } catch (err) {
+      setReporteEnviarMsg({ text: err.message || "No se pudo enviar el correo.", type: "error" });
+    }
+    setReporteEnviando(false);
   };
 
   const fechaRefAlerta = (c) => c.fechaProxima || c.fechaVencimiento;
@@ -1221,7 +1250,24 @@ const SoatPage = ({ showConfirm, softphone }) => {
                   <Icon name="download" size={16} /> Descargar PDF
                 </button>
               )}
+              {reporteData && (
+                <>
+                  <div>
+                    <label style={lblS}>Enviar a</label>
+                    <input type="email" value={reporteEnviarA} onChange={e => setReporteEnviarA(e.target.value)} style={{ ...inpS, width: 220 }} />
+                  </div>
+                  <button onClick={enviarReportePorCorreo} disabled={reporteEnviando} style={{ ...S.btn("secondary"), border: `1.5px solid ${BLUE.primary}`, color: BLUE.primary, opacity: reporteEnviando ? 0.6 : 1, cursor: reporteEnviando ? "not-allowed" : "pointer" }}>
+                    <Icon name="mail" size={16} /> {reporteEnviando ? "Enviando…" : "Enviar por correo"}
+                  </button>
+                </>
+              )}
             </div>
+
+            {reporteEnviarMsg.text && (
+              <div style={{ background: reporteEnviarMsg.type === "error" ? "#fef2f2" : "#f0fdf4", border: `1px solid ${reporteEnviarMsg.type === "error" ? "#fecaca" : "#bbf7d0"}`, borderRadius: 8, padding: "8px 14px", marginBottom: 16, fontSize: 13, color: reporteEnviarMsg.type === "error" ? "#dc2626" : "#16a34a" }}>
+                {reporteEnviarMsg.text}
+              </div>
+            )}
 
             {reporteError && (
               <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 16px", marginBottom: 16, fontSize: 13, color: "#dc2626" }}>
