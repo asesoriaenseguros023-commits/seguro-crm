@@ -78,6 +78,13 @@ function topKeyByValue(obj) {
   return best || "(Sin dato)";
 }
 
+function nombreTokens(s) { return s.split(/\s+/).filter(Boolean); }
+// true si TODAS las palabras de "cortas" aparecen en "largas" (subconjunto exacto de palabras)
+function esSubconjuntoDePalabras(cortas, largas) {
+  const set = new Set(largas);
+  return cortas.length > 0 && cortas.every((t) => set.has(t));
+}
+
 // Cruce de tomadores 2025 -> 2026 (excluye Accidentes Escolares, capítulo aparte)
 function buildRenewalTable(rows2025, rows2026) {
   const base2025 = rows2025.filter((r) => !isEscolar(r));
@@ -105,18 +112,48 @@ function buildRenewalTable(rows2025, rows2026) {
     g.ramoPrima[rk] = (g.ramoPrima[rk] || 0) + r.prima;
   });
 
+  // Cruce difuso por palabras — SOLO como respaldo cuando el cruce exacto no
+  // encontró nada (pedido explícito 2026-09-24: casos como "GUILLERMO
+  // MORENO" en 2025 vs "MORENO LUIS GUILLERMO" en 2026, mismo cliente con el
+  // nombre incompleto o en otro orden en una de las dos hojas). Un nombre
+  // corto cruza con uno largo solo si TODAS sus palabras están contenidas en
+  // el largo, Y es la ÚNICA coincidencia posible en ambos sentidos — si un
+  // nombre corto pudiera calzar con más de un nombre largo (o viceversa), se
+  // deja SIN cruzar en vez de adivinar: fusionar dos clientes distintos por
+  // error es peor que mostrar de más un "no ha renovado".
+  const fuzzyMatch = {}; // clave normalizada 2025 -> clave normalizada 2026
+  const usados2026 = new Set();
+  const pendientes2025 = Object.keys(groups).filter((k) => !(k in map2026));
+  const pendientes2026 = Object.keys(map2026).filter((k) => !(k in groups));
+  const tokensPend2025 = Object.fromEntries(pendientes2025.map((k) => [k, nombreTokens(k)]));
+  const tokensPend2026 = Object.fromEntries(pendientes2026.map((k) => [k, nombreTokens(k)]));
+  const calzan = (ta, tb) => ta.length >= 2 && tb.length >= 2 && (esSubconjuntoDePalabras(ta, tb) || esSubconjuntoDePalabras(tb, ta));
+  pendientes2025.forEach((k25) => {
+    const candidatos26 = pendientes2026.filter((k26) => calzan(tokensPend2025[k25], tokensPend2026[k26]));
+    if (candidatos26.length !== 1) return;
+    const k26 = candidatos26[0];
+    const otrosCandidatos25 = pendientes2025.filter((otra) => otra !== k25 && calzan(tokensPend2025[otra], tokensPend2026[k26]));
+    if (otrosCandidatos25.length > 0) return;
+    fuzzyMatch[k25] = k26;
+    usados2026.add(k26);
+  });
+
   const list = Object.keys(groups).map((k) => {
     const g = groups[k];
-    const renovo = Object.prototype.hasOwnProperty.call(map2026, k);
+    const exact = Object.prototype.hasOwnProperty.call(map2026, k);
+    const kFuzzy = !exact ? fuzzyMatch[k] : null;
+    const renovo = exact || !!kFuzzy;
+    const prima2026 = exact ? map2026[k] : kFuzzy ? map2026[kFuzzy] : 0;
     return {
-      nombre: g.nombre, ramo: topKeyByValue(g.ramoPrima),
-      prima2025: g.prima2025, prima2026: renovo ? map2026[k] : 0, renovo, esNuevo: false,
+      nombre: kFuzzy ? nombre2026[kFuzzy] : g.nombre, ramo: topKeyByValue(g.ramoPrima),
+      prima2025: g.prima2025, prima2026, renovo, esNuevo: false, cruceAutomatico: !!kFuzzy,
     };
   });
 
-  // Tomadores 2026 sin cruce en 2025 = negocio nuevo, no entran en % de retención.
+  // Tomadores 2026 sin cruce en 2025 (exacto ni difuso) = negocio nuevo, no entran en % de retención.
   Object.keys(map2026).forEach((k) => {
     if (Object.prototype.hasOwnProperty.call(groups, k)) return;
+    if (usados2026.has(k)) return;
     list.push({ nombre: nombre2026[k], ramo: topKeyByValue(ramoPrima2026[k]), prima2025: 0, prima2026: map2026[k], renovo: true, esNuevo: true });
   });
 
@@ -665,7 +702,10 @@ export default function PulsoPrimasPage() {
             <div style={{ padding: 32, textAlign: "center", color: "#aaa" }}>Sin datos para los filtros elegidos.</div>
           ) : renewalList.map((t, i) => (
             <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr 1fr" }}>
-              <div style={{ fontWeight: 600 }}>{t.nombre}</div>
+              <div style={{ fontWeight: 600 }}>
+                {t.nombre}
+                {t.cruceAutomatico && <span title="Nombre distinto en cada año, cruzado automáticamente por coincidencia de palabras" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: COLOR_2025, cursor: "help" }}>🔗</span>}
+              </div>
               <span style={S.badge(t.esNuevo ? COLOR_2026 : t.renovo ? COLOR_GOOD : COLOR_BAD)}>{t.esNuevo ? "Cliente nuevo" : t.renovo ? "Renovó" : "No ha renovado"}</span>
               <div style={{ fontWeight: 600 }}>{t.renovo ? fmt(t.prima2026) : "—"}</div>
               <div>{fmt(t.prima2025)}</div>
