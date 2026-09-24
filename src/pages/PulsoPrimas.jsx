@@ -418,6 +418,13 @@ const DeltaChip = ({ delta }) => {
   return <span style={{ fontWeight: 700, color: up ? COLOR_GOOD : COLOR_BAD }}>{up ? "+" : ""}{delta.toFixed(0)}%</span>;
 };
 
+// Pedido explícito 2026-09-24: los filtros de período arrancan en el MES EN
+// CURSO (no en todo el año hasta la fecha) — hoy sería septiembre, y el mes
+// que corresponda más adelante, para 2026 y 2025 por igual (comparación mes
+// contra el mismo mes del año pasado). "Total año 2025" sigue siendo
+// siempre el año completo, sin importar este filtro — ver más abajo.
+function mesEnCurso() { return new Date().getMonth(); }
+
 export default function PulsoPrimasPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -427,11 +434,10 @@ export default function PulsoPrimasPage() {
 
   const [filterRamo, setFilterRamo] = useState("");
   const [filterCompania, setFilterCompania] = useState("");
-  const [ini2026, setIni2026] = useState(0);
-  const [fin2026, setFin2026] = useState(null);
-  const [ini2025, setIni2025] = useState(0);
-  const [fin2025, setFin2025] = useState(11);
-  const [defaultFin2026, setDefaultFin2026] = useState(null);
+  const [ini2026, setIni2026] = useState(mesEnCurso);
+  const [fin2026, setFin2026] = useState(mesEnCurso);
+  const [ini2025, setIni2025] = useState(mesEnCurso);
+  const [fin2025, setFin2025] = useState(mesEnCurso);
   // Botón "Actualizar" y el auto-refresco de abajo no llaman una función
   // externa directamente — solo suben este contador, que es la única
   // dependencia del efecto de carga. Así el fetch queda enteramente definido
@@ -451,14 +457,6 @@ export default function PulsoPrimasPage() {
         setError("");
         setData(json);
         setLastUpdated(new Date());
-        setDefaultFin2026((prev) => {
-          if (prev !== null) return prev;
-          let mm = -1;
-          (json.rows2026 || []).forEach((r) => { if (r.mesIdx != null && r.mesIdx > mm) mm = r.mesIdx; });
-          const fin = mm >= 0 ? mm : 11;
-          setFin2026(fin);
-          return fin;
-        });
       } catch (e) {
         if (!cancelado) setError(e.message || "No se pudo cargar la información.");
       } finally {
@@ -478,7 +476,7 @@ export default function PulsoPrimasPage() {
 
   const rawRows2026 = useMemo(() => data?.rows2026 || [], [data]);
   const rawRows2025 = useMemo(() => data?.rows2025 || [], [data]);
-  const finToUse2026 = fin2026 ?? 11;
+  const finToUse2026 = fin2026;
 
   const rows2026 = useMemo(
     () => applyCategoryOnly(rawRows2026, filterRamo, filterCompania).filter((r) => inPeriod(r, ini2026, finToUse2026)),
@@ -529,7 +527,8 @@ export default function PulsoPrimasPage() {
 
   const ramoOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.ramo || "(Sin dato)"), [rawRows2026, rawRows2025]);
   const compOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.compania || "(Sin dato)"), [rawRows2026, rawRows2025]);
-  const periodoDefault = ini2026 === 0 && finToUse2026 === (defaultFin2026 ?? finToUse2026) && ini2025 === 0 && fin2025 === 11;
+  const mesActual = mesEnCurso();
+  const periodoDefault = ini2026 === mesActual && finToUse2026 === mesActual && ini2025 === mesActual && fin2025 === mesActual;
   const filtersActive = !!(filterRamo || filterCompania || !periodoDefault);
 
   const label2026 = `${MESES_ABBR[ini2026]}–${MESES_ABBR[finToUse2026]}`;
@@ -537,8 +536,8 @@ export default function PulsoPrimasPage() {
 
   const limpiarFiltros = () => {
     setFilterRamo(""); setFilterCompania("");
-    setIni2026(0); setFin2026(defaultFin2026 ?? 11);
-    setIni2025(0); setFin2025(11);
+    setIni2026(mesActual); setFin2026(mesActual);
+    setIni2025(mesActual); setFin2025(mesActual);
   };
 
   if (loading) {
