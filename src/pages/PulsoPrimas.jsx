@@ -418,11 +418,11 @@ const DeltaChip = ({ delta }) => {
   return <span style={{ fontWeight: 700, color: up ? COLOR_GOOD : COLOR_BAD }}>{up ? "+" : ""}{delta.toFixed(0)}%</span>;
 };
 
-// Pedido explícito 2026-09-24: los filtros de período arrancan en el MES EN
-// CURSO (no en todo el año hasta la fecha) — hoy sería septiembre, y el mes
-// que corresponda más adelante, para 2026 y 2025 por igual (comparación mes
-// contra el mismo mes del año pasado). "Total año 2025" sigue siendo
-// siempre el año completo, sin importar este filtro — ver más abajo.
+// Pedido explícito 2026-09-24 (ajustado el mismo día): los filtros de
+// período arrancan en "año a la fecha" — de Enero al mes en curso — para
+// 2026 y 2025 por igual (mismo rango en los dos años, no todo 2025 vs solo
+// el mes actual de 2026). "Total año 2025" sigue siendo siempre el año
+// completo, sin importar este filtro — ver más abajo.
 function mesEnCurso() { return new Date().getMonth(); }
 
 export default function PulsoPrimasPage() {
@@ -434,9 +434,9 @@ export default function PulsoPrimasPage() {
 
   const [filterRamo, setFilterRamo] = useState("");
   const [filterCompania, setFilterCompania] = useState("");
-  const [ini2026, setIni2026] = useState(mesEnCurso);
+  const [ini2026, setIni2026] = useState(0);
   const [fin2026, setFin2026] = useState(mesEnCurso);
-  const [ini2025, setIni2025] = useState(mesEnCurso);
+  const [ini2025, setIni2025] = useState(0);
   const [fin2025, setFin2025] = useState(mesEnCurso);
   // Botón "Actualizar" y el auto-refresco de abajo no llaman una función
   // externa directamente — solo suben este contador, que es la única
@@ -528,7 +528,7 @@ export default function PulsoPrimasPage() {
   const ramoOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.ramo || "(Sin dato)"), [rawRows2026, rawRows2025]);
   const compOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.compania || "(Sin dato)"), [rawRows2026, rawRows2025]);
   const mesActual = mesEnCurso();
-  const periodoDefault = ini2026 === mesActual && finToUse2026 === mesActual && ini2025 === mesActual && fin2025 === mesActual;
+  const periodoDefault = ini2026 === 0 && finToUse2026 === mesActual && ini2025 === 0 && fin2025 === mesActual;
   const filtersActive = !!(filterRamo || filterCompania || !periodoDefault);
 
   const label2026 = `${MESES_ABBR[ini2026]}–${MESES_ABBR[finToUse2026]}`;
@@ -536,8 +536,8 @@ export default function PulsoPrimasPage() {
 
   const limpiarFiltros = () => {
     setFilterRamo(""); setFilterCompania("");
-    setIni2026(mesActual); setFin2026(mesActual);
-    setIni2025(mesActual); setFin2025(mesActual);
+    setIni2026(0); setFin2026(mesActual);
+    setIni2025(0); setFin2025(mesActual);
   };
 
   if (loading) {
