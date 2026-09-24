@@ -18,8 +18,11 @@ const MESES_ABBR = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct",
 const RAMO_ESCOLARES = "accidentes escolares";
 const REFETCH_MS = 20 * 60 * 1000;
 
-const COLOR_2026 = BLUE.primary;
-const COLOR_2025 = "#f59e0b";
+// Paleta propia del módulo (pedido explícito 2026-09-24: "más verde y azul,
+// de otro lado" — no la reutiliza tal cual del resto del CRM) — azul para
+// 2026, verde para 2025, distintos del verde/rojo semántico de good/bad.
+const COLOR_2026 = "#2563eb";
+const COLOR_2025 = "#059669";
 const COLOR_GOOD = "#16a34a";
 const COLOR_BAD = "#dc2626";
 const COLOR_GRID = BLUE.border;
@@ -32,6 +35,12 @@ function fmtCompact(n) {
   if (abs >= 1e6) return sign + (abs / 1e6).toLocaleString("es-CO", { maximumFractionDigits: 1 }) + "M";
   if (abs >= 1e3) return sign + (abs / 1e3).toLocaleString("es-CO", { maximumFractionDigits: 0 }) + "k";
   return sign + abs.toLocaleString("es-CO");
+}
+// Sin sufijo "M" — el chart declara una vez arriba que todo está en
+// millones (pedido explícito) en vez de repetirlo en cada etiqueta.
+function fmtMillones(n) {
+  const sign = n < 0 ? "-" : "";
+  return sign + (Math.abs(n) / 1e6).toLocaleString("es-CO", { maximumFractionDigits: 1 });
 }
 function niceCeil(v) {
   if (v <= 0) return 1;
@@ -133,6 +142,9 @@ function buildEscolaresData(rows2026, rows2025) {
   }).sort((a, b) => b.prima2026 - a.prima2026);
 }
 
+// Cada insight es una tarjeta corta: kicker (qué es) + headline (el número
+// que importa) + sub (el detalle de apoyo) — pedido explícito 2026-09-24de
+// reemplazar las frases largas por algo más corto y dinámico en tarjetas.
 function buildInsights(rows2026, rows2025) {
   const insights = [];
   const total2026 = rows2026.reduce((a, r) => a + r.prima, 0);
@@ -140,10 +152,13 @@ function buildInsights(rows2026, rows2025) {
 
   if (totalPeriodo2025 > 0) {
     const deltaTotal = ((total2026 - totalPeriodo2025) / totalPeriodo2025) * 100;
-    insights.push(deltaTotal < 0
-      ? { tone: "bad", icon: "🔻", node: <>Las primas van <b>{Math.abs(deltaTotal).toFixed(0)}% por debajo</b> del período comparado de 2025 ({fmt(total2026)} vs {fmt(totalPeriodo2025)}). Vale la pena revisar qué ramos o compañías explican la caída.</> }
-      : { tone: "good", icon: "📈", node: <>Las primas van <b>{deltaTotal.toFixed(0)}% por encima</b> del período comparado de 2025 ({fmt(total2026)} vs {fmt(totalPeriodo2025)}).</> }
-    );
+    insights.push({
+      tone: deltaTotal < 0 ? "bad" : "good",
+      icon: deltaTotal < 0 ? "🔻" : "📈",
+      kicker: "Primas 2026 vs. período 2025",
+      headline: `${deltaTotal >= 0 ? "+" : ""}${deltaTotal.toFixed(0)}%`,
+      sub: `${fmt(total2026)} vs ${fmt(totalPeriodo2025)}`,
+    });
   }
 
   function biggestMover(keyFn, label) {
@@ -160,12 +175,14 @@ function buildInsights(rows2026, rows2025) {
     if (worst && worst.pct < -15) {
       insights.push({
         tone: "bad", icon: "⚠️",
-        node: <>{label} con mayor caída en pesos es <b>{worst.cat}</b>: {fmt(worst.a)} en 2026 vs {fmt(worst.b)} en el período comparado de 2025 ({worst.pct.toFixed(0)}%, {fmt(worst.drop)} menos).</>,
+        kicker: `${label} con mayor caída`,
+        headline: worst.cat,
+        sub: `${worst.pct.toFixed(0)}% · ${fmt(worst.drop)} menos que 2025`,
       });
     }
   }
-  biggestMover((r) => r.ramo || "(Sin dato)", "El ramo");
-  biggestMover((r) => r.compania || "(Sin dato)", "La compañía");
+  biggestMover((r) => r.ramo || "(Sin dato)", "Ramo");
+  biggestMover((r) => r.compania || "(Sin dato)", "Compañía");
 
   const renewal = buildRenewalTable(rows2025, rows2026).filter((t) => !t.esNuevo);
   if (renewal.length) {
@@ -175,7 +192,9 @@ function buildInsights(rows2026, rows2025) {
     if (noRenovo.length) {
       insights.push({
         tone: pctRenovo < 60 ? "bad" : "good", icon: "🔁",
-        node: <><b>{noRenovo.length} de {renewal.length} clientes</b> de 2025 (sin contar Escolares) aún no renuevan en 2026 ({pctRenovo.toFixed(0)}% de retención) — {fmt(enRiesgo)} en prima 2025 sin renovar todavía.</>,
+        kicker: "Retención de clientes 2025",
+        headline: `${pctRenovo.toFixed(0)}%`,
+        sub: `${noRenovo.length} de ${renewal.length} sin renovar · ${fmt(enRiesgo)} en riesgo`,
       });
     }
   }
@@ -188,7 +207,9 @@ function buildInsights(rows2026, rows2025) {
     if (share > 30) {
       insights.push({
         tone: share > 50 ? "bad" : "good", icon: "🎯",
-        node: <>Los <b>3 tomadores más grandes</b> concentran {share.toFixed(0)}% de la prima 2026 — {share > 50 ? "alta dependencia de pocos clientes." : "concentración moderada."}</>,
+        kicker: "Concentración de cartera",
+        headline: `${share.toFixed(0)}%`,
+        sub: "de la prima 2026 en los 3 tomadores más grandes",
       });
     }
   }
@@ -296,11 +317,13 @@ function MonthlyChart({ s2025, s2026 }) {
   );
 }
 
-// Barras verticales pareadas (2026 vs 2025) por categoría arbitraria (compañía/ramo)
+// Barras verticales pareadas (2026 vs 2025) por categoría arbitraria (compañía)
+// — cifras en millones sin sufijo "M" (se declara una vez en la leyenda de
+// arriba, pedido explícito 2026-09-24).
 function CategoryChart({ categories, v2026, v2025 }) {
   if (!categories.length) return <div style={{ padding: 24, textAlign: "center", color: "#aaa", fontSize: 13 }}>Sin datos para los filtros elegidos.</div>;
   const width = 400, height = 280;
-  const padL = 46, padR = 10, padT = 14, padB = 78;
+  const padL = 34, padR = 10, padT = 14, padB = 78;
   const plotW = width - padL - padR, plotH = height - padT - padB;
   const maxVal = Math.max(1, ...v2026, ...v2025);
   const niceMax = niceCeil(maxVal);
@@ -317,7 +340,7 @@ function CategoryChart({ categories, v2026, v2025 }) {
       {gridTicks.map((g, i) => (
         <g key={i}>
           <line x1={padL} y1={g.yy} x2={width - padR} y2={g.yy} stroke={COLOR_GRID} strokeWidth={1} />
-          <text x={padL - 8} y={g.yy + 3.5} fontSize={10} fill={COLOR_AXIS} textAnchor="end">{fmtCompact(g.val)}</text>
+          <text x={padL - 6} y={g.yy + 3.5} fontSize={10} fill={COLOR_AXIS} textAnchor="end">{fmtMillones(g.val)}</text>
         </g>
       ))}
       {categories.map((cat, i) => {
@@ -331,13 +354,60 @@ function CategoryChart({ categories, v2026, v2025 }) {
         return (
           <g key={cat}>
             <rect x={cx26} y={y26} width={barW} height={h26} rx={2.5} fill={COLOR_2026}><title>{cat} 2026: {fmt(v26)}</title></rect>
-            <text x={cx26 + barW / 2} y={y26 - 4} fontSize={10.5} fill={COLOR_AXIS} textAnchor="middle">{fmtCompact(v26)}</text>
+            <text x={cx26 + barW / 2} y={y26 - 4} fontSize={10.5} fill={COLOR_AXIS} textAnchor="middle">{fmtMillones(v26)}</text>
             <rect x={cx25} y={y25} width={barW} height={h25} rx={2.5} fill={COLOR_2025}><title>{cat} 2025: {fmt(v25)}</title></rect>
-            <text x={cx25 + barW / 2} y={y25 - 4} fontSize={10.5} fill={COLOR_AXIS} textAnchor="middle">{fmtCompact(v25)}</text>
+            <text x={cx25 + barW / 2} y={y25 - 4} fontSize={10.5} fill={COLOR_AXIS} textAnchor="middle">{fmtMillones(v25)}</text>
             <text x={lx} y={ly} fontSize={10} fill={COLOR_AXIS} textAnchor="end" transform={`rotate(-35 ${lx} ${ly})`}>{cat}</text>
           </g>
         );
       })}
+    </svg>
+  );
+}
+
+// Barras horizontales pareadas (2026 vs 2025) por ramo — pedido explícito
+// 2026-09-24. Misma idea que CategoryChart pero categorías en el eje Y,
+// mejor para nombres de ramo largos y para escanear el ranking de arriba
+// hacia abajo.
+function HorizontalCategoryChart({ categories, v2026, v2025 }) {
+  if (!categories.length) return <div style={{ padding: 24, textAlign: "center", color: "#aaa", fontSize: 13 }}>Sin datos para los filtros elegidos.</div>;
+  const width = 460;
+  const rowH = 40;
+  const padL = 118, padR = 44, padT = 8, padB = 22;
+  const height = padT + padB + categories.length * rowH;
+  const plotW = width - padL - padR;
+  const maxVal = Math.max(1, ...v2026, ...v2025);
+  const niceMax = niceCeil(maxVal);
+  const barGap = 3, barH = (rowH - barGap - 10) / 2;
+  const gridTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => {
+    const val = niceMax * f;
+    return { val, xx: padL + (plotW * val) / niceMax };
+  });
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }} preserveAspectRatio="xMidYMid meet">
+      {gridTicks.map((g, i) => (
+        <line key={i} x1={g.xx} y1={padT} x2={g.xx} y2={height - padB} stroke={COLOR_GRID} strokeWidth={1} />
+      ))}
+      {categories.map((cat, i) => {
+        const rowY = padT + i * rowH;
+        const y26 = rowY + 5;
+        const y25 = y26 + barH + barGap;
+        const v26 = v2026[i] || 0, v25 = v2025[i] || 0;
+        const w26 = Math.max(1, (plotW * v26) / niceMax);
+        const w25 = Math.max(1, (plotW * v25) / niceMax);
+        return (
+          <g key={cat}>
+            <text x={padL - 10} y={rowY + rowH / 2 + 4} fontSize={11} fill={BLUE.text} textAnchor="end">{cat}</text>
+            <rect x={padL} y={y26} width={w26} height={barH} rx={2.5} fill={COLOR_2026}><title>{cat} 2026: {fmt(v26)}</title></rect>
+            <text x={padL + w26 + 6} y={y26 + barH / 2 + 3.5} fontSize={10.5} fill={COLOR_AXIS}>{fmtMillones(v26)}</text>
+            <rect x={padL} y={y25} width={w25} height={barH} rx={2.5} fill={COLOR_2025}><title>{cat} 2025: {fmt(v25)}</title></rect>
+            <text x={padL + w25 + 6} y={y25 + barH / 2 + 3.5} fontSize={10.5} fill={COLOR_AXIS}>{fmtMillones(v25)}</text>
+          </g>
+        );
+      })}
+      {gridTicks.map((g, i) => (
+        <text key={i} x={g.xx} y={height - 6} fontSize={10} fill={COLOR_AXIS} textAnchor="middle">{fmtMillones(g.val)}</text>
+      ))}
     </svg>
   );
 }
@@ -559,7 +629,7 @@ export default function PulsoPrimasPage() {
       )}
 
       <div style={S.statGrid}>
-        <StatCard label="Primas 2026" value={fmt(totalPrima2026)} color={BLUE.primary} sub={`${rows2026.length} pólizas · ${label2026}`} />
+        <StatCard label="Primas 2026" value={fmt(totalPrima2026)} color={COLOR_2026} sub={`${rows2026.length} pólizas · ${label2026}`} />
         <StatCard label={`Primas 2025${mismoPeriodo ? " (mismo período)" : ""}`} value={fmt(totalPrima2025Periodo)} color={COLOR_2025} sub={`${rows2025.length} pólizas · ${label2025}`} />
         <StatCard
           label="Variación"
@@ -570,25 +640,18 @@ export default function PulsoPrimasPage() {
         <StatCard label="Total año 2025" value={fmt(totalPrima2025FullYear)} color="#6b87b0" sub={`${countPrima2025FullYear} pólizas · año completo`} />
       </div>
 
-      {insights.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {insights.map((ins, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "#fff", border: `1px solid ${BLUE.border}`, borderLeft: `3px solid ${ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD}`, borderRadius: 10, padding: "11px 14px", fontSize: 13, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
-              <span style={{ fontSize: 15, lineHeight: 1.3 }}>{ins.icon}</span>
-              <span>{ins.node}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
       <Card title="Evolución mensual de primas">
         <Legend />
         <MonthlyChart s2025={s2025} s2026={s2026} />
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 0 }}>
-        <Card title="Primas por compañía"><Legend /><CategoryChart categories={compCats.cats} v2026={compCats.v26} v2025={compCats.v25} /></Card>
-        <Card title="Primas por ramo"><Legend /><CategoryChart categories={ramoCats.cats} v2026={ramoCats.v26} v2025={ramoCats.v25} /></Card>
+        <Card title="Primas por compañía" desc="Cifras en millones de pesos (COP)">
+          <Legend /><CategoryChart categories={compCats.cats} v2026={compCats.v26} v2025={compCats.v25} />
+        </Card>
+        <Card title="Primas por ramo" desc="Cifras en millones de pesos (COP)">
+          <Legend /><HorizontalCategoryChart categories={ramoCats.cats} v2026={ramoCats.v26} v2025={ramoCats.v25} />
+        </Card>
       </div>
 
       <Card
@@ -596,17 +659,16 @@ export default function PulsoPrimasPage() {
         desc={`${renewedCount} de ${renewalCohort2025.length} clientes de 2025 (sin contar Accidentes Escolares) ya renovaron en 2026 · ${fmt(atRiskPrima)} en prima 2025 todavía sin renovar${renewalNuevos.length ? ` · ${renewalNuevos.length} clientes nuevos en 2026 (sin cruce en 2025)` : ""}`}
       >
         <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.6fr 0.9fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
-            <span>Tomador</span><span>Renovó en 2026</span><span>Prima 2026</span><span>Ramo principal</span><span>Prima 2025</span>
+          <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
+            <span>Tomador</span><span>Renovó en 2026</span><span>Prima 2026</span><span>Prima 2025</span>
           </div>
           {renewalList.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center", color: "#aaa" }}>Sin datos para los filtros elegidos.</div>
           ) : renewalList.map((t, i) => (
-            <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.6fr 0.9fr 1fr 1fr 1fr" }}>
+            <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr 1fr" }}>
               <div style={{ fontWeight: 600 }}>{t.nombre}</div>
-              <span style={S.badge(t.esNuevo ? BLUE.primary : t.renovo ? COLOR_GOOD : COLOR_BAD)}>{t.esNuevo ? "Cliente nuevo" : t.renovo ? "Renovó" : "No ha renovado"}</span>
+              <span style={S.badge(t.esNuevo ? COLOR_2026 : t.renovo ? COLOR_GOOD : COLOR_BAD)}>{t.esNuevo ? "Cliente nuevo" : t.renovo ? "Renovó" : "No ha renovado"}</span>
               <div style={{ fontWeight: 600 }}>{t.renovo ? fmt(t.prima2026) : "—"}</div>
-              <span style={S.chip(BLUE.primary)}>{t.ramo}</span>
               <div>{fmt(t.prima2025)}</div>
             </div>
           ))}
@@ -660,6 +722,23 @@ export default function PulsoPrimasPage() {
           </div>
         )}
       </Card>
+
+      {insights.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <SectionLabel>En resumen</SectionLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            {insights.map((ins, i) => (
+              <div key={i} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", borderTop: `3px solid ${ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD}`, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 700, color: "#9aa8c7", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13 }}>{ins.icon}</span>{ins.kicker}
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD, letterSpacing: -0.5 }}>{ins.headline}</div>
+                <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 3 }}>{ins.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ textAlign: "center", color: "#9aa8c7", fontSize: 11.5, marginTop: 8 }}>
         Fuente: Google Sheets "Seguros 2026" (Base 2026) y "Seguros 2025" (Base 2025) · se actualiza sola cada 20 minutos mientras esta pantalla esté abierta
