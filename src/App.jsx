@@ -17,6 +17,7 @@ import CotizacionesPage from "./pages/Cotizaciones.jsx";
 import PolizasPage from "./pages/Polizas.jsx";
 import RenovacionesPage from "./pages/Renovaciones.jsx";
 import SoatPage from "./pages/SOAT.jsx";
+import PulsoPrimasPage from "./pages/PulsoPrimas.jsx";
 import RamosPage from "./pages/Ramos.jsx";
 import AseguradorasPage from "./pages/Aseguradoras.jsx";
 import ConfiguracionPage from "./pages/Configuracion.jsx";
@@ -718,6 +719,8 @@ export default function App() {
     }
 
     if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} />;
+
+    if (seccion === "primas") return <PulsoPrimasPage />;
 
     if (seccion === "arriendos") return esAdmin(userRol) ? <ArriendosPage /> : null;
 
