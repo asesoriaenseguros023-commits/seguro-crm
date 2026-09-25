@@ -1062,7 +1062,12 @@ const StatCard = ({ label, value, color, sub }) => (
   </div>
 );
 
-const toISODash = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const MESES_ARR = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+// "AAAA-MM" (lo que produce un <input type="month">) -> "Julio 2026"
+function fmtMesAnio(ym) {
+  const [y, m] = ym.split("-");
+  return `${MESES_ARR[Number(m) - 1] || m} ${y}`;
+}
 
 // Mismo color/etiqueta para "necesita atención" en todo el Dashboard —
 // usa calcularEstadoPago (arriba), el mismo cálculo por ciclo de pago que
@@ -1076,25 +1081,40 @@ const ESTADO_CICLO_INFO = {
   proximo: { color: "#f59e0b", label: (e) => (e.dias === 0 ? "Vence hoy" : `Vence en ${e.dias} d`) },
 };
 
+// "AAAA-MM" del mes calendario actual — arranca acá por defecto el filtro
+// de recaudo, pedido explícito del usuario.
+function mesEnCursoStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
   const isMobile = useIsMobile();
   const [filtroArrendatario, setFiltroArrendatario] = useState("");
+  // Período de recaudo (input type="month", formato "AAAA-MM") — pedido
+  // explícito del usuario: poder elegir un rango (ej. Julio 2026 a Agosto
+  // 2026) para ver el recaudo total de esos meses, no solo "este mes".
+  const [filtroDesde, setFiltroDesde] = useState(mesEnCursoStr);
+  const [filtroHasta, setFiltroHasta] = useState(mesEnCursoStr);
 
   const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const inicioMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-01`;
-  const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  const inicioMesAnterior = toISODash(mesAnterior);
-  const finMesAnterior = toISODash(new Date(hoy.getFullYear(), hoy.getMonth(), 0));
 
   const inmueblesActivos = inmuebles.filter((i) => i.activo);
   const inmueblesOcupados = inmueblesActivos.filter((i) => i.arrendatarioId);
   const vacantes = inmueblesActivos.length - inmueblesOcupados.length;
   const canonMensual = inmueblesActivos.reduce((s, i) => s + (i.valorCanonBase || 0) + (i.tieneAdministracion ? (i.valorAdministracion || 0) : 0), 0);
-  const recaudadoMes = pagos.filter((p) => p.fechaPago >= inicioMes).reduce((s, p) => s + (p.valor || 0), 0);
-  const recaudadoMesAnterior = pagos.filter((p) => p.fechaPago >= inicioMesAnterior && p.fechaPago <= finMesAnterior).reduce((s, p) => s + (p.valor || 0), 0);
-  const variacionMes = recaudadoMesAnterior > 0 ? Math.round(((recaudadoMes - recaudadoMesAnterior) / recaudadoMesAnterior) * 100) : null;
+
+  // Si el usuario deja "Hasta" antes que "Desde", se intercambian solos en
+  // vez de mostrar un total vacío o negativo.
+  const periodoDesde = filtroDesde <= filtroHasta ? filtroDesde : filtroHasta;
+  const periodoHasta = filtroDesde <= filtroHasta ? filtroHasta : filtroDesde;
+  const recaudadoPeriodo = pagos
+    .filter((p) => { const ym = (p.fechaPago || "").slice(0, 7); return ym && ym >= periodoDesde && ym <= periodoHasta; })
+    .reduce((s, p) => s + (p.valor || 0), 0);
+  const labelPeriodo = periodoDesde === periodoHasta ? fmtMesAnio(periodoDesde) : `${fmtMesAnio(periodoDesde)} – ${fmtMesAnio(periodoHasta)}`;
+  const esPeriodoPorDefecto = filtroDesde === mesEnCursoStr() && filtroHasta === mesEnCursoStr();
 
   const estadosCiclo = inmueblesOcupados.map((i) => ({ inmueble: i, estado: calcularEstadoPago(i, pagos) }));
   const carteraMora = estadosCiclo.filter((x) => x.estado?.tipo === "mora").reduce((s, x) => s + (x.estado.valorTotal || 0), 0);
@@ -1130,13 +1150,22 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
         </div>
       </div>
 
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={S.label}>Recaudo desde</label>
+          <input type="month" style={{ ...S.input, width: "auto" }} value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={S.label}>Hasta</label>
+          <input type="month" style={{ ...S.input, width: "auto" }} value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
+        </div>
+        {!esPeriodoPorDefecto && (
+          <button style={S.btn("ghost")} onClick={() => { setFiltroDesde(mesEnCursoStr()); setFiltroHasta(mesEnCursoStr()); }}>Mes en curso</button>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 24 }}>
-        <StatCard
-          label="Recaudado este mes"
-          value={fmt(recaudadoMes)}
-          color={variacionMes === null ? undefined : variacionMes >= 0 ? "#16a34a" : "#dc2626"}
-          sub={variacionMes === null ? "sin dato del mes anterior" : `${variacionMes >= 0 ? "↑" : "↓"} ${Math.abs(variacionMes)}% vs. mes anterior`}
-        />
+        <StatCard label={`Recaudado — ${labelPeriodo}`} value={fmt(recaudadoPeriodo)} color={BLUE.primary} />
         <StatCard label="Cartera en mora" value={fmt(carteraMora)} color={carteraMora > 0 ? "#dc2626" : "#16a34a"} sub="acumulado, ciclos vencidos" />
         <StatCard
           label="Ocupación"
