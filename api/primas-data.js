@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { JWT } from "google-auth-library";
+import { sheetsClient, fetchSheetValues, toNumber } from "./_lib/googleSheets.js";
 
 const SUPABASE_URL = "https://cpzjaeurqeeljgsypwsh.supabase.co";
 const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -23,46 +23,11 @@ async function requireAgente(req) {
   return !!agente;
 }
 
-function sheetsClient() {
-  const email = process.env.GOOGLE_SHEETS_CLIENT_EMAIL;
-  // Vercel no preserva saltos de línea reales en variables de entorno — la
-  // llave privada se guarda con "\n" literales y hay que devolverlos aquí.
-  const key = (process.env.GOOGLE_SHEETS_PRIVATE_KEY || "").replace(/\\n/g, "\n");
-  if (!email || !key) {
-    throw new Error("Faltan las variables GOOGLE_SHEETS_CLIENT_EMAIL / GOOGLE_SHEETS_PRIVATE_KEY");
-  }
-  return new JWT({ email, key, scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"] });
-}
-
-async function fetchSheetValues(client, spreadsheetId, sheetName) {
-  const token = await client.getAccessToken();
-  const range = encodeURIComponent(`'${sheetName}'`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`;
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token.token}` } });
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Google Sheets API ${resp.status}: ${body.slice(0, 300)}`);
-  }
-  const data = await resp.json();
-  return data.values || [];
-}
-
 function normMesIdx(s) {
   if (!s) return null;
   const up = String(s).trim().toUpperCase();
   const i = MESES.findIndex((m) => m.toUpperCase() === up);
   return i === -1 ? null : i;
-}
-
-// UNFORMATTED_VALUE ya devuelve numeros reales — este fallback solo cubre
-// el caso raro de una celda con texto tipo "15.000" colado en una columna
-// numerica.
-function toNumber(v) {
-  if (v == null || v === "") return 0;
-  if (typeof v === "number") return v;
-  const s = String(v).trim().replace(/\./g, "").replace(",", ".");
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
 }
 
 function rowsFromMatrix(matrix) {

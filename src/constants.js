@@ -88,11 +88,12 @@ export const S = {
 
 // ─── NAVEGACIÓN (secciones del inicio y sub-pestañas) ────────────────────────
 export const SECCIONES = [
-  { id: "crm",       label: "CRM Seguros",      icon: "users",    adminOnly: false },
-  { id: "soat",      label: "Seguimiento SOAT", icon: "shield",   adminOnly: false },
-  { id: "primas",    label: "Pulso de Primas",  icon: "chart",    adminOnly: false },
-  { id: "arriendos", label: "Arriendos",        icon: "home",     adminOnly: true },
-  { id: "config",    label: "Configuraciones",  icon: "settings", adminOnly: true },
+  { id: "crm",          label: "CRM Seguros",           icon: "users",    adminOnly: false },
+  { id: "soat",         label: "Seguimiento SOAT",      icon: "shield",   adminOnly: false },
+  { id: "primas",       label: "Pulso de Primas",       icon: "chart",    adminOnly: false },
+  { id: "certificados", label: "Certificados Escolares", icon: "document", adminOnly: false },
+  { id: "arriendos",    label: "Arriendos",             icon: "home",     adminOnly: true },
+  { id: "config",       label: "Configuraciones",       icon: "settings", adminOnly: true },
 ];
 
 export const SUBTABS_CRM = [
