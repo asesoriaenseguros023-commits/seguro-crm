@@ -37,7 +37,7 @@ const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, 
 
   const handleNav = (id) => { onNav(id); if (isMobile) onClose(); };
   const handleLogo = () => { onLogo(); if (isMobile) onClose(); };
-  const visibles = SECCIONES.filter((s) => !s.adminOnly || esAdmin(userRol));
+  const visibles = SECCIONES.filter((s) => s.activo !== false && (!s.adminOnly || esAdmin(userRol)));
 
   return (
     <>
@@ -611,6 +611,7 @@ export default function App() {
 
   const handleNav = (id) => {
     const s = SECCIONES.find((x) => x.id === id);
+    if (s?.activo === false) return;
     if (s?.adminOnly && !esAdmin(userRol)) return;
     setSeccion(id);
   };
@@ -685,7 +686,7 @@ export default function App() {
 
   const renderContent = () => {
     if (seccion === "inicio") {
-      const visibles = SECCIONES.filter((s) => !s.adminOnly || esAdmin(userRol));
+      const visibles = SECCIONES.filter((s) => s.activo !== false && (!s.adminOnly || esAdmin(userRol)));
       return (
         <div style={S.homeWrap}>
           <div style={S.homeTitle}>Hola, {userName || "Usuario"}</div>
@@ -706,7 +707,13 @@ export default function App() {
       );
     }
 
+    // "CRM Seguros" desactivado a pedido del usuario (2026-09-25) — se deja
+    // todo el código (páginas, subtabs, queries) intacto para reactivarlo
+    // más adelante con solo quitar `activo: false` en SECCIONES. Este guard
+    // es defensivo (la sección ya no aparece ni en el sidebar ni en Inicio).
+    const seccionCrm = SECCIONES.find((s) => s.id === "crm");
     if (seccion === "crm") {
+      if (seccionCrm?.activo === false) return null;
       return (
         <div>
           <div style={S.subTabBar}>

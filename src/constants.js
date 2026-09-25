@@ -88,7 +88,10 @@ export const S = {
 
 // ─── NAVEGACIÓN (secciones del inicio y sub-pestañas) ────────────────────────
 export const SECCIONES = [
-  { id: "crm",          label: "CRM Seguros",           icon: "users",    adminOnly: false },
+  // Desactivado a pedido del usuario (2026-09-25) — código, páginas y
+  // consultas a Supabase quedan intactos; para reactivar, basta con quitar
+  // `activo: false` (o cambiarlo a true) de esta línea.
+  { id: "crm",          label: "CRM Seguros",           icon: "users",    adminOnly: false, activo: false },
   { id: "soat",         label: "Seguimiento SOAT",      icon: "shield",   adminOnly: false },
   { id: "primas",       label: "Pulso de Primas",       icon: "chart",    adminOnly: false },
   { id: "certificados", label: "Certificados Escolares", icon: "document", adminOnly: false },
