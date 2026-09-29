@@ -1,18 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 import twilio from "twilio";
-import { analizarGrabacion } from "./_lib/analizarLlamada.js";
 
 const SUPABASE_URL = "https://cpzjaeurqeeljgsypwsh.supabase.co";
 const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Vercel: la transcripción + análisis con Claude puede tardar más que el
-// límite por defecto — esto es un webhook de fondo de Twilio (no bloquea la
-// llamada real), así que unos segundos extra de respuesta no importan.
-export const config = { maxDuration: 60 };
-
 // Twilio llama esto cuando la grabación del <Dial> ya está lista. Guarda
 // solo el SID (no la URL directa de Twilio, que exige Basic Auth) — el
 // audio se sirve después a través de twilio-recording-audio.js.
+//
+// Pedido explícito del usuario (2026-09-29): ya NO se transcribe/analiza con
+// IA cada llamada apenas queda grabada — eso gastaba tokens en llamadas que
+// nadie termina revisando. El análisis ahora es perezoso: soat-informe-ia.js
+// lo dispara solo para las llamadas del rango que de verdad entran a un
+// Reporte IA. Ver analizarGrabacion() en _lib/analizarLlamada.js.
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).send("Método no permitido");
 
@@ -37,11 +37,6 @@ export default async function handler(req, res) {
       }
     } else {
       await supabase.from("soat_llamadas").update({ grabacion_sid: recordingSid }).eq("call_sid", callSid);
-      // Pedido del usuario: analizar automáticamente TODA llamada grabada
-      // (transcripción + Claude: persona real vs. buzón, resumen, calidad
-      // del agente). Se espera a que termine antes de responder — si no,
-      // Vercel puede congelar la función a medias y perder el resultado.
-      await analizarGrabacion({ recordingSid, callSid, supabase });
     }
   }
 

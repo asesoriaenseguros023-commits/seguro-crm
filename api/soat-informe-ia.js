@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { analizarGrabacion } from "./_lib/analizarLlamada.js";
 
 const SUPABASE_URL = "https://cpzjaeurqeeljgsypwsh.supabase.co";
 const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -10,8 +11,41 @@ const anthropic = new Anthropic();
 // "Reporte IA": agrega el análisis individual (ver _lib/analizarLlamada.js)
 // de todas las llamadas de un periodo y le pide a Claude un comentario
 // consolidado — patrones que se repiten, no una lista repetida. Sesión de
-// agente autenticado requerida (dispara una llamada paga a Anthropic).
+// agente autenticado requerida (dispara llamadas pagas a OpenAI/Anthropic).
+//
+// Pedido explícito del usuario (2026-09-29): antes CADA llamada se
+// transcribía/analizaba apenas quedaba grabada (ver twilio-recording-status.js,
+// ya no lo hace) — eso gastaba tokens en llamadas que nadie termina
+// revisando. Ahora el análisis es perezoso: se dispara aquí mismo, solo para
+// las llamadas del rango pedido que todavía no tengan análisis, justo antes
+// de armar el reporte. Con LIMITE_ANALISIS_POR_REPORTE + CONCURRENCIA
+// acotados para no exceder maxDuration — si un rango tiene más pendientes
+// que el límite, "pendientesSinAnalizar" en la respuesta avisa que hay que
+// generar el reporte de nuevo para completarlas (mismo patrón que ya usaba
+// soat-backfill-analisis.js para su propio backlog).
 export const config = { maxDuration: 60 };
+const LIMITE_ANALISIS_POR_REPORTE = 8;
+const CONCURRENCIA_ANALISIS = 4;
+
+async function analizarPendientesDelRango(desde, hasta) {
+  const { data: pendientes } = await supabase.from("soat_llamadas")
+    .select("call_sid, grabacion_sid")
+    .gte("created_at", `${desde}T00:00:00-05:00`)
+    .lte("created_at", `${hasta}T23:59:59-05:00`)
+    .not("grabacion_sid", "is", null)
+    .is("analizado_en", null)
+    .order("created_at", { ascending: true })
+    .limit(LIMITE_ANALISIS_POR_REPORTE + 1); // +1 para saber si quedó algo fuera del tope
+  if (!pendientes?.length) return { analizadas: 0, quedanMas: false };
+
+  const quedanMas = pendientes.length > LIMITE_ANALISIS_POR_REPORTE;
+  const porProcesar = pendientes.slice(0, LIMITE_ANALISIS_POR_REPORTE);
+  for (let i = 0; i < porProcesar.length; i += CONCURRENCIA_ANALISIS) {
+    const lote = porProcesar.slice(i, i + CONCURRENCIA_ANALISIS);
+    await Promise.all(lote.map((row) => analizarGrabacion({ recordingSid: row.grabacion_sid, callSid: row.call_sid, supabase })));
+  }
+  return { analizadas: porProcesar.length, quedanMas };
+}
 
 async function requireAgente(req) {
   const auth = req.headers.authorization || "";
@@ -68,6 +102,8 @@ export default async function handler(req, res) {
   const hasta = req.query.hasta;
   if (!desde || !hasta) return res.status(400).json({ error: "Faltan fechas desde/hasta" });
 
+  const { analizadas, quedanMas } = await analizarPendientesDelRango(desde, hasta);
+
   // Colombia es UTC-5 fijo, sin horario de verano — desde/hasta vienen como
   // fecha de calendario en Bogotá (el date picker), así que se ancla el
   // rango con ese offset explícito. Sin esto, Postgres las interpretaba en
@@ -117,5 +153,9 @@ export default async function handler(req, res) {
   const llamadas = todas.filter((l) => l.persona_real === "si");
   const consolidado = await generarConsolidado(llamadas);
 
-  return res.status(200).json({ llamadas, estadisticas, consolidado });
+  return res.status(200).json({
+    llamadas, estadisticas, consolidado,
+    analisisEnEsteReporte: analizadas,
+    pendientesSinAnalizar: quedanMas,
+  });
 }

@@ -519,6 +519,26 @@ export default function App() {
     setAgentes((prev) => prev.filter((x) => x.id !== id));
   };
 
+  // ─── CRUD Comerciales ─────────────────────────────────────────────────────
+  // Antes pasaba por api/comerciales.js (un endpoint de Vercel completo solo
+  // para esto). Se movió a Supabase directo desde el navegador — mismo
+  // patrón que Ramos/Aseguradoras arriba — porque "Comerciales" ya vive bajo
+  // "Configuraciones", una sección adminOnly (ver SECCIONES en constants.js):
+  // ya nadie más que un Admin puede ni siquiera ver este formulario, así que
+  // el endpoint no agregaba una restricción real que RLS no diera. Ahorra
+  // una función serverless (Vercel Hobby tope a 12 — ver [[project-seguro-crm]]).
+  const addComercial = async (nombre) => {
+    const nombreUpper = nombre.trim().toUpperCase();
+    const email = `comercial.${nombre.trim().toLowerCase().replace(/\s+/g, ".")}@crm.local`;
+    const { data, error } = await supabase.from("agentes").insert([{ nombre: nombreUpper, rol: "Comercial", email }]).select().single();
+    if (error) { console.error(error); return; }
+    if (data) setAgentes((prev) => [...prev, data]);
+  };
+  const deleteComercial = async (id) => {
+    await supabase.from("agentes").delete().eq("id", id).eq("rol", "Comercial");
+    setAgentes((prev) => prev.filter((x) => x.id !== id));
+  };
+
   // ─── CRUD Ramos ───────────────────────────────────────────────────────────
   // Antes se descartaba el error del insert: si fallaba (nombre vacío,
   // constraint, etc.) el modal se cerraba igual sin avisar nada — el ramo
@@ -677,7 +697,7 @@ export default function App() {
       case "aseguradoras":
         return <AseguradorasPage aseguradoras={aseguradoras} onAdd={addAseguradora} onEdit={editAseguradora} onDelete={deleteAseguradora} />;
       case "comerciales":
-        return <ComercialPage showConfirm={showConfirm} />;
+        return <ComercialPage comerciales={agentes.filter((a) => a.rol === "Comercial")} onAdd={addComercial} onDelete={deleteComercial} showConfirm={showConfirm} />;
       case "configuracion":
         return <ConfiguracionPage agentes={agentes} polizas={polizas} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} />;
       default:
@@ -727,7 +747,7 @@ export default function App() {
       );
     }
 
-    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} />;
+    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} comerciales={agentes.filter((a) => a.rol === "Comercial")} />;
 
     if (seccion === "primas") return <PulsoPrimasPage />;
 

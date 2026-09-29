@@ -1,45 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { S, BLUE } from "../constants.js";
-import { authHeaders } from "../helpers.js";
 
-const API = "/api/comerciales";
-
-const ComercialPage = ({ showConfirm }) => {
-  const [agentes, setAgentes] = useState([]);
-  const [loading, setLoading] = useState(true);
+// Ya no pide/escribe vía api/comerciales.js — onAdd/onDelete (App.jsx) hacen
+// el insert/delete directo a Supabase, mismo patrón que Ramos/Aseguradoras.
+const ComercialPage = ({ comerciales, onAdd, onDelete, showConfirm }) => {
+  const agentes = comerciales;
   const [nuevo, setNuevo] = useState("");
   const [saving, setSaving] = useState(false);
-
-  const fetchAgentes = async () => {
-    const res = await fetch(API, { headers: await authHeaders() });
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  };
-
-  useEffect(() => {
-    fetchAgentes().then((data) => { setAgentes(data); setLoading(false); });
-  }, []);
 
   const add = async () => {
     const nombre = nuevo.trim().toUpperCase();
     if (!nombre || agentes.some(a => a.nombre.toUpperCase() === nombre)) return;
     setSaving(true);
-    const res = await fetch(API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ nombre }),
-    });
-    const data = await res.json();
-    if (data.error) console.error(data.error);
-    setAgentes(await fetchAgentes());
+    await onAdd(nombre);
     setNuevo(""); setSaving(false);
   };
 
   const remove = async (id, nombre) => {
     const ok = await showConfirm(`¿Eliminar a ${nombre}?`, "Los leads asignados quedarán como 'Sin asignar'.");
     if (!ok) return;
-    await fetch(`${API}?id=${id}`, { method: "DELETE", headers: await authHeaders() });
-    setAgentes(await fetchAgentes());
+    await onDelete(id);
   };
 
   const inpS = { background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px", color: BLUE.text, fontSize: 13.5, outline: "none", fontFamily: "inherit", boxSizing: "border-box", width: "100%" };
@@ -76,9 +56,7 @@ const ComercialPage = ({ showConfirm }) => {
           <span>Fecha de registro</span>
           <span></span>
         </div>
-        {loading ? (
-          <div style={{ padding: 48, textAlign: "center", color: "#aaa" }}>Cargando...</div>
-        ) : agentes.length === 0 ? (
+        {agentes.length === 0 ? (
           <div style={{ padding: 48, textAlign: "center", color: "#aaa" }}>Sin comerciales registrados. Agrega el primero.</div>
         ) : agentes.map((a, i) => (
           <div key={a.id}

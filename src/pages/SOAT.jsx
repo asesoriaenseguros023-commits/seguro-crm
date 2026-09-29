@@ -73,7 +73,7 @@ const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
   );
 };
 
-const SoatPage = ({ showConfirm, softphone }) => {
+const SoatPage = ({ showConfirm, softphone, comerciales }) => {
   const [clientes, setClientes] = useState([]);
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
@@ -83,7 +83,9 @@ const SoatPage = ({ showConfirm, softphone }) => {
   const [busquedaModo, setBusquedaModo] = useState("nombre");
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
-  const [agentes, setAgentes] = useState(["Sin asignar"]);
+  // "comerciales" (prop, viene de App.jsx -> Supabase directo) reemplaza el
+  // viejo fetch("/api/comerciales") — ya no hace falta esa función serverless.
+  const agentes = ["Sin asignar", ...comerciales.map((c) => c.nombre)];
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
   const [importDups, setImportDups] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
@@ -121,14 +123,6 @@ const SoatPage = ({ showConfirm, softphone }) => {
     supabase.from("soat_clientes").select("*").order("created_at", { ascending: false })
       .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
 
-    const cargarAgentes = () =>
-      fetch("/api/comerciales").then(r => r.json())
-        .then(data => {
-          if (Array.isArray(data) && data.length > 0)
-            setAgentes(["Sin asignar", ...data.map(r => r.nombre)]);
-        });
-    cargarAgentes();
-
     const channel = supabase.channel("soat-all")
       .on("postgres_changes", { event: "*", schema: "public", table: "soat_clientes" }, (payload) => {
         if (payload.eventType === "INSERT")
@@ -138,7 +132,6 @@ const SoatPage = ({ showConfirm, softphone }) => {
         if (payload.eventType === "DELETE")
           setClientes(p => p.filter(x => x.id !== payload.old.id));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "agentes" }, cargarAgentes)
       .on("postgres_changes", { event: "*", schema: "public", table: "soat_llamadas" }, (payload) => {
         const row = payload.new;
         if (!row) return;
@@ -247,7 +240,7 @@ const SoatPage = ({ showConfirm, softphone }) => {
                     )
                   )}
                   {ia && <span style={{ ...S.chip(iaColor) }}>{iaLabel}</span>}
-                  {l.grabacion_sid && !l.analizado_en && <span style={{ color: "#6b87b0", fontSize: 11 }}>Analizando…</span>}
+                  {l.grabacion_sid && !l.analizado_en && <span style={{ color: "#6b87b0", fontSize: 11 }}>Sin analizar (se analiza al generar el Reporte IA de este período)</span>}
                 </div>
               </div>
               {ia && (
@@ -1286,6 +1279,16 @@ const SoatPage = ({ showConfirm, softphone }) => {
 
             {reporteData && !reporteLoading && (
               <>
+                {reporteData.analisisEnEsteReporte > 0 && (
+                  <div style={{ ...S.alertBox("#1a56db"), marginBottom: 14 }}>
+                    Se analizaron {reporteData.analisisEnEsteReporte} llamada{reporteData.analisisEnEsteReporte === 1 ? "" : "s"} nueva{reporteData.analisisEnEsteReporte === 1 ? "" : "s"} de este período (antes no se analizaban solas al colgar).
+                  </div>
+                )}
+                {reporteData.pendientesSinAnalizar && (
+                  <div style={{ ...S.alertBox("#f59e0b"), marginBottom: 14 }}>
+                    Quedaron llamadas de este período sin analizar todavía (se procesan de a pocas por corrida) — genera el reporte de nuevo para completarlas.
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
                   {[
                     { label: "Llamadas analizadas", value: reporteData.estadisticas.total, color: BLUE.primary },
