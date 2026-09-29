@@ -18,33 +18,42 @@ const anthropic = new Anthropic();
 // ya no lo hace) — eso gastaba tokens en llamadas que nadie termina
 // revisando. Ahora el análisis es perezoso: se dispara aquí mismo, solo para
 // las llamadas del rango pedido que todavía no tengan análisis, justo antes
-// de armar el reporte. Con LIMITE_ANALISIS_POR_REPORTE + CONCURRENCIA
-// acotados para no exceder maxDuration — si un rango tiene más pendientes
-// que el límite, "pendientesSinAnalizar" en la respuesta avisa que hay que
-// generar el reporte de nuevo para completarlas (mismo patrón que ya usaba
-// soat-backfill-analisis.js para su propio backlog).
+// de armar el reporte.
+//
+// Un tope fijo de "hasta N llamadas" no tiene sentido — un reporte semanal
+// puede traer 50 llamadas sin problema, uno diario puede traer 3. Lo que sí
+// es un límite real (y no se puede subir sin pasar a Vercel Pro) es que la
+// función entera tiene que responder en maxDuration=60s. Por eso esto no
+// tope por CANTIDAD sino por TIEMPO: procesa en lotes de a
+// CONCURRENCIA_ANALISIS en paralelo hasta acercarse al presupuesto, dejando
+// margen para la consulta final + el comentario consolidado de Claude. Si el
+// rango no alcanzó a completarse, "pendientesRestantes" en la respuesta dice
+// exactamente cuántas faltan (no solo un booleano) para volver a generar el
+// reporte y completarlas — mismo patrón de "seguir corriendo hasta terminar"
+// que ya usaba soat-backfill-analisis.js para su propio backlog.
 export const config = { maxDuration: 60 };
-const LIMITE_ANALISIS_POR_REPORTE = 8;
-const CONCURRENCIA_ANALISIS = 4;
+const PRESUPUESTO_ANALISIS_MS = 45000; // deja ~15s para el resto del reporte
+const CONCURRENCIA_ANALISIS = 6;
 
 async function analizarPendientesDelRango(desde, hasta) {
+  const inicio = Date.now();
   const { data: pendientes } = await supabase.from("soat_llamadas")
     .select("call_sid, grabacion_sid")
     .gte("created_at", `${desde}T00:00:00-05:00`)
     .lte("created_at", `${hasta}T23:59:59-05:00`)
     .not("grabacion_sid", "is", null)
     .is("analizado_en", null)
-    .order("created_at", { ascending: true })
-    .limit(LIMITE_ANALISIS_POR_REPORTE + 1); // +1 para saber si quedó algo fuera del tope
-  if (!pendientes?.length) return { analizadas: 0, quedanMas: false };
+    .order("created_at", { ascending: true });
+  if (!pendientes?.length) return { analizadas: 0, pendientesRestantes: 0 };
 
-  const quedanMas = pendientes.length > LIMITE_ANALISIS_POR_REPORTE;
-  const porProcesar = pendientes.slice(0, LIMITE_ANALISIS_POR_REPORTE);
-  for (let i = 0; i < porProcesar.length; i += CONCURRENCIA_ANALISIS) {
-    const lote = porProcesar.slice(i, i + CONCURRENCIA_ANALISIS);
+  let analizadas = 0;
+  for (let i = 0; i < pendientes.length; i += CONCURRENCIA_ANALISIS) {
+    if (Date.now() - inicio > PRESUPUESTO_ANALISIS_MS) break;
+    const lote = pendientes.slice(i, i + CONCURRENCIA_ANALISIS);
     await Promise.all(lote.map((row) => analizarGrabacion({ recordingSid: row.grabacion_sid, callSid: row.call_sid, supabase })));
+    analizadas += lote.length;
   }
-  return { analizadas: porProcesar.length, quedanMas };
+  return { analizadas, pendientesRestantes: pendientes.length - analizadas };
 }
 
 async function requireAgente(req) {
@@ -102,7 +111,7 @@ export default async function handler(req, res) {
   const hasta = req.query.hasta;
   if (!desde || !hasta) return res.status(400).json({ error: "Faltan fechas desde/hasta" });
 
-  const { analizadas, quedanMas } = await analizarPendientesDelRango(desde, hasta);
+  const { analizadas, pendientesRestantes } = await analizarPendientesDelRango(desde, hasta);
 
   // Colombia es UTC-5 fijo, sin horario de verano — desde/hasta vienen como
   // fecha de calendario en Bogotá (el date picker), así que se ancla el
@@ -156,6 +165,6 @@ export default async function handler(req, res) {
   return res.status(200).json({
     llamadas, estadisticas, consolidado,
     analisisEnEsteReporte: analizadas,
-    pendientesSinAnalizar: quedanMas,
+    pendientesRestantes,
   });
 }

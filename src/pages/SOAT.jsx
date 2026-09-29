@@ -1284,9 +1284,9 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
                     Se analizaron {reporteData.analisisEnEsteReporte} llamada{reporteData.analisisEnEsteReporte === 1 ? "" : "s"} nueva{reporteData.analisisEnEsteReporte === 1 ? "" : "s"} de este período (antes no se analizaban solas al colgar).
                   </div>
                 )}
-                {reporteData.pendientesSinAnalizar && (
+                {reporteData.pendientesRestantes > 0 && (
                   <div style={{ ...S.alertBox("#f59e0b"), marginBottom: 14 }}>
-                    Quedaron llamadas de este período sin analizar todavía (se procesan de a pocas por corrida) — genera el reporte de nuevo para completarlas.
+                    Quedaron {reporteData.pendientesRestantes} llamada{reporteData.pendientesRestantes === 1 ? "" : "s"} de este período sin analizar (el análisis tiene un límite de tiempo por corrida) — genera el reporte de nuevo para completarlas.
                   </div>
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
