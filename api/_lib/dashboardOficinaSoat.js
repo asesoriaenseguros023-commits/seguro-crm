@@ -1,8 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
-import { sheetsClient, fetchSheetValues, toNumber, rowsFromMatrixGeneric } from "./_lib/googleSheets.js";
-
-const SUPABASE_URL = "https://cpzjaeurqeeljgsypwsh.supabase.co";
-const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+import { fetchSheetValues, toNumber, rowsFromMatrixGeneric } from "./googleSheets.js";
 
 // Mismo origen que el artefacto "Oficina SOAT": una hoja con 3 pestañas
 // (ventas, gastos, caja del negocio de venta de SOAT) — ver [[project-pulso-primas]]
@@ -12,17 +8,6 @@ const SHEET_ID = "11XaNCkjmRONiu5pPiJ8XP7bSFNIqrCLEBpvxNBVe9Uw";
 const TAB_SOAT = "Histórico SOAT";
 const TAB_GASTOS = "GASTOS";
 const TAB_CAJA = "CAJA";
-
-async function requireAgente(req) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return false;
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userData?.user?.email) return false;
-  const { data: agente } = await supabase
-    .from("agentes").select("id").eq("email", userData.user.email).maybeSingle();
-  return !!agente;
-}
 
 function hoyISO() {
   const d = new Date();
@@ -120,19 +105,7 @@ function parseCaja(matrix, hoyIso) {
   return out;
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "GET") return res.status(405).json({ error: "Método no permitido" });
-  if (!(await requireAgente(req))) return res.status(401).json({ error: "No autorizado" });
-
-  res.setHeader("Cache-Control", "no-store");
-
-  let client;
-  try {
-    client = sheetsClient();
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-
+export async function obtenerOficinaSoat(client) {
   const [rSoat, rGastos, rCaja] = await Promise.allSettled([
     fetchSheetValues(client, SHEET_ID, TAB_SOAT),
     fetchSheetValues(client, SHEET_ID, TAB_GASTOS),
@@ -144,7 +117,7 @@ export default async function handler(req, res) {
   const gastos = rGastos.status === "fulfilled" ? parseGastos(rGastos.value, hoyIso) : [];
   const caja = rCaja.status === "fulfilled" ? parseCaja(rCaja.value, hoyIso) : [];
 
-  res.status(200).json({
+  return {
     generatedAt: new Date().toISOString(),
     soat, gastos, caja,
     errors: {
@@ -152,5 +125,5 @@ export default async function handler(req, res) {
       gastos: rGastos.status === "rejected" ? String(rGastos.reason?.message || rGastos.reason) : null,
       caja: rCaja.status === "rejected" ? String(rCaja.reason?.message || rCaja.reason) : null,
     },
-  });
+  };
 }

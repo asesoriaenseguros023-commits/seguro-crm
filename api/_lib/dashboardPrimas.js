@@ -1,8 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
-import { sheetsClient, fetchSheetValues, toNumber } from "./_lib/googleSheets.js";
-
-const SUPABASE_URL = "https://cpzjaeurqeeljgsypwsh.supabase.co";
-const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+import { fetchSheetValues, toNumber } from "./googleSheets.js";
 
 // Mismas hojas que lee el artefacto "Pulso de Primas" — ver [[project-pulso-primas]].
 const FILE_2026 = "1JYZVhq_uefnQYDPgcbfqBs9E2lpZGCSdLUPVMRvYjnw";
@@ -11,17 +7,6 @@ const FILE_2025 = "192-u8FiQmoj7B-XCVvwbH40h1hYun6bl4lDYKD_bfS4";
 const TAB_2025 = "Base 2025";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-
-async function requireAgente(req) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return false;
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userData?.user?.email) return false;
-  const { data: agente } = await supabase
-    .from("agentes").select("id").eq("email", userData.user.email).maybeSingle();
-  return !!agente;
-}
 
 function normMesIdx(s) {
   if (!s) return null;
@@ -93,19 +78,7 @@ function normalizarTomadores(rows2026, rows2025) {
   });
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "GET") return res.status(405).json({ error: "Método no permitido" });
-  if (!(await requireAgente(req))) return res.status(401).json({ error: "No autorizado" });
-
-  res.setHeader("Cache-Control", "no-store");
-
-  let client;
-  try {
-    client = sheetsClient();
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-
+export async function obtenerPrimas(client) {
   const [r2026, r2025] = await Promise.allSettled([
     fetchSheetValues(client, FILE_2026, TAB_2026),
     fetchSheetValues(client, FILE_2025, TAB_2025),
@@ -117,7 +90,7 @@ export default async function handler(req, res) {
   unificarRamo(rows2026, rows2025);
   normalizarTomadores(rows2026, rows2025);
 
-  res.status(200).json({
+  return {
     generatedAt: new Date().toISOString(),
     rows2026,
     rows2025,
@@ -125,5 +98,5 @@ export default async function handler(req, res) {
       base2026: r2026.status === "rejected" ? String(r2026.reason?.message || r2026.reason) : null,
       base2025: r2025.status === "rejected" ? String(r2025.reason?.message || r2025.reason) : null,
     },
-  });
+  };
 }

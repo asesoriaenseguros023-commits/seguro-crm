@@ -241,7 +241,7 @@ export default function OficinaSoatPage() {
     let cancelado = false;
     async function cargarDatos() {
       try {
-        const res = await fetch("/api/oficina-soat-data", { headers: await authHeaders() });
+        const res = await fetch("/api/sheets-dashboards?tipo=oficina-soat", { headers: await authHeaders() });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json.error || `Error ${res.status} consultando Google Sheets`);
         if (cancelado) return;
