@@ -19,6 +19,7 @@ import RenovacionesPage from "./pages/Renovaciones.jsx";
 import SoatPage from "./pages/SOAT.jsx";
 import PulsoPrimasPage from "./pages/PulsoPrimas.jsx";
 import CertificadosEscolaresPage from "./pages/CertificadosEscolares.jsx";
+import OficinaSoatPage from "./pages/OficinaSoat.jsx";
 import RamosPage from "./pages/Ramos.jsx";
 import AseguradorasPage from "./pages/Aseguradoras.jsx";
 import ConfiguracionPage from "./pages/Configuracion.jsx";
@@ -731,6 +732,8 @@ export default function App() {
     if (seccion === "primas") return <PulsoPrimasPage />;
 
     if (seccion === "certificados") return <CertificadosEscolaresPage />;
+
+    if (seccion === "oficina-soat") return <OficinaSoatPage />;
 
     if (seccion === "arriendos") return esAdmin(userRol) ? <ArriendosPage /> : null;
 

@@ -95,6 +95,7 @@ export const SECCIONES = [
   { id: "soat",         label: "Seguimiento SOAT",      icon: "shield",   adminOnly: false },
   { id: "primas",       label: "Pulso de Primas",       icon: "chart",    adminOnly: false },
   { id: "certificados", label: "Certificados Escolares", icon: "document", adminOnly: false },
+  { id: "oficina-soat", label: "Oficina SOAT",          icon: "tag",      adminOnly: false },
   { id: "arriendos",    label: "Arriendos",             icon: "home",     adminOnly: true },
   { id: "config",       label: "Configuraciones",       icon: "settings", adminOnly: true },
 ];
