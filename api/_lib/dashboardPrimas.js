@@ -90,6 +90,15 @@ const TOMADOR_ALIAS = {
   // "FORESTAL CIMITARRA SA" en Base 2026. Confirmado contra las 7 filas
   // reales de 2025 antes de aplicar el alias.
   "forestar cimitarra": "FORESTAL CIMITARRA SA",
+  // Revision de pares de nombres 2026-09-30 (el usuario confirmo estos 3, y
+  // descarto el resto de candidatos por ser personas/entidades distintas —
+  // ver [[project-pulso-primas]]): "NIDIA"/"NIDYA" y "MELISA"/"MELISSA" son
+  // errores de digitacion en 2025, y la Parroquia difiere solo por la tilde
+  // en la Ñ (2025 SI la trae, el OCR de 2026 no). Canonico = como lo escribe
+  // el pipeline de 2026 en los 3 casos.
+  "torres lozano nidia": "TORRES LOZANO NIDYA SOFIA",
+  "parroquia nuestra señora de los dolores": "PARROQUIA NUESTRA SENORA DE LOS DOLORES",
+  "monica melisa castellanos": "CASTELLANOS FLORIAN MONICA MELISSA",
 };
 
 function normalizarTomadores(rows2026, rows2025) {
