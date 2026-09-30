@@ -87,26 +87,19 @@ export const S = {
 };
 
 // ─── NAVEGACIÓN (secciones del inicio y sub-pestañas) ────────────────────────
+// "CRM Seguros" (Dashboard/Clientes/Leads/Cotizaciones/Pólizas/Renovaciones)
+// se eliminó del código el 2026-09-30 a pedido explícito del usuario — venía
+// desactivado desde el 2026-09-25 y decidió no reactivarlo nunca, tras
+// encontrar un bug real de datos en la importación de pólizas (Renovaciones).
+// Las tablas de Supabase (clientes, interesados, cotizaciones, polizas) NO
+// se tocaron — solo se quitó el código del frontend. Ver [[project-seguro-crm]].
 export const SECCIONES = [
-  // Desactivado a pedido del usuario (2026-09-25) — código, páginas y
-  // consultas a Supabase quedan intactos; para reactivar, basta con quitar
-  // `activo: false` (o cambiarlo a true) de esta línea.
-  { id: "crm",          label: "CRM Seguros",           icon: "users",    adminOnly: false, activo: false },
   { id: "soat",         label: "Seguimiento SOAT",      icon: "shield",   adminOnly: false },
   { id: "primas",       label: "Pulso de Primas",       icon: "chart",    adminOnly: false },
   { id: "certificados", label: "Certificados Escolares", icon: "document", adminOnly: false },
   { id: "oficina-soat", label: "Oficina SOAT",          icon: "tag",      adminOnly: false },
   { id: "arriendos",    label: "Arriendos",             icon: "home",     adminOnly: true },
   { id: "config",       label: "Configuraciones",       icon: "settings", adminOnly: true },
-];
-
-export const SUBTABS_CRM = [
-  { id: "dashboard",    label: "Dashboard" },
-  { id: "clientes",     label: "Clientes" },
-  { id: "interesados",  label: "Leads" },
-  { id: "cotizaciones", label: "Cotizaciones" },
-  { id: "polizas",      label: "Pólizas" },
-  { id: "renovaciones", label: "Renovaciones" },
 ];
 
 export const SUBTABS_CONFIG = [
@@ -140,7 +133,3 @@ export const MOTIVOS_SOAT = [
 export const MOTIVOS_ILOCALIZABLE = ["No contestó / Buzón"];
 
 export const ACCIONES_SOAT = ["Volver a llamar", "Escribir por WhatsApp"];
-
-// ─── COTIZACIONES ─────────────────────────────────────────────────────────────
-export const ESTADOS_COT = ["Corrección SARLAFT", "Corrección Contrato", "Cotización Completada"];
-export const ACCIONES_COT = ["En Curso", "Cliente Rechaza", "Póliza Emitida"];

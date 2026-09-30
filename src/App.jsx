@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { S, BLUE, ROL_AGENTE, SECCIONES, SUBTABS_CRM, SUBTABS_CONFIG } from "./constants.js";
-import { mapInteresado, mapCotizacion, mapPoliza, esAdmin, today } from "./helpers.js";
+import { S, BLUE, ROL_AGENTE, SECCIONES, SUBTABS_CONFIG } from "./constants.js";
+import { esAdmin } from "./helpers.js";
 import { FontLoader, LoadingScreen } from "./components/Modal.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import SoftphoneWidget from "./components/SoftphoneWidget.jsx";
@@ -10,12 +10,6 @@ import UpdateBanner from "./components/UpdateBanner.jsx";
 import { useAppVersion } from "./hooks/useAppVersion.js";
 import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import ClientesPage from "./pages/Clients.jsx";
-import InteresadosPage from "./pages/Leads.jsx";
-import CotizacionesPage from "./pages/Cotizaciones.jsx";
-import PolizasPage from "./pages/Polizas.jsx";
-import RenovacionesPage from "./pages/Renovaciones.jsx";
 import SoatPage from "./pages/SOAT.jsx";
 import PulsoPrimasPage from "./pages/PulsoPrimas.jsx";
 import CertificadosEscolaresPage from "./pages/CertificadosEscolares.jsx";
@@ -133,12 +127,10 @@ const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [seccion, setSeccion] = useState("inicio");
-  const [crmTab, setCrmTab] = useState("dashboard");
   const [configTab, setConfigTab] = useState("ramos");
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState("");
   const [userRol, setUserRol] = useState(ROL_AGENTE);
-  const [agenteActualId, setAgenteActualId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const softphone = useSoftphone();
@@ -153,10 +145,6 @@ export default function App() {
   const [ramos, setRamos] = useState([]);
   const [documentosCatalogo, setDocumentosCatalogo] = useState([]);
   const [aseguradoras, setAseguradoras] = useState([]);
-  const [clientes, setClientes] = useState([]);
-  const [interesados, setInteresados] = useState([]);
-  const [cotizaciones, setCotizaciones] = useState([]);
-  const [polizas, setPolizas] = useState([]);
 
   // ─── ConfirmDialog state ──────────────────────────────────────────────────
   const [confirmState, setConfirmState] = useState({ open: false, message: "", detail: "", resolve: null });
@@ -178,19 +166,16 @@ export default function App() {
       if (data) {
         setUserName(data.nombre);
         setUserRol(data.rol || ROL_AGENTE);
-        setAgenteActualId(data.id);
       } else {
         // Fallback: si no encuentra el email en agentes, asumir el rol de
         // MENOS privilegio (Agente), no Admin — un correo autenticado que
         // no está en la tabla no debería heredar acceso total por defecto.
         setUserName("Usuario");
         setUserRol(ROL_AGENTE);
-        setAgenteActualId(null);
       }
     } catch {
       setUserName("Usuario");
       setUserRol(ROL_AGENTE);
-      setAgenteActualId(null);
     }
   };
 
@@ -204,13 +189,9 @@ export default function App() {
     if (!loggedIn) return;
     const cargar = async () => {
       setLoading(true);
-      const [{ data: rms }, { data: asgs }, { data: cls }, { data: ints }, { data: cots }, { data: pols }, { data: agts }, { data: docs }] = await Promise.all([
+      const [{ data: rms }, { data: asgs }, { data: agts }, { data: docs }] = await Promise.all([
         supabase.from("ramos").select("*").order("nombre"),
         supabase.from("aseguradoras").select("*").order("nombre"),
-        supabase.from("clientes").select("*").order("nombre"),
-        supabase.from("interesados").select("*").order("created_at", { ascending: false }),
-        supabase.from("cotizaciones").select("*").order("created_at", { ascending: false }),
-        supabase.from("polizas").select("*").order("created_at", { ascending: false }),
         supabase.from("agentes").select("*").order("nombre"),
         supabase.from("ramos_documentos").select("*").order("nombre"),
       ]);
@@ -218,291 +199,15 @@ export default function App() {
       if (asgs) setAseguradoras(asgs);
       if (agts) setAgentes(agts);
       if (docs) setDocumentosCatalogo(docs);
-      if (cls) setClientes(cls.map((c) => ({ ...c, tipoDocumento: c.tipo_documento, tipoPersona: c.tipo_persona, nombreContacto: c.nombre_contacto, telefonoContacto: c.telefono_contacto })));
-      if (ints) setInteresados(ints.map(mapInteresado));
-      if (cots) setCotizaciones(cots.map(mapCotizacion));
-      if (pols) setPolizas(pols.map((p) => ({ ...mapPoliza(p), ramo: p.ramo, clienteNombre: p.cliente_nombre, clienteTelefono: p.cliente_telefono })));
-
-      // Auto-crear cotizaciones para leads con envio_oficina=true que no tengan cotización
-      if (ints && cots) {
-        const leadsConEnvio = ints.filter((i) => i.envio_oficina);
-        const leadIdsConCot = new Set(cots.map((c) => c.lead_id).filter(Boolean));
-        const leadsHuerfanos = leadsConEnvio.filter((i) => !leadIdsConCot.has(i.id));
-        if (leadsHuerfanos.length > 0) {
-          const nuevasCots = leadsHuerfanos.map((i) => {
-            const cliente = cls?.find((c) => c.id === i.cliente_id);
-            return {
-              lead_id: i.id, cliente_nombre: i.nombre,
-              cliente_telefono: cliente?.celular || cliente?.telefono || "",
-              ramo: i.tipo_seguro, estado: "Pendiente", accion: "En Curso",
-              fecha_cotizacion: today(),
-            };
-          });
-          const { data: creadas } = await supabase.from("cotizaciones").insert(nuevasCots).select();
-          if (creadas) setCotizaciones((prev) => [...creadas.map(mapCotizacion), ...prev]);
-        }
-      }
-
       setLoading(false);
     };
     cargar();
-
-    // ─── REALTIME ─────────────────────────────────────────────────────────────
-    const channel = supabase
-      .channel("db-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "clientes" }, (payload) => {
-        if (payload.eventType === "INSERT")
-          setClientes((prev) =>
-            prev.some((x) => x.id === payload.new.id) ? prev : [{ ...payload.new, tipoPersona: payload.new.tipo_persona, nombreContacto: payload.new.nombre_contacto, telefonoContacto: payload.new.telefono_contacto, tipoDocumento: payload.new.tipo_documento }, ...prev]
-          );
-        if (payload.eventType === "UPDATE")
-          setClientes((prev) =>
-            prev.map((x) => x.id === payload.new.id ? { ...x, ...payload.new, tipoPersona: payload.new.tipo_persona, nombreContacto: payload.new.nombre_contacto, telefonoContacto: payload.new.telefono_contacto } : x)
-          );
-        if (payload.eventType === "DELETE")
-          setClientes((prev) => prev.filter((x) => x.id !== payload.old.id));
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "interesados" }, (payload) => {
-        if (payload.eventType === "INSERT")
-          setInteresados((prev) => prev.some((x) => x.id === payload.new.id) ? prev : [mapInteresado(payload.new), ...prev]);
-        if (payload.eventType === "UPDATE")
-          setInteresados((prev) => prev.map((x) => x.id === payload.new.id ? mapInteresado(payload.new) : x));
-        if (payload.eventType === "DELETE")
-          setInteresados((prev) => prev.filter((x) => x.id !== payload.old.id));
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "cotizaciones" }, (payload) => {
-        if (payload.eventType === "INSERT")
-          setCotizaciones((prev) => prev.some((x) => x.id === payload.new.id) ? prev : [mapCotizacion(payload.new), ...prev]);
-        if (payload.eventType === "UPDATE")
-          setCotizaciones((prev) => prev.map((x) => x.id === payload.new.id ? mapCotizacion(payload.new) : x));
-        if (payload.eventType === "DELETE")
-          setCotizaciones((prev) => prev.filter((x) => x.id !== payload.old.id));
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "polizas" }, (payload) => {
-        if (payload.eventType === "INSERT")
-          setPolizas((prev) => prev.some((x) => x.id === payload.new.id) ? prev : [{ ...mapPoliza(payload.new), clienteNombre: payload.new.cliente_nombre, clienteTelefono: payload.new.cliente_telefono }, ...prev]);
-        if (payload.eventType === "UPDATE")
-          setPolizas((prev) => prev.map((x) => x.id === payload.new.id ? { ...mapPoliza(payload.new), clienteNombre: payload.new.cliente_nombre, clienteTelefono: payload.new.cliente_telefono } : x));
-        if (payload.eventType === "DELETE")
-          setPolizas((prev) => prev.filter((x) => x.id !== payload.old.id));
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
   }, [loggedIn]);
 
   const handleLogin = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) await resolverRol(session.user.email);
     setLoggedIn(true);
-  };
-
-  // ─── CRUD Clientes ────────────────────────────────────────────────────────
-  const addCliente = async (f) => {
-    const { data, error } = await supabase.from("clientes").insert([{
-      nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono,
-      tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto,
-      documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion,
-      notas: f.notas,
-    }]).select().single();
-    if (error) return { error: error.message };
-    setClientes((prev) => [...prev, { ...data, tipoPersona: data.tipo_persona, nombreContacto: data.nombre_contacto, telefonoContacto: data.telefono_contacto, tipoDocumento: data.tipo_documento }]);
-    return { data };
-  };
-
-  // Antes no revisaba el error de Supabase: el estado local se actualizaba
-  // igual aunque el update real hubiera fallado, mostrando un cambio que
-  // nunca quedó guardado en la base.
-  const editCliente = async (f) => {
-    const { error } = await supabase.from("clientes").update({
-      nombre: f.nombre, email: f.email, celular: f.celular || f.telefono, telefono: f.telefono,
-      tipo_persona: f.tipoPersona, nombre_contacto: f.nombreContacto, telefono_contacto: f.telefonoContacto,
-      documento: f.documento, tipo_documento: f.tipoDocumento, ciudad: f.ciudad, direccion: f.direccion,
-      notas: f.notas,
-    }).eq("id", f.id);
-    if (error) return { error: error.message };
-    setClientes((prev) => prev.map((x) => x.id === f.id ? { ...x, ...f, tipoPersona: f.tipoPersona, nombreContacto: f.nombreContacto, telefonoContacto: f.telefonoContacto, tipoDocumento: f.tipoDocumento } : x));
-    return {};
-  };
-
-  const deleteCliente = async (id) => {
-    await supabase.from("clientes").delete().eq("id", id);
-    setClientes((prev) => prev.filter((x) => x.id !== id));
-  };
-
-  // ─── CRUD Interesados ─────────────────────────────────────────────────────
-  const addInteresado = async (f) => {
-    const clienteNombre = clientes.find((c) => c.id === f.clienteId)?.nombre || "";
-    const { data, error } = await supabase.from("interesados").insert([{
-      cliente_id: f.clienteId, nombre: clienteNombre,
-      tipo_seguro: f.tipoSeguro, documentos_checklist: f.documentosChecklist || {},
-      envio_oficina: f.envioOficina || false, notas: f.notas || "",
-      estado: f.estado || "Lead", fecha_registro: f.fechaRegistro,
-    }]).select().single();
-    if (error) { console.error("addInteresado error:", error); return; }
-    if (data) setInteresados((prev) => [mapInteresado(data), ...prev]);
-  };
-
-  const editInteresado = async (f) => {
-    const clienteNombre = clientes.find((c) => c.id === f.clienteId)?.nombre || "";
-    const cliente = clientes.find((c) => c.id === f.clienteId);
-    const { error } = await supabase.from("interesados").update({
-      cliente_id: f.clienteId, nombre: clienteNombre,
-      tipo_seguro: f.tipoSeguro, documentos_checklist: f.documentosChecklist || {},
-      envio_oficina: f.envioOficina || false, notas: f.notas || "",
-    }).eq("id", f.id);
-    if (error) { console.error("editInteresado error:", error); return; }
-    if (f.envioOficina) {
-      try {
-        const { data: existing } = await supabase.from("cotizaciones").select("*").eq("lead_id", f.id).limit(1);
-        if (!existing || existing.length === 0) {
-          const { data: cot, error: cotError } = await supabase.from("cotizaciones").insert([{
-            lead_id: f.id, cliente_nombre: clienteNombre,
-            cliente_telefono: cliente?.celular || cliente?.telefono || "",
-            ramo: f.tipoSeguro, estado: "Pendiente", accion: "En Curso",
-            fecha_cotizacion: today(),
-          }]).select().single();
-          if (cotError) console.error("Error creando cotización:", cotError);
-          if (cot) setCotizaciones((prev) => [mapCotizacion(cot), ...prev]);
-        } else {
-          setCotizaciones((prev) => prev.some((c) => c.id === existing[0].id) ? prev : [mapCotizacion(existing[0]), ...prev]);
-        }
-      } catch (e) { console.error("Excepción cotización:", e); }
-    }
-    setInteresados((prev) => prev.map((x) => x.id === f.id ? { ...x, clienteId: f.clienteId, nombre: clienteNombre, tipoSeguro: f.tipoSeguro, documentosChecklist: f.documentosChecklist, envioOficina: f.envioOficina, notas: f.notas } : x));
-  };
-
-  const deleteInteresado = async (id) => {
-    await supabase.from("interesados").delete().eq("id", id);
-    setInteresados((prev) => prev.filter((x) => x.id !== id));
-  };
-
-  // ─── CRUD Cotizaciones ────────────────────────────────────────────────────
-  const addCotizacion = async (f) => {
-    const { data } = await supabase.from("cotizaciones").insert([{
-      interesado_id: f.interesadoId, lead_id: f.leadId, agente_id: f.agenteId,
-      cliente_nombre: f.clienteNombre, cliente_telefono: f.clienteTelefono,
-      ramo: f.ramo, aseguradora: f.aseguradora, suma_asegurada: f.sumaAsegurada,
-      prima: f.prima, iva: f.iva, gastos_expedicion: f.gastosExpedicion,
-      numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion,
-      notas: f.notas, estado: f.estado || "Pendiente", accion: f.accion || "En Curso",
-    }]).select().single();
-    if (data) setCotizaciones((prev) => [mapCotizacion(data), ...prev]);
-  };
-
-  const editCotizacion = async (f) => {
-    await supabase.from("cotizaciones").update({
-      ramo: f.ramo, aseguradora: f.aseguradora, suma_asegurada: f.sumaAsegurada,
-      prima: f.prima, iva: f.iva, gastos_expedicion: f.gastosExpedicion,
-      numero_poliza: f.numeroPoliza, fecha_cotizacion: f.fechaCotizacion,
-      notas: f.notas, estado: f.estado, accion: f.accion,
-      numero_poliza_emitida: f.numeroPolizaEmitida,
-      aseguradora_emitida: f.aseguradoraEmitida,
-      prima_emitida: f.primaEmitida, iva_emitida: f.ivaEmitida,
-      gastos_emitida: f.gastosEmitida, descuento_emitida: f.descuentoEmitida,
-      total_pago_emitida: f.totalPagoEmitida,
-    }).eq("id", f.id);
-    setCotizaciones((prev) => prev.map((x) => x.id === f.id ? { ...x, ...f } : x));
-
-    if (f.accion === "Póliza Emitida" && f.numeroPolizaEmitida) {
-      const yaExiste = polizas.some((p) => p.cotizacionId === f.id);
-      if (!yaExiste) {
-        const vigenciaInicio = today();
-        // Hora local, no toISOString() (UTC) — mismo motivo que today().
-        const vigenciaFin = (() => {
-          const d = new Date(); d.setFullYear(d.getFullYear() + 1);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        })();
-        const { data: pol, error } = await supabase.from("polizas").insert([{
-          cotizacion_id: f.id, cliente_nombre: f.clienteNombre, cliente_telefono: f.clienteTelefono,
-          numero: f.numeroPolizaEmitida, ramo: f.ramo, aseguradora: f.aseguradoraEmitida,
-          prima: f.primaEmitida, iva: f.ivaEmitida, gastos_expedicion: f.gastosEmitida,
-          descuento: f.descuentoEmitida, total_pago: f.totalPagoEmitida, fecha_emision: today(),
-          vigencia_inicio: vigenciaInicio, vigencia_fin: vigenciaFin, estado: "Activa",
-        }]).select().single();
-        if (error) console.error("Error creando póliza:", error);
-        if (pol) setPolizas((prev) => [{ ...mapPoliza(pol), clienteNombre: pol.cliente_nombre, clienteTelefono: pol.cliente_telefono }, ...prev]);
-      }
-    }
-  };
-
-  // Si la cotización tiene una póliza ligada (accion "Póliza Emitida"), hay
-  // que borrar esa póliza primero — cotizaciones.id tiene una foreign key
-  // desde polizas.cotizacion_id sin cascade, así que borrar la cotización
-  // sola siempre fallaba (409) y el error quedaba silenciado, dando la
-  // impresión de que sí borró cuando en realidad seguía intacta en la base.
-  const deleteCotizacion = async (id) => {
-    const polizaLigada = polizas.find((p) => p.cotizacionId === id);
-    if (polizaLigada) {
-      const { error: errPol } = await supabase.from("polizas").delete().eq("id", polizaLigada.id);
-      if (errPol) return { error: errPol.message };
-      setPolizas((prev) => prev.filter((p) => p.id !== polizaLigada.id));
-    }
-    // Pólizas cuya renovación generó ESTA cotización (Renovaciones ->
-    // "Cliente Cotiza"): esas pólizas son reales, no se borran — solo se
-    // suelta la referencia para poder borrar la cotización sin violar la
-    // foreign key polizas_cotizacion_renovacion_id_fkey.
-    const polizasRenovacion = polizas.filter((p) => p.cotizacionRenovacionId === id);
-    if (polizasRenovacion.length > 0) {
-      const { error: errRen } = await supabase.from("polizas")
-        .update({ cotizacion_renovacion_id: null }).in("id", polizasRenovacion.map((p) => p.id));
-      if (errRen) return { error: errRen.message };
-      setPolizas((prev) => prev.map((p) =>
-        polizasRenovacion.some((pr) => pr.id === p.id) ? { ...p, cotizacionRenovacionId: null } : p));
-    }
-    const { error } = await supabase.from("cotizaciones").delete().eq("id", id);
-    if (error) return { error: error.message };
-    setCotizaciones((prev) => prev.filter((x) => x.id !== id));
-    return {};
-  };
-
-  // ─── Decisión de renovación ───────────────────────────────────────────────
-  // "Cliente Cotiza" crea una cotización nueva a partir de la póliza que
-  // vence, y la liga (polizas.cotizacion_renovacion_id) para no duplicarla
-  // si se vuelve a seleccionar la misma decisión — en ese caso solo avisa
-  // que ya existe (yaExistia: true), sin dejar de guardar el cambio.
-  const marcarDecisionRenovacion = async (poliza, decision) => {
-    if (decision !== "Cliente Cotiza" || poliza.cotizacionRenovacionId) {
-      const { error } = await supabase.from("polizas").update({ decision_renovacion: decision }).eq("id", poliza.id);
-      if (error) return { error: error.message };
-      setPolizas((prev) => prev.map((p) => p.id === poliza.id ? { ...p, decisionRenovacion: decision } : p));
-      return decision === "Cliente Cotiza" ? { yaExistia: true } : {};
-    }
-    const { data: cot, error: errCot } = await supabase.from("cotizaciones").insert([{
-      cliente_nombre: poliza.clienteNombre, cliente_telefono: poliza.clienteTelefono,
-      agente_id: poliza.agenteId, ramo: poliza.ramo, aseguradora: poliza.aseguradora,
-      fecha_cotizacion: today(), estado: "Pendiente", accion: "En Curso",
-      notas: `Renovación de póliza ${poliza.numero || ""}`.trim(),
-    }]).select().single();
-    if (errCot) return { error: errCot.message };
-    const { error: errPol } = await supabase.from("polizas")
-      .update({ decision_renovacion: decision, cotizacion_renovacion_id: cot.id }).eq("id", poliza.id);
-    if (errPol) return { error: errPol.message };
-    setCotizaciones((prev) => [mapCotizacion(cot), ...prev]);
-    setPolizas((prev) => prev.map((p) => p.id === poliza.id ? { ...p, decisionRenovacion: decision, cotizacionRenovacionId: cot.id } : p));
-    return { creada: true };
-  };
-
-  // ─── Emitir póliza ────────────────────────────────────────────────────────
-  const emitirPoliza = async ({ cotizacion, interesado, fechaEmision, vigenciaInicio, vigenciaFin, ramoId, notas }) => {
-    const ramo = ramos.find((r) => r.id === ramoId);
-    const cliente = clientes.find((c) => c.id === interesado?.clienteId || c.id === interesado?.cliente_id);
-    const telefono = cliente?.celular || cliente?.telefono || interesado?.telefono || "";
-    const { data } = await supabase.from("polizas").insert([{
-      cotizacion_id: cotizacion.id, cliente_id: interesado?.id,
-      cliente_nombre: interesado?.nombre, cliente_telefono: telefono,
-      agente_id: cotizacion.agenteId, numero: cotizacion.numeroPoliza,
-      ramo: ramo?.nombre || cotizacion.ramo, ramo_id: ramoId,
-      aseguradora: cotizacion.aseguradora, suma_asegurada: cotizacion.sumaAsegurada,
-      prima: cotizacion.prima, iva: cotizacion.iva, gastos_expedicion: cotizacion.gastosExpedicion,
-      fecha_emision: fechaEmision, vigencia_inicio: vigenciaInicio, vigencia_fin: vigenciaFin,
-      estado: "Activa", notas,
-    }]).select().single();
-    if (data) {
-      setPolizas((prev) => [{ ...mapPoliza(data), ramo: data.ramo, clienteNombre: data.cliente_nombre, clienteTelefono: data.cliente_telefono }, ...prev]);
-      await supabase.from("cotizaciones").update({ estado: "Emitida" }).eq("id", cotizacion.id);
-      setCotizaciones((prev) => prev.map((c) => c.id === cotizacion.id ? { ...c, estado: "Emitida" } : c));
-    }
   };
 
   // ─── CRUD Agentes ─────────────────────────────────────────────────────────
@@ -593,38 +298,11 @@ export default function App() {
     setAseguradoras((prev) => prev.filter((x) => x.id !== id));
   };
 
-  const deletePoliza = async (id) => {
-    await supabase.from("polizas").delete().eq("id", id);
-    setPolizas((prev) => prev.filter((x) => x.id !== id));
-  };
-
-  const importPolizas = async (rows) => {
-    const inserts = rows.map((r) => ({
-      numero: r.numero, cliente_nombre: r.clienteNombre, cliente_telefono: r.clienteTelefono,
-      ramo: r.ramo, aseguradora: r.aseguradora, prima: r.prima, iva: r.iva,
-      gastos_expedicion: r.gastosExpedicion, total_pago: r.totalPago,
-      fecha_emision: r.fechaEmision, vigencia_inicio: r.vigenciaInicio,
-      vigencia_fin: r.vigenciaFin, estado: "Activa",
-    }));
-    const BATCH = 50;
-    let imported = [];
-    for (let i = 0; i < inserts.length; i += BATCH) {
-      const { data, error } = await supabase.from("polizas").insert(inserts.slice(i, i + BATCH)).select();
-      if (error) throw error;
-      if (data) imported = imported.concat(data);
-    }
-    setPolizas((prev) => [
-      ...imported.map((p) => ({ ...mapPoliza(p), ramo: p.ramo, clienteNombre: p.cliente_nombre, clienteTelefono: p.cliente_telefono })),
-      ...prev,
-    ]);
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setLoggedIn(false);
-    setAgentes([]); setRamos([]); setClientes([]);
-    setInteresados([]); setCotizaciones([]); setPolizas([]);
-    setUserRol(ROL_AGENTE); setAgenteActualId(null);
+    setAgentes([]); setRamos([]);
+    setUserRol(ROL_AGENTE);
   };
 
   if (!loggedIn) return <LoginPage onLogin={handleLogin} />;
@@ -635,53 +313,6 @@ export default function App() {
     if (s?.activo === false) return;
     if (s?.adminOnly && !esAdmin(userRol)) return;
     setSeccion(id);
-  };
-
-  const renderCrmTab = () => {
-    switch (crmTab) {
-      case "dashboard":
-        return <Dashboard interesados={interesados} cotizaciones={cotizaciones} polizas={polizas} userName={userName} onNav={setCrmTab} />;
-      case "clientes":
-        return <ClientesPage clientes={clientes} onAdd={addCliente} onEdit={editCliente} onDelete={deleteCliente} userRol={userRol} />;
-      case "interesados":
-        return (
-          <InteresadosPage
-            interesados={interesados} cotizaciones={cotizaciones} polizas={polizas}
-            agentes={agentes} ramos={ramos.filter((r) => r.activo !== false)} clientes={clientes}
-            onAddInteresado={addInteresado} onEditInteresado={editInteresado} onDeleteInteresado={deleteInteresado}
-            onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onEmitirPoliza={emitirPoliza}
-            userRol={userRol} agenteActualId={agenteActualId}
-          />
-        );
-      case "cotizaciones":
-        return (
-          <CotizacionesPage
-            cotizaciones={cotizaciones} interesados={interesados} polizas={polizas}
-            agentes={agentes} ramos={ramos.filter((r) => r.activo !== false)} aseguradoras={aseguradoras}
-            onAddCotizacion={addCotizacion} onEditCotizacion={editCotizacion} onDeleteCotizacion={deleteCotizacion}
-            onEmitirPoliza={emitirPoliza} userRol={userRol} agenteActualId={agenteActualId}
-            showConfirm={showConfirm}
-          />
-        );
-      case "polizas":
-        return (
-          <PolizasPage
-            polizas={polizas} interesados={interesados} ramos={ramos} aseguradoras={aseguradoras}
-            onDelete={deletePoliza} userRol={userRol} agenteActualId={agenteActualId}
-            showConfirm={showConfirm}
-          />
-        );
-      case "renovaciones":
-        return (
-          <RenovacionesPage
-            polizas={polizas} userRol={userRol} agenteActualId={agenteActualId}
-            onImportPolizas={importPolizas}
-            onDecisionRenovacion={marcarDecisionRenovacion}
-          />
-        );
-      default:
-        return null;
-    }
   };
 
   const renderConfigTab = () => {
@@ -699,7 +330,7 @@ export default function App() {
       case "comerciales":
         return <ComercialPage comerciales={agentes.filter((a) => a.rol === "Comercial")} onAdd={addComercial} onDelete={deleteComercial} showConfirm={showConfirm} />;
       case "configuracion":
-        return <ConfiguracionPage agentes={agentes} polizas={polizas} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} />;
+        return <ConfiguracionPage agentes={agentes} onAdd={addAgente} onEdit={editAgente} onDelete={deleteAgente} />;
       default:
         return null;
     }
@@ -724,25 +355,6 @@ export default function App() {
               </div>
             ))}
           </div>
-        </div>
-      );
-    }
-
-    // "CRM Seguros" desactivado a pedido del usuario (2026-09-25) — se deja
-    // todo el código (páginas, subtabs, queries) intacto para reactivarlo
-    // más adelante con solo quitar `activo: false` en SECCIONES. Este guard
-    // es defensivo (la sección ya no aparece ni en el sidebar ni en Inicio).
-    const seccionCrm = SECCIONES.find((s) => s.id === "crm");
-    if (seccion === "crm") {
-      if (seccionCrm?.activo === false) return null;
-      return (
-        <div>
-          <div style={S.subTabBar}>
-            {SUBTABS_CRM.map((t) => (
-              <button key={t.id} style={S.subTabBtn(crmTab === t.id)} onClick={() => setCrmTab(t.id)}>{t.label}</button>
-            ))}
-          </div>
-          {renderCrmTab()}
         </div>
       );
     }
@@ -775,11 +387,7 @@ export default function App() {
   };
 
   const seccionLabel = SECCIONES.find((s) => s.id === seccion)?.label || "Inicio";
-  const subTabLabel = seccion === "crm"
-    ? SUBTABS_CRM.find((t) => t.id === crmTab)?.label
-    : seccion === "config"
-      ? SUBTABS_CONFIG.find((t) => t.id === configTab)?.label
-      : null;
+  const subTabLabel = seccion === "config" ? SUBTABS_CONFIG.find((t) => t.id === configTab)?.label : null;
   const topbarTitle = subTabLabel ? `${seccionLabel} · ${subTabLabel}` : seccionLabel;
 
   return (

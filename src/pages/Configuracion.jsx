@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { S, BLUE, ROL_ADMIN, ROL_AGENTE } from "../constants.js";
-import { fmt } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
-const ConfiguracionPage = ({ agentes, polizas, onAdd, onEdit, onDelete }) => {
+// La tarjeta ya no muestra "Pólizas activas"/"Prima" por agente — dependía
+// de la tabla `polizas`, que era parte del módulo "CRM Seguros" eliminado
+// del frontend el 2026-09-30 (ver constants.js).
+const ConfiguracionPage = ({ agentes, onAdd, onEdit, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
@@ -33,8 +35,6 @@ const ConfiguracionPage = ({ agentes, polizas, onAdd, onEdit, onDelete }) => {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
         {agentes.map((a) => {
-          const nPolizas = polizas.filter((p) => p.agenteId === a.id && p.estado === "Activa").length;
-          const prima = polizas.filter((p) => p.agenteId === a.id && p.estado === "Activa").reduce((s, p) => s + Number(p.prima || 0), 0);
           const initials = a.nombre.split(" ").slice(0, 2).map((w) => w[0]).join("");
           const rolColor = a.rol === ROL_ADMIN ? "#7c3aed" : BLUE.primary;
           return (
@@ -59,18 +59,8 @@ const ConfiguracionPage = ({ agentes, polizas, onAdd, onEdit, onDelete }) => {
                   </button>
                 </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={S.chip(rolColor)}>{a.rol}</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, borderTop: `1px solid ${BLUE.border}`, paddingTop: 12 }}>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{nPolizas}</div>
-                  <div style={{ fontSize: 11, color: "#aaa" }}>Pólizas Activas</div>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{fmt(prima)}</div>
-                  <div style={{ fontSize: 11, color: "#aaa" }}>Prima</div>
-                </div>
               </div>
             </div>
           );
