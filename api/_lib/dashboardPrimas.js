@@ -30,6 +30,7 @@ function rowsFromMatrix(matrix) {
   return matrix.slice(1).map((row) => ({
     poliza: String(get(row, ["poliza"]) || "").trim(),
     tomador: String(get(row, ["tomador"]) || "").trim(),
+    fecha: String(get(row, ["fecha"]) || "").trim(),
     prima: toNumber(get(row, ["prima"])),
     mesIdx: normMesIdx(get(row, ["mes"])),
     iva: toNumber(get(row, ["iva"])),
@@ -65,6 +66,11 @@ const TOMADOR_ALIAS = {
   "institucion educativa departamental san juan": "INSTITUCION EDUCATIVA DEPARTAMENTAL SAN JUAN BOSCO",
   "neidy forero bejarano": "NEYDY DANELLY FORERO BEJARANO",
   "fredy forero": "FREDY FRANCISCO FORERO BEJARANO",
+  // Pedido explícito 2026-09-30: "FORESTAR CIMITARRA" (typo, así aparece
+  // SIEMPRE en Base 2025 — Mundial, Previsora y HDI) es la misma empresa que
+  // "FORESTAL CIMITARRA SA" en Base 2026. Confirmado contra las 7 filas
+  // reales de 2025 antes de aplicar el alias.
+  "forestar cimitarra": "FORESTAL CIMITARRA SA",
 };
 
 function normalizarTomadores(rows2026, rows2025) {

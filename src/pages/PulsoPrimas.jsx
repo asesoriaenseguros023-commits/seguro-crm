@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { S, BLUE } from "../constants.js";
 import { fmt, authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
+import Modal from "../components/Modal.jsx";
 
 // Módulo nativo del CRM que replica el artefacto "Pulso de Primas" (mismas
 // hojas de origen — "Base 2026" y "Base 2025" — mismos fixes de datos).
@@ -147,6 +148,10 @@ function buildRenewalTable(rows2025, rows2026) {
     return {
       nombre: kFuzzy ? nombre2026[kFuzzy] : g.nombre, ramo: topKeyByValue(g.ramoPrima),
       prima2025: g.prima2025, prima2026, renovo, esNuevo: false, cruceAutomatico: !!kFuzzy,
+      // Claves normalizadas usadas en el cruce — permiten, al hacer click,
+      // volver a filtrar las filas crudas de cada año para este tomador sin
+      // reimplementar la lógica de match (exacto o difuso) de aquí arriba.
+      key2025: k, key2026: exact ? k : (kFuzzy || null),
     };
   });
 
@@ -154,7 +159,7 @@ function buildRenewalTable(rows2025, rows2026) {
   Object.keys(map2026).forEach((k) => {
     if (Object.prototype.hasOwnProperty.call(groups, k)) return;
     if (usados2026.has(k)) return;
-    list.push({ nombre: nombre2026[k], ramo: topKeyByValue(ramoPrima2026[k]), prima2025: 0, prima2026: map2026[k], renovo: true, esNuevo: true });
+    list.push({ nombre: nombre2026[k], ramo: topKeyByValue(ramoPrima2026[k]), prima2025: 0, prima2026: map2026[k], renovo: true, esNuevo: true, key2025: null, key2026: k });
   });
 
   list.sort((a, b) => {
@@ -471,6 +476,7 @@ export default function PulsoPrimasPage() {
 
   const [filterRamo, setFilterRamo] = useState("");
   const [filterCompania, setFilterCompania] = useState("");
+  const [detalleTomador, setDetalleTomador] = useState(null);
   const [ini2026, setIni2026] = useState(0);
   const [fin2026, setFin2026] = useState(mesEnCurso);
   const [ini2025, setIni2025] = useState(0);
@@ -561,6 +567,20 @@ export default function PulsoPrimasPage() {
   const renewedCount = renewalCohort2025.filter((t) => t.renovo).length;
   const atRiskPrima = renewalCohort2025.filter((t) => !t.renovo).reduce((a, t) => a + t.prima2025, 0);
   const escList = useMemo(() => buildEscolaresData(periodRaw2026, periodRaw2025), [periodRaw2026, periodRaw2025]);
+
+  // Registros individuales (uno por póliza) del tomador seleccionado en el
+  // modal de detalle — reusa las mismas claves normalizadas (key2025/
+  // key2026) que ya resolvió buildRenewalTable, para no reimplementar el
+  // cruce exacto/difuso aquí.
+  const registrosDetalle = useMemo(() => {
+    if (!detalleTomador) return [];
+    const r25 = detalleTomador.key2025 ? rows2025.filter((r) => normTomador(r.tomador) === detalleTomador.key2025) : [];
+    const r26 = detalleTomador.key2026 ? rows2026.filter((r) => normTomador(r.tomador) === detalleTomador.key2026) : [];
+    return [
+      ...r25.map((r) => ({ ...r, anio: 2025 })),
+      ...r26.map((r) => ({ ...r, anio: 2026 })),
+    ].sort((a, b) => a.anio - b.anio || (a.fecha || "").localeCompare(b.fecha || ""));
+  }, [detalleTomador, rows2025, rows2026]);
 
   const ramoOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.ramo || "(Sin dato)"), [rawRows2026, rawRows2025]);
   const compOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.compania || "(Sin dato)"), [rawRows2026, rawRows2025]);
@@ -702,7 +722,11 @@ export default function PulsoPrimasPage() {
             <div style={{ padding: 32, textAlign: "center", color: "#aaa" }}>Sin datos para los filtros elegidos.</div>
           ) : renewalList.map((t, i) => (
             <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr 1fr" }}>
-              <div style={{ fontWeight: 600 }}>
+              <div
+                style={{ fontWeight: 600, cursor: "pointer", color: BLUE.primary }}
+                onClick={() => setDetalleTomador(t)}
+                title="Ver detalle de pólizas"
+              >
                 {t.nombre}
                 {t.cruceAutomatico && <span title="Nombre distinto en cada año, cruzado automáticamente por coincidencia de palabras" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: COLOR_2025, cursor: "help" }}>🔗</span>}
               </div>
@@ -782,6 +806,32 @@ export default function PulsoPrimasPage() {
       <div style={{ textAlign: "center", color: "#9aa8c7", fontSize: 11.5, marginTop: 8 }}>
         Fuente: Google Sheets "Seguros 2026" (Base 2026) y "Seguros 2025" (Base 2025) · se actualiza sola cada 20 minutos mientras esta pantalla esté abierta
       </div>
+
+      {detalleTomador && (
+        <Modal title={detalleTomador.nombre} onClose={() => setDetalleTomador(null)} wide>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ ...S.tableHead, gridTemplateColumns: "0.6fr 1fr 1.3fr 1fr 1fr 1fr 1fr" }}>
+              <span>Año</span><span>Fecha</span><span>Póliza</span><span>Prima</span><span>Iva</span><span>Gastos</span><span>Total</span>
+            </div>
+            {registrosDetalle.length === 0 ? (
+              <div style={{ padding: 24, textAlign: "center", color: "#aaa", fontSize: 12.5 }}>Sin registros individuales para este tomador.</div>
+            ) : registrosDetalle.map((r, i) => (
+              <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "0.6fr 1fr 1.3fr 1fr 1fr 1fr 1fr" }}>
+                <span style={S.badge(r.anio === 2026 ? COLOR_2026 : COLOR_2025)}>{r.anio}</span>
+                <div>{r.fecha || "—"}</div>
+                <div style={{ fontSize: 12.5 }}>{r.poliza || "—"}</div>
+                <div>{fmt(r.prima)}</div>
+                <div>{fmt(r.iva)}</div>
+                <div>{fmt(r.gastos)}</div>
+                <div style={{ fontWeight: 600 }}>{fmt(r.total)}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>
+            {`Número de póliza 2025: ${[...new Set(registrosDetalle.filter((r) => r.anio === 2025).map((r) => r.poliza))].join(", ") || "—"} · Número de póliza 2026: ${[...new Set(registrosDetalle.filter((r) => r.anio === 2026).map((r) => r.poliza))].join(", ") || "—"}`}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
