@@ -11,7 +11,10 @@ import Icon from "../components/Icon.jsx";
 // mismo motivo que [[project-pulso-primas]].
 
 const REFETCH_MS = 20 * 60 * 1000;
-const COLOR_ACCENT = "#b8923c";
+// Pedido explícito 2026-09-30: este módulo es parte nativa del CRM, no un
+// artefacto embebido — usa el azul de marca del sistema (BLUE.primary),
+// igual que Arriendos/SOAT/Configuraciones, en vez de una paleta propia.
+const COLOR_ACCENT = BLUE.primary;
 const COLOR_OK = "#16a34a";
 const COLOR_WARN = "#dc2626";
 const COLOR_MUTED = "#6b87b0";

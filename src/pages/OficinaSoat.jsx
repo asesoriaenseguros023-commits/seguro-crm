@@ -11,8 +11,11 @@ import Icon from "../components/Icon.jsx";
 
 const REFETCH_MS = 20 * 60 * 1000;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const COLOR_VENTAS = "#1656c9";
-const COLOR_CLIENTES = "#5b8def";
+// Pedido explícito 2026-09-30: este módulo es parte nativa del CRM, no un
+// artefacto embebido — usa el azul de marca del sistema (BLUE.primary),
+// igual que Arriendos/SOAT/Configuraciones, en vez de una paleta propia.
+const COLOR_VENTAS = BLUE.primary;
+const COLOR_CLIENTES = "#f59e0b";
 const COLOR_GOOD = "#16a34a";
 const COLOR_BAD = "#dc2626";
 const GRUPO_COLOR = { Personal: "#1656c9", Servicios: "#1baf7a", Operativos: "#eda100", Depreciaciones: "#4a3aa7", "Sin categoría": "#8b95a3" };

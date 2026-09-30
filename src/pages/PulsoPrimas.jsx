@@ -18,11 +18,11 @@ const MESES_ABBR = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct",
 const RAMO_ESCOLARES = "accidentes escolares";
 const REFETCH_MS = 20 * 60 * 1000;
 
-// Paleta propia del módulo (pedido explícito 2026-09-24: "más verde y azul,
-// de otro lado" — no la reutiliza tal cual del resto del CRM) — azul para
-// 2026, verde para 2025, distintos del verde/rojo semántico de good/bad.
-const COLOR_2026 = "#2563eb";
-const COLOR_2025 = "#059669";
+// Pedido explícito 2026-09-30: este módulo es parte nativa del CRM, no un
+// artefacto embebido — usa el azul de marca del sistema (BLUE.primary),
+// igual que Arriendos/SOAT/Configuraciones, en vez de una paleta propia.
+const COLOR_2026 = BLUE.primary;
+const COLOR_2025 = "#f59e0b";
 const COLOR_GOOD = "#16a34a";
 const COLOR_BAD = "#dc2626";
 const COLOR_GRID = BLUE.border;
