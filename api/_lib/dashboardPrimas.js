@@ -15,6 +15,25 @@ function normMesIdx(s) {
   return i === -1 ? null : i;
 }
 
+// La columna Fecha en ambas hojas mezcla celdas de tipo fecha real (Sheets
+// las devuelve como numero serial con valueRenderOption=UNFORMATTED_VALUE —
+// dias desde 1899-12-30, mismo epoch que Excel) con celdas cargadas a mano
+// como texto plano ("03-09-2026"). Confirmado con datos reales 2026-09-30:
+// el serial 45705 = 17/02/2025 y 46227 = 24/07/2026, ambos coincidiendo
+// exacto con las fechas ya conocidas de esas polizas — sin esto, el modal de
+// detalle de Pulso de Primas mostraba el numero crudo (ej. "45705") en vez
+// de una fecha legible.
+function formatFechaCelda(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number") {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    return `${dd}-${mm}-${d.getUTCFullYear()}`;
+  }
+  return String(v).trim();
+}
+
 function rowsFromMatrix(matrix) {
   if (!matrix.length) return [];
   const header = matrix[0].map((h) => String(h || "").trim().toLowerCase());
@@ -30,7 +49,7 @@ function rowsFromMatrix(matrix) {
   return matrix.slice(1).map((row) => ({
     poliza: String(get(row, ["poliza"]) || "").trim(),
     tomador: String(get(row, ["tomador"]) || "").trim(),
-    fecha: String(get(row, ["fecha"]) || "").trim(),
+    fecha: formatFechaCelda(get(row, ["fecha"])),
     prima: toNumber(get(row, ["prima"])),
     mesIdx: normMesIdx(get(row, ["mes"])),
     iva: toNumber(get(row, ["iva"])),
