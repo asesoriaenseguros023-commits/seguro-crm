@@ -396,3 +396,104 @@ export function generarCuentaCobro({ numero, arrendatario, inmueble, arrendador,
   const blobUrl = doc.output("bloburl");
   window.open(blobUrl, "_blank");
 }
+
+// Documento de cierre al finalizar un arriendo: "Paz y Salvo" si el saldo
+// pendiente da $0, o "Cuenta de cobro final" (con el detalle de lo que
+// todavía debe) si no. Una sola función porque la decisión es automática —
+// quien llama no necesita saber de antemano cuál de los dos le va a tocar,
+// solo pasa `periodosAdeudados` (recalculado en vivo con calcularEstadoCuentaCobro
+// hasta la fecha de finalización elegida).
+export function generarDocumentoFinalizacion({ arrendatario, inmueble, arrendador, fechaInicio, fechaFin, totalPagado, periodosAdeudados }) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const marginX = 15;
+  const atrasados = periodosAdeudados || [];
+  const saldoFinal = atrasados.reduce((s, p) => s + (p.valor || 0), 0);
+  const pazYSalvo = saldoFinal === 0;
+  let y = 20;
+
+  // ── Encabezado ────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text(arrendador?.nombre || "—", marginX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  let yIzq = y + 6;
+  if (arrendador?.documento) { doc.text(`C.C./NIT ${arrendador.documento}`, marginX, yIzq); yIzq += 5; }
+  if (arrendador?.direccion) { doc.text(arrendador.direccion, marginX, yIzq); yIzq += 5; }
+  if (arrendador?.telefono) { doc.text(`Tel. ${arrendador.telefono}`, marginX, yIzq); yIzq += 5; }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text(pazYSalvo ? "PAZ Y SALVO" : "CUENTA DE COBRO FINAL", W - marginX, y, { align: "right" });
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Emitido ${fmtFecha(new Date().toISOString().slice(0, 10))}`, W - marginX, y + 7, { align: "right" });
+  y = Math.max(yIzq, y + 10) + 6;
+
+  // ── Datos del arriendo finalizado ────────────────────────────────────────
+  const grisClaro = [242, 243, 246];
+  autoTable(doc, {
+    startY: y,
+    margin: { left: marginX, right: marginX },
+    theme: "grid",
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 2.3, textColor: [30, 30, 30] },
+    body: [
+      [{ content: "ARRENDATARIO", styles: { fontStyle: "bold", fillColor: grisClaro } }, arrendatario?.nombre || "—",
+        { content: "C.C.", styles: { fontStyle: "bold", fillColor: grisClaro } }, arrendatario?.documento || "—"],
+      [{ content: "INMUEBLE", styles: { fontStyle: "bold", fillColor: grisClaro } },
+        { content: [inmueble?.nombre, inmueble?.direccion].filter(Boolean).join(" - ") || "—", colSpan: 3 }],
+      [{ content: "INICIO ARRIENDO", styles: { fontStyle: "bold", fillColor: grisClaro } }, fmtFecha(fechaInicio),
+        { content: "FIN ARRIENDO", styles: { fontStyle: "bold", fillColor: grisClaro } }, fmtFecha(fechaFin)],
+      [{ content: "TOTAL PAGADO DURANTE EL ARRIENDO", styles: { fontStyle: "bold", fillColor: grisClaro } },
+        { content: fmtMoney(totalPagado), colSpan: 3 }],
+    ],
+    columnStyles: { 0: { cellWidth: 48 }, 2: { cellWidth: 32 } },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  if (pazYSalvo) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    const texto = `Por medio del presente documento, ${arrendador?.nombre || "el arrendador"} certifica que ${arrendatario?.nombre || "el arrendatario"}, identificado con C.C./NIT ${arrendatario?.documento || "—"}, se encuentra A PAZ Y SALVO por concepto de canon de arrendamiento y demás obligaciones derivadas del arriendo del inmueble ${inmueble?.nombre || "—"}${inmueble?.direccion ? ` (${inmueble.direccion})` : ""}, correspondiente al período comprendido entre el ${fmtFecha(fechaInicio)} y el ${fmtFecha(fechaFin)}.`;
+    const lineas = doc.splitTextToSize(texto, W - marginX * 2);
+    doc.text(lineas, marginX, y);
+    y += lineas.length * 6 + 6;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    doc.text("No existen saldos pendientes a la fecha de expedición de este documento.", marginX, y);
+    y += 20;
+    doc.setFont("helvetica", "normal");
+    doc.line(marginX, y, 85, y);
+    y += 5;
+    doc.text(arrendador?.nombre || "Arrendador", marginX, y);
+  } else {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      theme: "grid",
+      head: [["Descripcion", "Periodo", "Valor"]],
+      styles: { font: "helvetica", fontSize: 9, cellPadding: 2.5, textColor: [180, 35, 35] },
+      headStyles: { fillColor: [26, 86, 219], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 2: { halign: "right", cellWidth: 35 } },
+      body: atrasados.map((p) => ["Canon arrendamiento (pendiente)", fmtPeriodo(p.periodoInicio, p.periodoFin), fmtMoney(p.valor)]),
+      foot: [[{ content: "SALDO PENDIENTE", colSpan: 2, styles: { fontStyle: "bold", halign: "right" } }, { content: fmtMoney(saldoFinal), styles: { fontStyle: "bold" } }]],
+      footStyles: { fillColor: grisClaro, textColor: [20, 20, 20] },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Valor en letras:", marginX, y);
+    doc.setFont("helvetica", "normal");
+    const letras = doc.splitTextToSize(montoEnLetras(saldoFinal), W - marginX * 2 - 32);
+    doc.text(letras, 47, y);
+    y += letras.length * 4.5 + 9;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    const nota = doc.splitTextToSize(`El arriendo del inmueble ${inmueble?.nombre || "—"} termina el ${fmtFecha(fechaFin)} con un saldo pendiente. El Paz y Salvo se expedira una vez se cancele el valor indicado arriba.`, W - marginX * 2);
+    doc.text(nota, marginX, y);
+  }
+
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl, "_blank");
+}

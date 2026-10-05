@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase.js";
 import { S, BLUE } from "../constants.js";
-import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow, mapCuentaCobro, toCuentaCobroRow } from "../helpers.js";
-import { generarComprobante, generarCuentaCobro, siguienteNumeroComprobante, calcularEstadoCuentaCobro, METODOS_LABEL } from "../pdfComprobante.js";
+import { fmt, fmtDate, today, mapInmueble, toInmuebleRow, mapArrendatario, mapPago, toPagoRow, mapArrendador, toArrendadorRow, mapCuentaCobro, toCuentaCobroRow, mapHistorial, toHistorialRow } from "../helpers.js";
+import { generarComprobante, generarCuentaCobro, generarDocumentoFinalizacion, siguienteNumeroComprobante, calcularEstadoCuentaCobro, METODOS_LABEL } from "../pdfComprobante.js";
 import Icon from "../components/Icon.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -13,6 +13,7 @@ const TABS = [
   { id: "pagos", label: "Pagos" },
   { id: "alertas", label: "Alertas" },
   { id: "arrendadores", label: "Arrendadores" },
+  { id: "historico", label: "Histórico" },
 ];
 
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "", fechaInicioArriendo: "" };
@@ -250,15 +251,24 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
 };
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
-const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuentasCobro, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo, onAgregarCuentaCobro }) => {
+const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuentasCobro, historial, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo, onAgregarCuentaCobro, onFinalizarArriendo }) => {
   const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
   const [form, setForm] = useState(ARRENDATARIO_INIT);
   const [saving, setSaving] = useState(false);
+  const [finalizarItem, setFinalizarItem] = useState(null);
+  const [fechaFinalizar, setFechaFinalizar] = useState("");
+  const [finalizando, setFinalizando] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const inmuebleDe = (arrendatarioId) => inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
+  // Último registro de historial de este arrendatario (si ya finalizó un
+  // arriendo antes) — se usa para reimprimir el documento de cierre y para
+  // mostrar el saldo pendiente de la última vez, incluso sin inmueble activo.
+  const historialDe = (arrendatarioId) =>
+    historial.filter((h) => h.arrendatarioId === arrendatarioId).sort((a, b) => b.fechaFin.localeCompare(a.fechaFin))[0];
+  const deudaPendiente = (arrendatarioId) => historial.find((h) => h.arrendatarioId === arrendatarioId && h.saldoFinal > 0);
 
   // Genera (o reutiliza, si ya existe para ese período) la cuenta de cobro:
   // número consecutivo propio y saldo anterior = todo lo facturado a este
@@ -292,6 +302,55 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
       periodo: { inicio: cuenta.periodoInicio, fin: cuenta.periodoFin },
       valor: cuenta.valor, valorAdministracion: cuenta.valorAdministracion, periodosAdeudados, fechaEmision: cuenta.fechaEmision,
     });
+  };
+
+  // Abre el modal de finalización con la fecha de hoy por defecto — editable,
+  // por si el cierre es con otra fecha (ej. se registra unos días después).
+  const abrirFinalizar = (a) => { setFinalizarItem(a); setFechaFinalizar(today()); };
+
+  // Reimprime el documento de cierre (Paz y Salvo o Cuenta de cobro final) de
+  // un arrendatario que ya finalizó su arriendo antes — a partir de lo que
+  // quedó guardado en Histórico, no de un recálculo nuevo (ese arriendo ya
+  // terminó, el inmueble puede incluso tener otro arrendatario ahora).
+  const reimprimirDocumentoFinal = (a) => {
+    const h = historialDe(a.id);
+    if (!h) return;
+    const inmueble = inmuebles.find((i) => i.id === h.inmuebleId) || { nombre: h.inmuebleNombre };
+    const arrendador = arrendadores.find((ar) => ar.id === inmueble?.arrendadorId);
+    const totalPagado = pagos.filter((p) => p.arrendatarioId === a.id).reduce((s, p) => s + (p.valor || 0), 0);
+    generarDocumentoFinalizacion({
+      arrendatario: a, inmueble, arrendador,
+      fechaInicio: h.fechaInicio, fechaFin: h.fechaFin, totalPagado,
+      periodosAdeudados: h.saldoFinal > 0 ? [{ periodoInicio: h.fechaInicio, periodoFin: h.fechaFin, valor: h.saldoFinal }] : [],
+    });
+  };
+
+  // Calcula el saldo pendiente hasta la fecha de finalización elegida (mismo
+  // cálculo en vivo que la cuenta de cobro, cortado en esa fecha en vez de
+  // hoy), guarda el registro en Histórico, libera el inmueble y marca al
+  // arrendatario Inactivo — y genera el documento de cierre correspondiente.
+  const confirmarFinalizar = async () => {
+    const a = finalizarItem;
+    const inmueble = inmuebleDe(a?.id);
+    if (!a || !inmueble || !fechaFinalizar) return;
+    setFinalizando(true);
+    const fechaFinDate = new Date(fechaFinalizar + "T00:00:00");
+    const { periodosAdeudados } = calcularEstadoCuentaCobro(inmueble, a.id, pagos, fechaFinDate);
+    const totalPagado = pagos.filter((p) => p.arrendatarioId === a.id).reduce((s, p) => s + (p.valor || 0), 0);
+    const saldoFinal = periodosAdeudados.reduce((s, p) => s + p.valor, 0);
+    const arrendador = arrendadores.find((ar) => ar.id === inmueble.arrendadorId);
+    await onFinalizarArriendo({
+      arrendatarioId: a.id, arrendatarioNombre: a.nombre,
+      inmuebleId: inmueble.id, inmuebleNombre: inmueble.nombre,
+      fechaInicio: inmueble.fechaInicioArriendo || "", fechaFin: fechaFinalizar,
+      totalPagado, saldoFinal, detalleAdeudado: periodosAdeudados,
+    });
+    generarDocumentoFinalizacion({
+      arrendatario: a, inmueble, arrendador,
+      fechaInicio: inmueble.fechaInicioArriendo, fechaFin: fechaFinalizar, totalPagado, periodosAdeudados,
+    });
+    setFinalizando(false);
+    setFinalizarItem(null);
   };
 
   const abrirNuevo = () => { setEditItem(null); setForm(ARRENDATARIO_INIT); setShowForm(true); };
@@ -347,10 +406,19 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
               )}
               <div style={{ marginTop: 8 }}>
                 {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ fontSize: 12.5, color: "#ccc" }}>Sin inmueble</span>}
+                {!inmuebleDe(a.id) && deudaPendiente(a.id) && (
+                  <span style={S.chip("#dc2626")}>Debe {fmt(deudaPendiente(a.id).saldoFinal)}</span>
+                )}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BLUE.border}` }}>
                 {inmuebleDe(a.id) && (
-                  <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => generarCuenta(a)}>Generar</button>
+                  <>
+                    <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => generarCuenta(a)}>Generar</button>
+                    <button style={{ ...S.btn("secondary"), color: "#dc2626" }} onClick={() => abrirFinalizar(a)}>Finalizar</button>
+                  </>
+                )}
+                {!inmuebleDe(a.id) && historialDe(a.id) && (
+                  <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => reimprimirDocumentoFinal(a)}>Generar</button>
                 )}
                 <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
                 <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
@@ -374,6 +442,9 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
             <div style={{ color: a.documento ? "inherit" : "#ccc" }}>{a.documento || "—"}</div>
             <div>
               {inmuebleDe(a.id) ? <span style={S.chip(BLUE.primary)}>{inmuebleDe(a.id).nombre}</span> : <span style={{ color: "#ccc" }}>Sin inmueble</span>}
+              {!inmuebleDe(a.id) && deudaPendiente(a.id) && (
+                <span style={S.chip("#dc2626")}>Debe {fmt(deudaPendiente(a.id).saldoFinal)}</span>
+              )}
             </div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
               <button
@@ -384,6 +455,8 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
                 {a.activo ? "Activo" : "Inactivo"}
               </button>
               {inmuebleDe(a.id) && <button style={S.btn("secondary")} onClick={() => generarCuenta(a)}>Generar</button>}
+              {inmuebleDe(a.id) && <button style={{ ...S.btn("secondary"), color: "#dc2626" }} onClick={() => abrirFinalizar(a)}>Finalizar</button>}
+              {!inmuebleDe(a.id) && historialDe(a.id) && <button style={S.btn("secondary")} onClick={() => reimprimirDocumentoFinal(a)}>Generar</button>}
               <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
             </div>
@@ -449,6 +522,30 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
           }
         >
           <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar <strong>{delItem.nombre}</strong>? Esto solo es posible si no tiene contratos asociados.</p>
+        </Modal>
+      )}
+
+      {finalizarItem && (
+        <Modal
+          title={`Finalizar arriendo — ${finalizarItem.nombre}`}
+          onClose={() => setFinalizarItem(null)}
+          footer={
+            <>
+              <button style={S.btn("secondary")} onClick={() => setFinalizarItem(null)}>Cancelar</button>
+              <button style={{ ...S.btn("danger"), opacity: finalizando ? 0.6 : 1 }} onClick={confirmarFinalizar} disabled={finalizando}>
+                {finalizando ? "Procesando…" : "Finalizar y generar documento"}
+              </button>
+            </>
+          }
+        >
+          <div style={S.formGroup}>
+            <label style={S.label}>Fecha de finalización *</label>
+            <input style={S.input} type="date" value={fechaFinalizar} onChange={(e) => setFechaFinalizar(e.target.value)} autoFocus />
+          </div>
+          <p style={{ fontSize: 12.5, color: "#6b87b0", lineHeight: 1.5 }}>
+            Se calculará el saldo pendiente hasta esta fecha y se generará el documento de cierre: <strong>Paz y Salvo</strong> si no debe nada, o <strong>Cuenta de cobro final</strong> si todavía debe algo.
+            El inmueble <strong>{inmuebleDe(finalizarItem.id)?.nombre}</strong> quedará vacante y este arrendatario pasará a <strong>Inactivo</strong>. Este período quedará guardado en Histórico.
+          </p>
         </Modal>
       )}
     </div>
@@ -1291,6 +1388,104 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
   );
 };
 
+// ─── Histórico ──────────────────────────────────────────────────────────
+// Arriendos ya finalizados (ver "Finalizar" en Arrendatarios) — cada uno con
+// su total pagado durante el arriendo y, si quedó algo sin cobrar, el saldo
+// final. "Ver pagos" abre el detalle período por período de ese arrendatario
+// (no cambia aunque después vuelva a arrendar otro inmueble, porque se
+// filtra por arrendatarioId, no por el arriendo puntual que se finalizó).
+const filaLabelS = { fontSize: 11, color: "#9aa8c7" };
+const filaValorS = { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 };
+
+const HistoricoTab = ({ historial, pagos }) => {
+  const isMobile = useIsMobile();
+  const [verPagos, setVerPagos] = useState(null);
+  const pagosDe = (h) => pagos.filter((p) => p.arrendatarioId === h.arrendatarioId).sort((a, b) => a.periodoInicio.localeCompare(b.periodoInicio));
+  const totalPagadoDe = (h) => pagosDe(h).reduce((s, p) => s + (p.valor || 0), 0);
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Histórico</div>
+          <div style={S.pageSub}>{historial.length} arriendos finalizados</div>
+        </div>
+      </div>
+
+      {isMobile ? (
+        <div>
+          {historial.map((h, idx) => (
+            <div key={h.id} style={cardS}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>
+                    <span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{h.arrendatarioNombre}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{h.inmuebleNombre}</div>
+                </div>
+                <span style={S.chip(h.saldoFinal > 0 ? "#dc2626" : "#16a34a")}>{h.saldoFinal > 0 ? "Con saldo" : "Paz y salvo"}</span>
+              </div>
+              <div style={filaValorS}>
+                <span style={filaLabelS}>Período</span>
+                <span style={{ fontSize: 12.5 }}>{fmtDate(h.fechaInicio)} – {fmtDate(h.fechaFin)}</span>
+              </div>
+              <div style={filaValorS}>
+                <span style={filaLabelS}>Total pagado</span>
+                <span style={{ fontSize: 12.5 }}>{fmt(totalPagadoDe(h))}</span>
+              </div>
+              {h.saldoFinal > 0 && (
+                <div style={filaValorS}>
+                  <span style={filaLabelS}>Saldo final</span>
+                  <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmt(h.saldoFinal)}</span>
+                </div>
+              )}
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BLUE.border}` }}>
+                <button style={{ ...S.btn("secondary"), width: "100%" }} onClick={() => setVerPagos(h)}>Ver pagos</button>
+              </div>
+            </div>
+          ))}
+          {historial.length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 20 }}>Todavía no hay arriendos finalizados.</div>}
+        </div>
+      ) : (
+        <div style={{ ...S.tableWrap, overflowX: "auto" }}>
+          <div style={{ ...S.tableHead, gridTemplateColumns: "36px 1.1fr 1fr 1.2fr 0.9fr 0.9fr 140px", minWidth: 950 }}>
+            <div>#</div><div>Arrendatario</div><div>Inmueble</div><div>Período</div><div>Total pagado</div><div>Saldo final</div><div></div>
+          </div>
+          {historial.map((h, idx) => (
+            <div key={h.id} style={{ ...S.tableRow, gridTemplateColumns: "36px 1.1fr 1fr 1.2fr 0.9fr 0.9fr 140px", minWidth: 950 }}>
+              <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
+              <div style={{ fontWeight: 600, color: BLUE.text }}>{h.arrendatarioNombre}</div>
+              <div>{h.inmuebleNombre}</div>
+              <div style={{ fontSize: 12.5 }}>{fmtDate(h.fechaInicio)} – {fmtDate(h.fechaFin)}</div>
+              <div>{fmt(totalPagadoDe(h))}</div>
+              <div style={{ fontWeight: h.saldoFinal > 0 ? 700 : 400, color: h.saldoFinal > 0 ? "#dc2626" : "#16a34a" }}>
+                {h.saldoFinal > 0 ? fmt(h.saldoFinal) : "Paz y salvo"}
+              </div>
+              <div><button style={S.btn("secondary")} onClick={() => setVerPagos(h)}>Ver pagos</button></div>
+            </div>
+          ))}
+          {historial.length === 0 && <div style={{ padding: 20, color: "#aaa", fontSize: 13 }}>Todavía no hay arriendos finalizados.</div>}
+        </div>
+      )}
+
+      {verPagos && (
+        <Modal title={`Pagos de ${verPagos.arrendatarioNombre} — ${verPagos.inmuebleNombre}`} onClose={() => setVerPagos(null)}>
+          {pagosDe(verPagos).map((p) => (
+            <div key={p.id} style={{ ...filaValorS, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${BLUE.border}` }}>
+              <div>
+                <div style={{ fontSize: 13, color: BLUE.text }}>{fmtDate(p.periodoInicio)} – {fmtDate(p.periodoFin)}</div>
+                <div style={{ fontSize: 11, color: "#9aa8c7" }}>Pagado el {fmtDate(p.fechaPago)} · {METODOS_LABEL[p.metodo] || p.metodo}</div>
+              </div>
+              <span style={{ fontWeight: 700, color: BLUE.primary }}>{fmt(p.valor)}</span>
+            </div>
+          ))}
+          {pagosDe(verPagos).length === 0 && <div style={{ color: "#aaa", fontSize: 13, padding: 10 }}>Este arrendatario no tiene pagos registrados.</div>}
+        </Modal>
+      )}
+    </div>
+  );
+};
+
 // ─── Página raíz del módulo ───────────────────────────────────────────────
 const ArriendosPage = () => {
   const [tab, setTab] = useState("dashboard");
@@ -1299,6 +1494,7 @@ const ArriendosPage = () => {
   const [pagos, setPagos] = useState([]);
   const [arrendadores, setArrendadores] = useState([]);
   const [cuentasCobro, setCuentasCobro] = useState([]);
+  const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1308,12 +1504,14 @@ const ArriendosPage = () => {
       supabase.from("pagos").select("*").order("periodo_inicio", { ascending: false }),
       supabase.from("arrendador_config").select("*").order("nombre"),
       supabase.from("cuentas_cobro").select("*").order("numero", { ascending: false }),
-    ]).then(([{ data: inm }, { data: arr }, { data: pgs }, { data: arrd }, { data: cc }]) => {
+      supabase.from("historial_arrendatarios").select("*").order("fecha_fin", { ascending: false }),
+    ]).then(([{ data: inm }, { data: arr }, { data: pgs }, { data: arrd }, { data: cc }, { data: hist }]) => {
       if (inm) setInmuebles(inm.map(mapInmueble));
       if (arr) setArrendatarios(arr.map(mapArrendatario));
       if (pgs) setPagos(pgs.map(mapPago));
       if (arrd) setArrendadores(arrd.map(mapArrendador));
       if (cc) setCuentasCobro(cc.map(mapCuentaCobro));
+      if (hist) setHistorial(hist.map(mapHistorial));
       setLoading(false);
     });
 
@@ -1342,6 +1540,11 @@ const ArriendosPage = () => {
         if (payload.eventType === "INSERT") setCuentasCobro((p) => p.some((x) => x.id === payload.new.id) ? p : [mapCuentaCobro(payload.new), ...p]);
         if (payload.eventType === "UPDATE") setCuentasCobro((p) => p.map((x) => x.id === payload.new.id ? mapCuentaCobro(payload.new) : x));
         if (payload.eventType === "DELETE") setCuentasCobro((p) => p.filter((x) => x.id !== payload.old.id));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "historial_arrendatarios" }, (payload) => {
+        if (payload.eventType === "INSERT") setHistorial((p) => p.some((x) => x.id === payload.new.id) ? p : [mapHistorial(payload.new), ...p]);
+        if (payload.eventType === "UPDATE") setHistorial((p) => p.map((x) => x.id === payload.new.id ? mapHistorial(payload.new) : x));
+        if (payload.eventType === "DELETE") setHistorial((p) => p.filter((x) => x.id !== payload.old.id));
       })
       .subscribe();
 
@@ -1451,6 +1654,26 @@ const ArriendosPage = () => {
     return cuenta;
   };
 
+  // Cierra un arriendo: guarda el período en Histórico, libera el inmueble
+  // (queda vacante, sin fecha de inicio) y marca al arrendatario Inactivo.
+  // Los 3 pasos van en este orden porque si algo falla a mitad de camino es
+  // preferible que el historial ya haya quedado guardado (no se pierde el
+  // registro) antes que el inmueble o el arrendatario queden en un estado
+  // a medias sin rastro de por qué.
+  const finalizarArriendo = async (datos) => {
+    const { data, error } = await supabase.from("historial_arrendatarios").insert([toHistorialRow(datos)]).select().single();
+    if (error) { console.error("finalizarArriendo historial error:", error); return; }
+    if (data) setHistorial((p) => [mapHistorial(data), ...p]);
+
+    const { error: errInmueble } = await supabase.from("inmuebles").update({ arrendatario_id: null, fecha_inicio_arriendo: null }).eq("id", datos.inmuebleId);
+    if (errInmueble) { console.error("finalizarArriendo inmueble error:", errInmueble); return; }
+    setInmuebles((p) => p.map((x) => x.id === datos.inmuebleId ? { ...x, arrendatarioId: "", fechaInicioArriendo: "" } : x));
+
+    const { error: errArrendatario } = await supabase.from("arrendatarios").update({ activo: false }).eq("id", datos.arrendatarioId);
+    if (errArrendatario) { console.error("finalizarArriendo arrendatario error:", errArrendatario); return; }
+    setArrendatarios((p) => p.map((x) => x.id === datos.arrendatarioId ? { ...x, activo: false } : x));
+  };
+
   if (loading) return <div style={{ padding: 40, color: "#6b87b0", fontSize: 13 }}>Cargando…</div>;
 
   return (
@@ -1481,10 +1704,11 @@ const ArriendosPage = () => {
 
       {tab === "dashboard" && <DashboardTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} arrendadores={arrendadores} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
-      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendadores={arrendadores} cuentasCobro={cuentasCobro} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} onAgregarCuentaCobro={addCuentaCobro} />}
+      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendadores={arrendadores} cuentasCobro={cuentasCobro} historial={historial} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} onAgregarCuentaCobro={addCuentaCobro} onFinalizarArriendo={finalizarArriendo} />}
       {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendadores={arrendadores} onAdd={addPago} onEdit={editPago} onDelete={deletePago} onAsignarNumero={asignarNumeroComprobante} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendadores" && <ArrendadoresTab arrendadores={arrendadores} inmuebles={inmuebles} onAdd={addArrendador} onEdit={editArrendador} onDelete={deleteArrendador} />}
+      {tab === "historico" && <HistoricoTab historial={historial} pagos={pagos} />}
     </div>
   );
 };

@@ -192,3 +192,28 @@ export const toCuentaCobroRow = (f) => ({
   fecha_emision: f.fechaEmision,
   fecha_vencimiento: f.fechaVencimiento,
 });
+
+export const mapHistorial = (r) => ({
+  id: r.id,
+  inmuebleId: r.inmueble_id || "",
+  arrendatarioId: r.arrendatario_id || "",
+  inmuebleNombre: r.inmueble_nombre || "",
+  arrendatarioNombre: r.arrendatario_nombre || "",
+  fechaInicio: r.fecha_inicio || "",
+  fechaFin: r.fecha_fin || "",
+  totalPagado: r.total_pagado || 0,
+  saldoFinal: r.saldo_final || 0,
+  detalleAdeudado: r.detalle_adeudado || [],
+});
+
+export const toHistorialRow = (f) => ({
+  inmueble_id: f.inmuebleId || null,
+  arrendatario_id: f.arrendatarioId || null,
+  inmueble_nombre: f.inmuebleNombre,
+  arrendatario_nombre: f.arrendatarioNombre,
+  fecha_inicio: f.fechaInicio || null,
+  fecha_fin: f.fechaFin,
+  total_pagado: Number(f.totalPagado) || 0,
+  saldo_final: Number(f.saldoFinal) || 0,
+  detalle_adeudado: f.detalleAdeudado || [],
+});
