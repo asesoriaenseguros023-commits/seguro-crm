@@ -95,6 +95,7 @@ export const S = {
 // se tocaron — solo se quitó el código del frontend. Ver [[project-seguro-crm]].
 export const SECCIONES = [
   { id: "soat",         label: "Seguimiento SOAT",      icon: "shield",   adminOnly: false },
+  { id: "whatsapp",     label: "WhatsApp",              icon: "whatsapp", adminOnly: false },
   { id: "primas",       label: "Pulso de Primas",       icon: "chart",    adminOnly: false },
   { id: "certificados", label: "Certificados Escolares", icon: "document", adminOnly: false },
   { id: "oficina-soat", label: "Oficina SOAT",          icon: "tag",      adminOnly: false },
@@ -127,6 +128,19 @@ export const MOTIVOS_SOAT = [
   "No tiene vehículo activo",
   "No le interesa renovar aún",
 ];
+
+// ─── WhatsApp (whatsapp_conversaciones) ─────────────────────────────────────
+// Mismo orden que el ciclo real de un mensaje: enviado -> entregado -> leido,
+// con "respondido" (el lead escribió de vuelta) y "fallido" como ramas aparte.
+export const ESTADOS_WHATSAPP = [
+  { id: "enviado",    label: "Enviado",    color: "#64748b", bg: "#f1f5f9", text: "#334155" },
+  { id: "entregado",  label: "Entregado",  color: "#3b82f6", bg: "#dbeafe", text: "#1d4ed8" },
+  { id: "leido",      label: "Leído",      color: "#8b5cf6", bg: "#ede9fe", text: "#5b21b6" },
+  { id: "respondido", label: "Respondió",  color: "#22c55e", bg: "#dcfce7", text: "#166534" },
+  { id: "fallido",    label: "Falló",      color: "#ef4444", bg: "#fee2e2", text: "#991b1b" },
+];
+
+export const FM_WHATSAPP = Object.fromEntries(ESTADOS_WHATSAPP.map(e => [e.id, e]));
 
 // "Número equivocado" salió de acá — ahora es su propia fase (FASES_SOAT),
 // no un motivo dentro de Ilocalizable. Pedido explícito del usuario.

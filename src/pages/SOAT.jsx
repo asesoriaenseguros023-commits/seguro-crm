@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
-import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
+import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT, FM_WHATSAPP } from "../constants.js";
 import { parseDateSoat, mapSoat, toSoatRow, authHeaders, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import { generarInformeIA, informeIABase64 } from "../pdfReporteIA.js";
@@ -117,6 +117,9 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
   // Estado técnico de llamadas Twilio (estado/duración/grabación), por cliente
   const [llamadasTecnicas, setLlamadasTecnicas] = useState({});
   const [reproduciendo, setReproduciendo] = useState(null); // { sid, url } o "cargando:<sid>"
+  // Última conversación de WhatsApp por cliente (tabla whatsapp_conversaciones,
+  // ver WhatsApp.jsx) -- alimenta el color/estado del ícono de WhatsApp.
+  const [conversacionesWA, setConversacionesWA] = useState({});
 
   // ─── Carga inicial + realtime ────────────────────────────────────────────
   useEffect(() => {
@@ -139,6 +142,30 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
           const lista = (p[row.cliente_id] || []).filter(l => l.id !== row.id);
           return { ...p, [row.cliente_id]: [row, ...lista].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5) };
         });
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  // Carga inicial + realtime de whatsapp_conversaciones -- misma tabla que
+  // lee WhatsApp.jsx, así que un cambio de estado por el webhook de Meta
+  // (entregado/leído/respondió) aparece aquí solo, sin código de sync aparte.
+  useEffect(() => {
+    supabase.from("whatsapp_conversaciones").select("*")
+      .order("updated_at", { ascending: true })
+      .then(({ data }) => {
+        if (!data) return;
+        const porCliente = {};
+        data.forEach(row => { porCliente[row.cliente_id] = row; }); // el último updated_at gana
+        setConversacionesWA(porCliente);
+      });
+
+    const channel = supabase.channel("soat-whatsapp")
+      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_conversaciones" }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        setConversacionesWA(p => ({ ...p, [row.cliente_id]: row }));
       })
       .subscribe();
 
@@ -189,7 +216,10 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
 
   // Manda la plantilla "soat_seguimiento_lead" (WhatsApp Business Cloud API,
   // ver api/whatsapp.js) al número del lead. "enviandoWA" solo da feedback
-  // visual en el botón -- no bloquea el resto de la UI.
+  // visual inmediato en el botón -- el estado real (entregado/leído/
+  // respondió) llega después por el webhook y se ve vía "conversacionesWA"
+  // (suscripción realtime más abajo), que es la misma tabla que lee
+  // WhatsApp.jsx -- por eso no hace falta sincronizar nada a mano.
   const [enviandoWA, setEnviandoWA] = useState({});
   const enviarWhatsapp = async (c) => {
     setEnviandoWA(p => ({ ...p, [c.id]: "enviando" }));
@@ -197,7 +227,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
       const res = await fetch("/api/whatsapp?action=enviar-seguimiento-soat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        body: JSON.stringify({ telefono: c.telefono, nombre: c.nombre }),
+        body: JSON.stringify({ telefono: c.telefono, nombre: c.nombre, clienteId: c.id }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Error al enviar");
       setEnviandoWA(p => ({ ...p, [c.id]: "ok" }));
@@ -206,6 +236,21 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
       console.error("enviarWhatsapp:", err.message);
     }
     setTimeout(() => setEnviandoWA(p => { const n = { ...p }; delete n[c.id]; return n; }), 3000);
+  };
+
+  // Color/título del botón de WhatsApp: primero el feedback inmediato del
+  // clic (enviandoWA), si no hay nada de eso el estado real guardado en
+  // whatsapp_conversaciones (conversacionesWA), y si tampoco hay eso, el
+  // verde por defecto de "nunca se le ha escrito".
+  const estadoIconoWA_ = (clienteId) => {
+    if (enviandoWA[clienteId] === "enviando") return { color: "#999", title: "Enviando…" };
+    if (enviandoWA[clienteId] === "error") return { color: "#dc2626", title: "No se pudo enviar" };
+    const conv = conversacionesWA[clienteId];
+    if (conv) {
+      const fm = FM_WHATSAPP[conv.estado];
+      return { color: fm?.color || "#25D366", title: `WhatsApp: ${fm?.label || conv.estado}` };
+    }
+    return { color: "#25D366", title: "Enviar WhatsApp" };
   };
 
   const ESTADOS_LLAMADA = {
@@ -784,15 +829,17 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
                         <Icon name="phone" size={12} />
                       </button>
                     )}
-                    {c.telefono && (
-                      <button onClick={(e) => { e.stopPropagation(); enviarWhatsapp(c); }}
-                        disabled={enviandoWA[c.id] === "enviando"}
-                        style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 4,
-                          color: enviandoWA[c.id] === "error" ? "#dc2626" : enviandoWA[c.id] === "ok" ? "#16a34a" : "#25D366" }}
-                        title={enviandoWA[c.id] === "ok" ? "Enviado" : enviandoWA[c.id] === "error" ? "No se pudo enviar" : "Enviar WhatsApp"}>
-                        <Icon name="whatsapp" size={12} />
-                      </button>
-                    )}
+                    {c.telefono && (() => {
+                      const wa = estadoIconoWA_(c.id);
+                      return (
+                        <button onClick={(e) => { e.stopPropagation(); enviarWhatsapp(c); }}
+                          disabled={enviandoWA[c.id] === "enviando"}
+                          style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 4, color: wa.color }}
+                          title={wa.title}>
+                          <Icon name="whatsapp" size={12} />
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#555" }}>{fmtAnioMes(c.anioMes)}</div>
@@ -913,13 +960,17 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
                         style={{ ...S.btn("ghost"), padding: "2px 6px", color: BLUE.primary }} title="Llamar">
                         <Icon name="phone" size={13} />
                       </button>
-                      <button onClick={() => enviarWhatsapp(modal)}
-                        disabled={enviandoWA[modal.id] === "enviando"}
-                        style={{ ...S.btn("ghost"), padding: "2px 6px",
-                          color: enviandoWA[modal.id] === "error" ? "#dc2626" : enviandoWA[modal.id] === "ok" ? "#16a34a" : "#25D366" }}
-                        title={enviandoWA[modal.id] === "ok" ? "Enviado" : enviandoWA[modal.id] === "error" ? "No se pudo enviar" : "Enviar WhatsApp"}>
-                        <Icon name="whatsapp" size={13} />
-                      </button>
+                      {(() => {
+                        const wa = estadoIconoWA_(modal.id);
+                        return (
+                          <button onClick={() => enviarWhatsapp(modal)}
+                            disabled={enviandoWA[modal.id] === "enviando"}
+                            style={{ ...S.btn("ghost"), padding: "2px 6px", color: wa.color }}
+                            title={wa.title}>
+                            <Icon name="whatsapp" size={13} />
+                          </button>
+                        );
+                      })()}
                     </span>
                   )}
                   {modal.placa && <span>Placa: {modal.placa}</span>}

@@ -11,6 +11,7 @@ import { useAppVersion } from "./hooks/useAppVersion.js";
 import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
 import SoatPage from "./pages/SOAT.jsx";
+import WhatsAppPage from "./pages/WhatsApp.jsx";
 import PulsoPrimasPage from "./pages/PulsoPrimas.jsx";
 import CertificadosEscolaresPage from "./pages/CertificadosEscolares.jsx";
 import OficinaSoatPage from "./pages/OficinaSoat.jsx";
@@ -360,6 +361,8 @@ export default function App() {
     }
 
     if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} comerciales={agentes.filter((a) => a.rol === "Comercial")} />;
+
+    if (seccion === "whatsapp") return <WhatsAppPage />;
 
     if (seccion === "primas") return <PulsoPrimasPage />;
 
