@@ -187,6 +187,27 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
     softphone.startCall(c.telefono, c.nombre, c.id);
   };
 
+  // Manda la plantilla "soat_seguimiento_lead" (WhatsApp Business Cloud API,
+  // ver api/whatsapp.js) al número del lead. "enviandoWA" solo da feedback
+  // visual en el botón -- no bloquea el resto de la UI.
+  const [enviandoWA, setEnviandoWA] = useState({});
+  const enviarWhatsapp = async (c) => {
+    setEnviandoWA(p => ({ ...p, [c.id]: "enviando" }));
+    try {
+      const res = await fetch("/api/whatsapp?action=enviar-seguimiento-soat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ telefono: c.telefono, nombre: c.nombre }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Error al enviar");
+      setEnviandoWA(p => ({ ...p, [c.id]: "ok" }));
+    } catch (err) {
+      setEnviandoWA(p => ({ ...p, [c.id]: "error" }));
+      console.error("enviarWhatsapp:", err.message);
+    }
+    setTimeout(() => setEnviandoWA(p => { const n = { ...p }; delete n[c.id]; return n; }), 3000);
+  };
+
   const ESTADOS_LLAMADA = {
     completed: { label: "Contestada", color: "#16a34a" },
     "no-answer": { label: "No contestó", color: "#f59e0b" },
@@ -763,6 +784,15 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
                         <Icon name="phone" size={12} />
                       </button>
                     )}
+                    {c.telefono && (
+                      <button onClick={(e) => { e.stopPropagation(); enviarWhatsapp(c); }}
+                        disabled={enviandoWA[c.id] === "enviando"}
+                        style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 4,
+                          color: enviandoWA[c.id] === "error" ? "#dc2626" : enviandoWA[c.id] === "ok" ? "#16a34a" : "#25D366" }}
+                        title={enviandoWA[c.id] === "ok" ? "Enviado" : enviandoWA[c.id] === "error" ? "No se pudo enviar" : "Enviar WhatsApp"}>
+                        <Icon name="whatsapp" size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#555" }}>{fmtAnioMes(c.anioMes)}</div>
@@ -882,6 +912,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
                       <button onClick={() => iniciarLlamada(modal)}
                         style={{ ...S.btn("ghost"), padding: "2px 6px", color: BLUE.primary }} title="Llamar">
                         <Icon name="phone" size={13} />
+                      </button>
+                      <button onClick={() => enviarWhatsapp(modal)}
+                        disabled={enviandoWA[modal.id] === "enviando"}
+                        style={{ ...S.btn("ghost"), padding: "2px 6px",
+                          color: enviandoWA[modal.id] === "error" ? "#dc2626" : enviandoWA[modal.id] === "ok" ? "#16a34a" : "#25D366" }}
+                        title={enviandoWA[modal.id] === "ok" ? "Enviado" : enviandoWA[modal.id] === "error" ? "No se pudo enviar" : "Enviar WhatsApp"}>
+                        <Icon name="whatsapp" size={13} />
                       </button>
                     </span>
                   )}
