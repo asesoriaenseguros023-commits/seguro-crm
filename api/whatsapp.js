@@ -67,8 +67,15 @@ async function enviarPlantilla_({ to, nombre, plantilla }) {
       template: {
         name: plantilla,
         language: { code: "es_CO" },
+        // parameter_name: la plantilla "soat_seguimiento_lead" en la cuenta
+        // de PRUEBA usa variable nombrada {{nombre}} (la cuenta real exigía
+        // parámetros nombrados al crearla; la plantilla original en la
+        // cuenta real quedó con {{1}} posicional de antes de ese cambio).
+        // Si el día de mañana se envía desde la cuenta real con esa
+        // plantilla posicional, hay que quitar parameter_name aquí o volver
+        // a someter esa plantilla también con {{nombre}}.
         components: [
-          { type: "body", parameters: [{ type: "text", text: nombre || "" }] },
+          { type: "body", parameters: [{ type: "text", parameter_name: "nombre", text: nombre || "" }] },
         ],
       },
     }),
