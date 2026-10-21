@@ -184,6 +184,92 @@ function buildEscolaresData(rows2026, rows2025) {
   }).sort((a, b) => b.prima2026 - a.prima2026);
 }
 
+// ---------- fecha de vencimiento estimada (emisión + 1 año) ----------
+// El usuario confirmó (2026-10-21): la fecha que se captura es la de
+// EMISIÓN y sus pólizas son de vigencia anual, así que emisión + 1 año es
+// una buena estimación de cuándo vence/debe renovarse -- esto habilita un
+// pipeline de renovación hacia adelante (30/60/90 días), que la
+// investigación confirmó como el estándar de la industria (AMS reales como
+// Applied Epic/HawkSoft lo arman así). "Eventos" se excluye explícitamente
+// porque cubre una fecha puntual, no es una póliza que se "renueve" cada
+// año. "Cumplimiento" se incluye pero marcado como estimado, porque en la
+// práctica su vigencia real está atada al contrato garantizado y puede no
+// ser exactamente un año.
+// Acepta "dd-mm-yyyy" (lo que produce formatFechaCelda para celdas de tipo
+// fecha real) Y "d/m/yyyy" sin ceros a la izquierda (confirmado 2026-10-21:
+// así vienen las celdas de Base 2025 que no pasaron por formatFechaCelda
+// por no ser numéricas en origen) -- ver comentario de formatFechaCelda en
+// api/_lib/dashboardPrimas.js.
+function parseFechaDDMMYYYY(s) {
+  if (!s) return null;
+  const m = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(String(s).trim());
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function addYears(date, n) {
+  const d = new Date(date);
+  d.setFullYear(d.getFullYear() + n);
+  return d;
+}
+function diffDias(a, b) { return Math.round((a.getTime() - b.getTime()) / 86400000); }
+
+// Pólizas de 2025 que (estimando vigencia anual) vencen dentro de los
+// próximos 90 días Y cuyo tomador todavía NO aparece en 2026 para ese MISMO
+// ramo (si ya renovó ese ramo puntual, no hace falta llamarlo aunque haya
+// renovado con otro nombre -- por eso se compara por ramo exacto, no se
+// reusa el cruce difuso de buildRenewalTable). "Eventos" se excluye porque
+// cubre una fecha puntual, y "Accidentes Escolares" porque es un ANEXO a
+// otra póliza (pedido explícito 2026-10-21), no tiene vigencia anual propia.
+function buildVencePronto(rows2025, rows2026, hoy) {
+  const renovadoRamo = new Set();
+  rows2026.forEach((r) => { renovadoRamo.add(normTomador(r.tomador) + "|" + (r.ramo || "")); });
+
+  const porClave = {};
+  rows2025.forEach((r) => {
+    if (isEscolar(r)) return;
+    const ramoLower = (r.ramo || "").trim().toLowerCase();
+    if (ramoLower === "eventos") return;
+    const k = normTomador(r.tomador);
+    if (!k) return;
+    if (renovadoRamo.has(k + "|" + (r.ramo || ""))) return;
+    const fecha = parseFechaDDMMYYYY(r.fecha);
+    if (!fecha) return;
+    const vence = addYears(fecha, 1);
+    const dias = diffDias(vence, hoy);
+    if (dias > 90) return;
+    const clave = k + "|" + (r.ramo || "");
+    if (!porClave[clave] || dias < porClave[clave].dias) {
+      porClave[clave] = { nombre: r.tomador, ramo: r.ramo || "(Sin dato)", prima: r.prima, vence, dias, estimado: ramoLower === "cumplimiento" };
+    }
+  });
+  return Object.values(porClave).sort((a, b) => a.dias - b.dias);
+}
+
+// ---------- venta cruzada (cross-sell) ----------
+// Palanca de crecimiento más fuerte según la investigación: clientes con 2+
+// ramos retienen ~91% vs ~67% con solo 1. Cuenta ramos DISTINTOS por
+// tomador en 2026 (incluye Accidentes Escolares, a diferencia de la tabla
+// de Renovaciones que lo trata aparte -- acá sí cuenta como un ramo más).
+function buildCrossSellData(rows2026) {
+  const ramosPorTomador = {}, nombrePorTomador = {}, primaPorTomador = {};
+  rows2026.forEach((r) => {
+    const k = normTomador(r.tomador);
+    if (!k) return;
+    if (!ramosPorTomador[k]) { ramosPorTomador[k] = new Set(); nombrePorTomador[k] = r.tomador; primaPorTomador[k] = 0; }
+    ramosPorTomador[k].add(r.ramo || "(Sin dato)");
+    primaPorTomador[k] += r.prima;
+  });
+  const tomadores = Object.keys(ramosPorTomador);
+  const totalRamos = tomadores.reduce((a, k) => a + ramosPorTomador[k].size, 0);
+  const promedio = tomadores.length ? totalRamos / tomadores.length : 0;
+  const unRamo = tomadores
+    .filter((k) => ramosPorTomador[k].size === 1)
+    .map((k) => ({ nombre: nombrePorTomador[k], ramo: [...ramosPorTomador[k]][0], prima: primaPorTomador[k] }))
+    .sort((a, b) => b.prima - a.prima);
+  return { promedio, totalTomadores: tomadores.length, unRamo };
+}
+
 // Cada insight es una tarjeta corta: kicker (qué es) + headline (el número
 // que importa) + sub (el detalle de apoyo) — pedido explícito 2026-09-24de
 // reemplazar las frases largas por algo más corto y dinámico en tarjetas.
@@ -226,27 +312,18 @@ function buildInsights(rows2026, rows2025) {
   biggestMover((r) => r.ramo || "(Sin dato)", "Ramo");
   biggestMover((r) => r.compania || "(Sin dato)", "Compañía");
 
-  const renewal = buildRenewalTable(rows2025, rows2026).filter((t) => !t.esNuevo);
-  if (renewal.length) {
-    const noRenovo = renewal.filter((t) => !t.renovo);
-    const pctRenovo = ((renewal.length - noRenovo.length) / renewal.length) * 100;
-    const enRiesgo = noRenovo.reduce((a, t) => a + t.prima2025, 0);
-    if (noRenovo.length) {
-      insights.push({
-        tone: pctRenovo < 60 ? "bad" : "good", icon: "🔁",
-        kicker: "Retención de clientes 2025",
-        headline: `${pctRenovo.toFixed(0)}%`,
-        sub: `${noRenovo.length} de ${renewal.length} sin renovar · ${fmt(enRiesgo)} en riesgo`,
-      });
-    }
-  }
+  // Nota: el insight de retención se removió de acá (2026-10-21) -- ahora es
+  // una tarjeta de cabecera, no tiene sentido repetirlo abajo también.
 
   const tomPrima = sumBy(rows2026, (r) => r.tomador || "(Sin tomador)");
   const tomSorted = Object.keys(tomPrima).sort((a, b) => tomPrima[b] - tomPrima[a]);
+  // Pedido explícito (investigación 2026-10-21): la concentración de
+  // cartera es una preocupación ejecutiva constante, se muestra siempre que
+  // haya datos -- no solo cuando supera un umbral.
   if (tomSorted.length >= 3 && total2026 > 0) {
     const top3 = tomSorted.slice(0, 3).reduce((a, k) => a + tomPrima[k], 0);
     const share = (top3 / total2026) * 100;
-    if (share > 30) {
+    {
       insights.push({
         tone: share > 50 ? "bad" : "good", icon: "🎯",
         kicker: "Concentración de cartera",
@@ -568,6 +645,23 @@ export default function PulsoPrimasPage() {
   const atRiskPrima = renewalCohort2025.filter((t) => !t.renovo).reduce((a, t) => a + t.prima2025, 0);
   const escList = useMemo(() => buildEscolaresData(periodRaw2026, periodRaw2025), [periodRaw2026, periodRaw2025]);
 
+  const pctRenovo = renewalCohort2025.length ? (renewedCount / renewalCohort2025.length) * 100 : null;
+
+  // Cross-sell: usa SIEMPRE el libro completo sin filtrar (rawRows2026) --
+  // si se filtrara por ramo, todo el mundo tendría "1 solo ramo" por
+  // definición y el dato dejaría de significar algo.
+  const crossSell = useMemo(() => buildCrossSellData(rawRows2026), [rawRows2026]);
+
+  // Vence pronto: respeta ramo/compañía (tiene sentido acotar a un ramo
+  // puntual) pero NO el período seleccionado -- es hacia adelante desde
+  // hoy, no depende de qué meses históricos se estén mirando.
+  const vencePronto = useMemo(() => {
+    const r25 = applyCategoryOnly(rawRows2025, filterRamo, filterCompania);
+    const r26 = applyCategoryOnly(rawRows2026, filterRamo, filterCompania);
+    return buildVencePronto(r25, r26, new Date());
+  }, [rawRows2025, rawRows2026, filterRamo, filterCompania]);
+  const vencePrimaTotal = vencePronto.reduce((a, v) => a + v.prima, 0);
+
   // Registros individuales (uno por póliza) del tomador seleccionado en el
   // modal de detalle — reusa las mismas claves normalizadas (key2025/
   // key2026) que ya resolvió buildRenewalTable, para no reimplementar el
@@ -696,22 +790,33 @@ export default function PulsoPrimasPage() {
         <StatCard label="Total año 2025" value={fmt(totalPrima2025FullYear)} color="#6b87b0" sub={`${countPrima2025FullYear} pólizas · año completo`} />
       </div>
 
-      <Card title="Evolución mensual de primas">
-        <Legend />
-        <MonthlyChart s2025={s2025} s2026={s2026} />
-      </Card>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 0 }}>
-        <Card title="Primas por compañía" desc="Cifras en millones de pesos (COP)">
-          <Legend /><CategoryChart categories={compCats.cats} v2026={compCats.v26} v2025={compCats.v25} />
-        </Card>
-        <Card title="Primas por ramo" desc="Cifras en millones de pesos (COP)">
-          <Legend /><HorizontalCategoryChart categories={ramoCats.cats} v2026={ramoCats.v26} v2025={ramoCats.v25} />
-        </Card>
+      {/* Cabecera ejecutiva (2026-10-21): lo primero que debe verse es si el
+          negocio está sano (retención), qué urge llamar (vence pronto) y
+          dónde crecer sin buscar clientes nuevos (cross-sell) -- antes esto
+          vivía enterrado al final de la página como "insights". */}
+      <div style={S.statGrid}>
+        <StatCard
+          label="Retención 2025 → 2026"
+          value={pctRenovo == null ? "—" : `${pctRenovo.toFixed(0)}%`}
+          color={pctRenovo == null ? "#6b87b0" : pctRenovo >= 93 ? COLOR_GOOD : pctRenovo >= 88 ? "#f59e0b" : COLOR_BAD}
+          sub={pctRenovo == null ? "Sin base de comparación" : `Meta sana 93%+ · ${renewalCohort2025.length - renewedCount} de ${renewalCohort2025.length} sin renovar`}
+        />
+        <StatCard
+          label="Vencen en 90 días"
+          value={String(vencePronto.length)}
+          color={vencePronto.some((v) => v.dias < 0) ? COLOR_BAD : vencePronto.length ? "#f59e0b" : COLOR_GOOD}
+          sub={vencePronto.length ? `${fmt(vencePrimaTotal)} en prima · estimado (emisión + 1 año)` : "Nada venciendo pronto"}
+        />
+        <StatCard
+          label="Ramos por cliente"
+          value={crossSell.promedio.toFixed(1)}
+          color={crossSell.promedio >= 2.2 ? COLOR_GOOD : crossSell.promedio >= 1.5 ? "#f59e0b" : COLOR_BAD}
+          sub={`Benchmark agencias top 2.2+ · ${crossSell.unRamo.length} clientes con 1 solo ramo`}
+        />
       </div>
 
       <Card
-        title="Renovaciones 2025 → 2026"
+        title="Clientes sin renovar"
         desc={`${renewedCount} de ${renewalCohort2025.length} clientes de 2025 (sin contar Accidentes Escolares) ya renovaron en 2026 · ${fmt(atRiskPrima)} en prima 2025 todavía sin renovar${renewalNuevos.length ? ` · ${renewalNuevos.length} clientes nuevos en 2026 (sin cruce en 2025)` : ""}`}
       >
         <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
@@ -738,6 +843,70 @@ export default function PulsoPrimasPage() {
         </div>
         <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>Cruce por nombre de tomador (no por número de póliza, que puede cambiar entre años).</div>
       </Card>
+
+      <Card
+        title="Vence pronto (próximos 90 días)"
+        desc="Estimado: fecha de emisión + 1 año de vigencia · excluye Eventos (fecha puntual) y Accidentes Escolares (es un anexo, no vigencia propia) · Cumplimiento marcado como estimado porque su plazo real depende del contrato garantizado"
+      >
+        {vencePronto.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Nada vence en los próximos 90 días con los filtros elegidos.</div>
+        ) : (
+          <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
+            <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
+              <span>Tomador</span><span>Ramo</span><span>Vence</span><span>Prima 2025</span>
+            </div>
+            {vencePronto.map((v, i) => (
+              <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr 1fr" }}>
+                <div style={{ fontWeight: 600 }}>{v.nombre}</div>
+                <div>{v.ramo}{v.estimado && <span title="Plazo estimado en 1 año -- Cumplimiento puede variar según el contrato garantizado" style={{ marginLeft: 5, fontSize: 10.5, color: "#f59e0b", cursor: "help" }}>≈</span>}</div>
+                <span style={S.badge(v.dias < 0 ? COLOR_BAD : v.dias <= 30 ? COLOR_BAD : v.dias <= 60 ? "#f59e0b" : COLOR_GOOD)}>
+                  {v.dias < 0 ? `Venció hace ${-v.dias}d` : `En ${v.dias}d`}
+                </span>
+                <div>{fmt(v.prima)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Oportunidades de venta cruzada"
+        desc={`Promedio del libro: ${crossSell.promedio.toFixed(1)} ramos por cliente (${crossSell.totalTomadores} clientes) · clientes top de la lista son los de mayor prima con un solo ramo contratado`}
+      >
+        {crossSell.unRamo.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Todos los clientes tienen 2 o más ramos contratados.</div>
+        ) : (
+          <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
+            <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr", position: "sticky", top: 0 }}>
+              <span>Tomador</span><span>Ramo actual</span><span>Prima 2026</span>
+            </div>
+            {crossSell.unRamo.slice(0, 20).map((c, i) => (
+              <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr" }}>
+                <div style={{ fontWeight: 600 }}>{c.nombre}</div>
+                <div>{c.ramo}</div>
+                <div>{fmt(c.prima)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {crossSell.unRamo.length > 20 && (
+          <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>Mostrando los 20 de mayor prima de {crossSell.unRamo.length} clientes con un solo ramo.</div>
+        )}
+      </Card>
+
+      <Card title="Evolución mensual de primas">
+        <Legend />
+        <MonthlyChart s2025={s2025} s2026={s2026} />
+      </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 0 }}>
+        <Card title="Primas por compañía" desc="Cifras en millones de pesos (COP)">
+          <Legend /><CategoryChart categories={compCats.cats} v2026={compCats.v26} v2025={compCats.v25} />
+        </Card>
+        <Card title="Primas por ramo" desc="Cifras en millones de pesos (COP)">
+          <Legend /><HorizontalCategoryChart categories={ramoCats.cats} v2026={ramoCats.v26} v2025={ramoCats.v25} />
+        </Card>
+      </div>
 
       <Card title="Escolares — seguimiento por colegio">
         {escList.length === 0 ? (
