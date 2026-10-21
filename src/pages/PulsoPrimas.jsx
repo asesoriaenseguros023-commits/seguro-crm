@@ -8,15 +8,26 @@ import Modal from "../components/Modal.jsx";
 // hojas de origen — "Base 2026" y "Base 2025" — mismos fixes de datos).
 // El artefacto usa un puente (window.claude.use("mcp")) que solo existe
 // dentro del visor de Artifacts de claude.ai, así que aquí los datos se
-// piden a /api/primas-data.js (lee Google Sheets con una cuenta de servicio,
-// del lado del servidor) en vez de vía conector. Ver [[project-pulso-primas]]
-// — cualquier corrección de datos nueva (alias de ramo/tomador) debe
-// aplicarse en AMBOS lugares (ese archivo server-side y este módulo NO
-// necesita repetirla porque ya llega normalizada desde la API).
+// piden a /api/sheets-dashboards?tipo=primas (lee Google Sheets con una
+// cuenta de servicio, del lado del servidor) en vez de vía conector. Ver
+// [[project-pulso-primas]] — cualquier corrección de datos nueva (alias de
+// ramo/tomador) debe aplicarse en AMBOS lugares (api/_lib/dashboardPrimas.js
+// y, si el artefacto se vuelve a tocar, también ahí).
+//
+// 2026-10-21 — rediseño ejecutivo + pestañas por ramo (pedido explícito del
+// usuario): "combinar ramos en este negocio no va" -- Accidentes Escolares
+// (colegios, ciclo académico) y Cumplimiento (empresas, pólizas atadas a
+// contrato) son negocios distintos entre sí y del resto; mezclarlos en un
+// solo "promedio" o "vence pronto" general no dice nada real. Por eso el
+// módulo ahora tiene una pestaña "General" (totales/comparación entre
+// ramos, eso sí es legítimo) y una pestaña POR RAMO (retención, vence
+// pronto y clientes sin renovar calculados solo con las filas de ESE ramo).
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MESES_ABBR = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const RAMO_ESCOLARES = "accidentes escolares";
+const RAMO_EVENTOS = "eventos";
+const TAB_GENERAL = "__general__";
 const REFETCH_MS = 20 * 60 * 1000;
 
 // Pedido explícito 2026-09-30: este módulo es parte nativa del CRM, no un
@@ -71,13 +82,7 @@ function monthlySeries(rows) {
   });
   return Array.from({ length: 12 }, (_, i) => (seen[i] ? sums[i] : null));
 }
-function isEscolar(r) { return (r.ramo || "").trim().toLowerCase() === RAMO_ESCOLARES; }
 function normTomador(t) { return (t || "").trim().toUpperCase(); }
-function topKeyByValue(obj) {
-  let best = null, bestV = -1;
-  Object.keys(obj).forEach((k) => { if (obj[k] > bestV) { bestV = obj[k]; best = k; } });
-  return best || "(Sin dato)";
-}
 
 function nombreTokens(s) { return s.split(/\s+/).filter(Boolean); }
 // true si TODAS las palabras de "cortas" aparecen en "largas" (subconjunto exacto de palabras)
@@ -86,31 +91,25 @@ function esSubconjuntoDePalabras(cortas, largas) {
   return cortas.length > 0 && cortas.every((t) => set.has(t));
 }
 
-// Cruce de tomadores 2025 -> 2026 (excluye Accidentes Escolares, capítulo aparte)
+// Cruce de tomadores 2025 -> 2026. Ya NO excluye ningún ramo acá adentro
+// (2026-10-21) -- quien llama esta función decide qué filas pasarle (todo
+// un ramo puntual, nunca una mezcla de varios, salvo Escolares que usa su
+// propia vista "seguimiento por colegio" en vez de esta tabla).
 function buildRenewalTable(rows2025, rows2026) {
-  const base2025 = rows2025.filter((r) => !isEscolar(r));
-  const base2026 = rows2026.filter((r) => !isEscolar(r));
-
-  const map2026 = {}, nombre2026 = {}, ramoPrima2026 = {};
-  base2026.forEach((r) => {
+  const map2026 = {}, nombre2026 = {};
+  rows2026.forEach((r) => {
     const k = normTomador(r.tomador);
     if (!k) return;
     map2026[k] = (map2026[k] || 0) + r.prima;
     if (!nombre2026[k]) nombre2026[k] = r.tomador || "(Sin tomador)";
-    if (!ramoPrima2026[k]) ramoPrima2026[k] = {};
-    const rk26 = r.ramo || "(Sin dato)";
-    ramoPrima2026[k][rk26] = (ramoPrima2026[k][rk26] || 0) + r.prima;
   });
 
   const groups = {};
-  base2025.forEach((r) => {
+  rows2025.forEach((r) => {
     const k = normTomador(r.tomador);
     if (!k) return;
-    if (!groups[k]) groups[k] = { nombre: r.tomador || "(Sin tomador)", prima2025: 0, ramoPrima: {} };
-    const g = groups[k];
-    g.prima2025 += r.prima;
-    const rk = r.ramo || "(Sin dato)";
-    g.ramoPrima[rk] = (g.ramoPrima[rk] || 0) + r.prima;
+    if (!groups[k]) groups[k] = { nombre: r.tomador || "(Sin tomador)", prima2025: 0 };
+    groups[k].prima2025 += r.prima;
   });
 
   // Cruce difuso por palabras — SOLO como respaldo cuando el cruce exacto no
@@ -146,7 +145,7 @@ function buildRenewalTable(rows2025, rows2026) {
     const renovo = exact || !!kFuzzy;
     const prima2026 = exact ? map2026[k] : kFuzzy ? map2026[kFuzzy] : 0;
     return {
-      nombre: kFuzzy ? nombre2026[kFuzzy] : g.nombre, ramo: topKeyByValue(g.ramoPrima),
+      nombre: kFuzzy ? nombre2026[kFuzzy] : g.nombre,
       prima2025: g.prima2025, prima2026, renovo, esNuevo: false, cruceAutomatico: !!kFuzzy,
       // Claves normalizadas usadas en el cruce — permiten, al hacer click,
       // volver a filtrar las filas crudas de cada año para este tomador sin
@@ -159,7 +158,7 @@ function buildRenewalTable(rows2025, rows2026) {
   Object.keys(map2026).forEach((k) => {
     if (Object.prototype.hasOwnProperty.call(groups, k)) return;
     if (usados2026.has(k)) return;
-    list.push({ nombre: nombre2026[k], ramo: topKeyByValue(ramoPrima2026[k]), prima2025: 0, prima2026: map2026[k], renovo: true, esNuevo: true, key2025: null, key2026: k });
+    list.push({ nombre: nombre2026[k], prima2025: 0, prima2026: map2026[k], renovo: true, esNuevo: true, key2025: null, key2026: k });
   });
 
   list.sort((a, b) => {
@@ -170,13 +169,11 @@ function buildRenewalTable(rows2025, rows2026) {
   return list;
 }
 
-// YTD por colegio, solo ramo Accidentes Escolares (capítulo aparte)
+// YTD por colegio, solo ramo Accidentes Escolares (vista propia de esa pestaña)
 function buildEscolaresData(rows2026, rows2025) {
-  const r26 = rows2026.filter(isEscolar);
-  const r25 = rows2025.filter(isEscolar);
   const map26 = {}, map25 = {}, n26 = {}, n25 = {};
-  r26.forEach((r) => { const k = r.tomador || "(Sin colegio)"; map26[k] = (map26[k] || 0) + r.prima; n26[k] = (n26[k] || 0) + 1; });
-  r25.forEach((r) => { const k = r.tomador || "(Sin colegio)"; map25[k] = (map25[k] || 0) + r.prima; n25[k] = (n25[k] || 0) + 1; });
+  rows2026.forEach((r) => { const k = r.tomador || "(Sin colegio)"; map26[k] = (map26[k] || 0) + r.prima; n26[k] = (n26[k] || 0) + 1; });
+  rows2025.forEach((r) => { const k = r.tomador || "(Sin colegio)"; map25[k] = (map25[k] || 0) + r.prima; n25[k] = (n25[k] || 0) + 1; });
   const keys = Object.keys(map26).concat(Object.keys(map25).filter((k) => !(k in map26)));
   return keys.map((k) => {
     const v26 = map26[k] || 0, v25 = map25[k] || 0;
@@ -190,11 +187,12 @@ function buildEscolaresData(rows2026, rows2025) {
 // una buena estimación de cuándo vence/debe renovarse -- esto habilita un
 // pipeline de renovación hacia adelante (30/60/90 días), que la
 // investigación confirmó como el estándar de la industria (AMS reales como
-// Applied Epic/HawkSoft lo arman así). "Eventos" se excluye explícitamente
-// porque cubre una fecha puntual, no es una póliza que se "renueve" cada
-// año. "Cumplimiento" se incluye pero marcado como estimado, porque en la
-// práctica su vigencia real está atada al contrato garantizado y puede no
-// ser exactamente un año.
+// Applied Epic/HawkSoft lo arman así). Quien llama esta función NUNCA la
+// invoca para la pestaña Accidentes Escolares (es un anexo a otra póliza,
+// no tiene vigencia propia) ni Eventos (cobertura puntual, no se "renueva"
+// cada año) -- ver el componente. "Cumplimiento" sí se incluye pero
+// marcado como estimado, porque en la práctica su vigencia real está atada
+// al contrato garantizado y puede no ser exactamente un año.
 // Acepta "dd-mm-yyyy" (lo que produce formatFechaCelda para celdas de tipo
 // fecha real) Y "d/m/yyyy" sin ceros a la izquierda (confirmado 2026-10-21:
 // así vienen las celdas de Base 2025 que no pasaron por formatFechaCelda
@@ -214,65 +212,35 @@ function addYears(date, n) {
 }
 function diffDias(a, b) { return Math.round((a.getTime() - b.getTime()) / 86400000); }
 
-// Pólizas de 2025 que (estimando vigencia anual) vencen dentro de los
-// próximos 90 días Y cuyo tomador todavía NO aparece en 2026 para ese MISMO
-// ramo (si ya renovó ese ramo puntual, no hace falta llamarlo aunque haya
-// renovado con otro nombre -- por eso se compara por ramo exacto, no se
-// reusa el cruce difuso de buildRenewalTable). "Eventos" se excluye porque
-// cubre una fecha puntual, y "Accidentes Escolares" porque es un ANEXO a
-// otra póliza (pedido explícito 2026-10-21), no tiene vigencia anual propia.
-function buildVencePronto(rows2025, rows2026, hoy) {
-  const renovadoRamo = new Set();
-  rows2026.forEach((r) => { renovadoRamo.add(normTomador(r.tomador) + "|" + (r.ramo || "")); });
+// Pólizas de 2025 (de UN SOLO ramo, el de la pestaña activa) que, estimando
+// vigencia anual, vencen dentro de los próximos 90 días Y cuyo tomador
+// todavía NO aparece en 2026 para ese mismo ramo.
+function buildVencePronto(rows2025, rows2026, hoy, ramoEsEstimado) {
+  const renovados = new Set();
+  rows2026.forEach((r) => { renovados.add(normTomador(r.tomador)); });
 
-  const porClave = {};
+  const porTomador = {};
   rows2025.forEach((r) => {
-    if (isEscolar(r)) return;
-    const ramoLower = (r.ramo || "").trim().toLowerCase();
-    if (ramoLower === "eventos") return;
     const k = normTomador(r.tomador);
-    if (!k) return;
-    if (renovadoRamo.has(k + "|" + (r.ramo || ""))) return;
+    if (!k || renovados.has(k)) return;
     const fecha = parseFechaDDMMYYYY(r.fecha);
     if (!fecha) return;
     const vence = addYears(fecha, 1);
     const dias = diffDias(vence, hoy);
     if (dias > 90) return;
-    const clave = k + "|" + (r.ramo || "");
-    if (!porClave[clave] || dias < porClave[clave].dias) {
-      porClave[clave] = { nombre: r.tomador, ramo: r.ramo || "(Sin dato)", prima: r.prima, vence, dias, estimado: ramoLower === "cumplimiento" };
+    if (!porTomador[k] || dias < porTomador[k].dias) {
+      porTomador[k] = { nombre: r.tomador, prima: r.prima, vence, dias, estimado: !!ramoEsEstimado };
     }
   });
-  return Object.values(porClave).sort((a, b) => a.dias - b.dias);
-}
-
-// ---------- venta cruzada (cross-sell) ----------
-// Palanca de crecimiento más fuerte según la investigación: clientes con 2+
-// ramos retienen ~91% vs ~67% con solo 1. Cuenta ramos DISTINTOS por
-// tomador en 2026 (incluye Accidentes Escolares, a diferencia de la tabla
-// de Renovaciones que lo trata aparte -- acá sí cuenta como un ramo más).
-function buildCrossSellData(rows2026) {
-  const ramosPorTomador = {}, nombrePorTomador = {}, primaPorTomador = {};
-  rows2026.forEach((r) => {
-    const k = normTomador(r.tomador);
-    if (!k) return;
-    if (!ramosPorTomador[k]) { ramosPorTomador[k] = new Set(); nombrePorTomador[k] = r.tomador; primaPorTomador[k] = 0; }
-    ramosPorTomador[k].add(r.ramo || "(Sin dato)");
-    primaPorTomador[k] += r.prima;
-  });
-  const tomadores = Object.keys(ramosPorTomador);
-  const totalRamos = tomadores.reduce((a, k) => a + ramosPorTomador[k].size, 0);
-  const promedio = tomadores.length ? totalRamos / tomadores.length : 0;
-  const unRamo = tomadores
-    .filter((k) => ramosPorTomador[k].size === 1)
-    .map((k) => ({ nombre: nombrePorTomador[k], ramo: [...ramosPorTomador[k]][0], prima: primaPorTomador[k] }))
-    .sort((a, b) => b.prima - a.prima);
-  return { promedio, totalTomadores: tomadores.length, unRamo };
+  return Object.values(porTomador).sort((a, b) => a.dias - b.dias);
 }
 
 // Cada insight es una tarjeta corta: kicker (qué es) + headline (el número
-// que importa) + sub (el detalle de apoyo) — pedido explícito 2026-09-24de
+// que importa) + sub (el detalle de apoyo) — pedido explícito 2026-09-24 de
 // reemplazar las frases largas por algo más corto y dinámico en tarjetas.
+// Se reusa igual en la pestaña General (compara ENTRE ramos, legítimo ahí)
+// y en cada pestaña de ramo (ahí "Ramo con mayor caída" colapsa a ese único
+// ramo -- sigue siendo una lectura válida de su propia caída YoY).
 function buildInsights(rows2026, rows2025) {
   const insights = [];
   const total2026 = rows2026.reduce((a, r) => a + r.prima, 0);
@@ -312,9 +280,6 @@ function buildInsights(rows2026, rows2025) {
   biggestMover((r) => r.ramo || "(Sin dato)", "Ramo");
   biggestMover((r) => r.compania || "(Sin dato)", "Compañía");
 
-  // Nota: el insight de retención se removió de acá (2026-10-21) -- ahora es
-  // una tarjeta de cabecera, no tiene sentido repetirlo abajo también.
-
   const tomPrima = sumBy(rows2026, (r) => r.tomador || "(Sin tomador)");
   const tomSorted = Object.keys(tomPrima).sort((a, b) => tomPrima[b] - tomPrima[a]);
   // Pedido explícito (investigación 2026-10-21): la concentración de
@@ -323,14 +288,12 @@ function buildInsights(rows2026, rows2025) {
   if (tomSorted.length >= 3 && total2026 > 0) {
     const top3 = tomSorted.slice(0, 3).reduce((a, k) => a + tomPrima[k], 0);
     const share = (top3 / total2026) * 100;
-    {
-      insights.push({
-        tone: share > 50 ? "bad" : "good", icon: "🎯",
-        kicker: "Concentración de cartera",
-        headline: `${share.toFixed(0)}%`,
-        sub: "de la prima 2026 en los 3 tomadores más grandes",
-      });
-    }
+    insights.push({
+      tone: share > 50 ? "bad" : "good", icon: "🎯",
+      kicker: "Concentración de cartera",
+      headline: `${share.toFixed(0)}%`,
+      sub: "de la prima 2026 en los 3 tomadores más grandes",
+    });
   }
 
   return insights.slice(0, 4);
@@ -485,9 +448,8 @@ function CategoryChart({ categories, v2026, v2025 }) {
 }
 
 // Barras horizontales pareadas (2026 vs 2025) por ramo — pedido explícito
-// 2026-09-24. Misma idea que CategoryChart pero categorías en el eje Y,
-// mejor para nombres de ramo largos y para escanear el ranking de arriba
-// hacia abajo.
+// 2026-09-24. Solo se usa en la pestaña General (comparar ramos entre sí
+// no tiene sentido dentro de la pestaña de un solo ramo).
 function HorizontalCategoryChart({ categories, v2026, v2025 }) {
   if (!categories.length) return <div style={{ padding: 24, textAlign: "center", color: "#aaa", fontSize: 13 }}>Sin datos para los filtros elegidos.</div>;
   const width = 460;
@@ -551,7 +513,7 @@ export default function PulsoPrimasPage() {
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  const [filterRamo, setFilterRamo] = useState("");
+  const [activeTab, setActiveTab] = useState(TAB_GENERAL);
   const [filterCompania, setFilterCompania] = useState("");
   const [detalleTomador, setDetalleTomador] = useState(null);
   const [ini2026, setIni2026] = useState(0);
@@ -598,21 +560,27 @@ export default function PulsoPrimasPage() {
   const rawRows2025 = useMemo(() => data?.rows2025 || [], [data]);
   const finToUse2026 = fin2026;
 
+  const esGeneral = activeTab === TAB_GENERAL;
+  const ramoActivo = esGeneral ? "" : activeTab;
+  const esEscolares = !esGeneral && activeTab.trim().toLowerCase() === RAMO_ESCOLARES;
+  const esEventos = !esGeneral && activeTab.trim().toLowerCase() === RAMO_EVENTOS;
+  const esCumplimiento = !esGeneral && activeTab.trim().toLowerCase() === "cumplimiento";
+
   const rows2026 = useMemo(
-    () => applyCategoryOnly(rawRows2026, filterRamo, filterCompania).filter((r) => inPeriod(r, ini2026, finToUse2026)),
-    [rawRows2026, filterRamo, filterCompania, ini2026, finToUse2026]
+    () => applyCategoryOnly(rawRows2026, ramoActivo, filterCompania).filter((r) => inPeriod(r, ini2026, finToUse2026)),
+    [rawRows2026, ramoActivo, filterCompania, ini2026, finToUse2026]
   );
   const rows2025 = useMemo(
-    () => applyCategoryOnly(rawRows2025, filterRamo, filterCompania).filter((r) => inPeriod(r, ini2025, fin2025)),
-    [rawRows2025, filterRamo, filterCompania, ini2025, fin2025]
+    () => applyCategoryOnly(rawRows2025, ramoActivo, filterCompania).filter((r) => inPeriod(r, ini2025, fin2025)),
+    [rawRows2025, ramoActivo, filterCompania, ini2025, fin2025]
   );
-  const periodRaw2026 = useMemo(() => rawRows2026.filter((r) => inPeriod(r, ini2026, finToUse2026)), [rawRows2026, ini2026, finToUse2026]);
-  const periodRaw2025 = useMemo(() => rawRows2025.filter((r) => inPeriod(r, ini2025, fin2025)), [rawRows2025, ini2025, fin2025]);
+  const periodRaw2026 = useMemo(() => applyCategoryOnly(rawRows2026, ramoActivo, filterCompania).filter((r) => inPeriod(r, ini2026, finToUse2026)), [rawRows2026, ramoActivo, filterCompania, ini2026, finToUse2026]);
+  const periodRaw2025 = useMemo(() => applyCategoryOnly(rawRows2025, ramoActivo, filterCompania).filter((r) => inPeriod(r, ini2025, fin2025)), [rawRows2025, ramoActivo, filterCompania, ini2025, fin2025]);
 
   const totalPrima2026 = rows2026.reduce((a, r) => a + r.prima, 0);
   const totalPrima2025Periodo = rows2025.reduce((a, r) => a + r.prima, 0);
-  const totalPrima2025FullYear = applyCategoryOnly(rawRows2025, filterRamo, filterCompania).reduce((a, r) => a + r.prima, 0);
-  const countPrima2025FullYear = applyCategoryOnly(rawRows2025, filterRamo, filterCompania).length;
+  const totalPrima2025FullYear = applyCategoryOnly(rawRows2025, ramoActivo, filterCompania).reduce((a, r) => a + r.prima, 0);
+  const countPrima2025FullYear = applyCategoryOnly(rawRows2025, ramoActivo, filterCompania).length;
   const mismoPeriodo = ini2026 === ini2025 && finToUse2026 === fin2025;
   const deltaPct = totalPrima2025Periodo !== 0 ? ((totalPrima2026 - totalPrima2025Periodo) / Math.abs(totalPrima2025Periodo)) * 100 : null;
 
@@ -627,39 +595,47 @@ export default function PulsoPrimasPage() {
     return { cats, v26: cats.map((c) => c26[c] || 0), v25: cats.map((c) => c25[c] || 0) };
   }, [rows2026, rows2025]);
 
+  // Primas por ramo / Detalle por ramo: SOLO se calculan sobre todo el
+  // libro (sin acotar a ramoActivo) porque solo se usan en la pestaña
+  // General -- comparar ramos entre sí ahí sí es legítimo.
+  const rowsGeneral2026 = useMemo(() => applyCategoryOnly(rawRows2026, "", filterCompania).filter((r) => inPeriod(r, ini2026, finToUse2026)), [rawRows2026, filterCompania, ini2026, finToUse2026]);
+  const rowsGeneral2025 = useMemo(() => applyCategoryOnly(rawRows2025, "", filterCompania).filter((r) => inPeriod(r, ini2025, fin2025)), [rawRows2025, filterCompania, ini2025, fin2025]);
   const ramoCats = useMemo(() => {
-    const r26 = sumBy(rows2026, (r) => r.ramo || "(Sin dato)");
-    const r25 = sumBy(rows2025, (r) => r.ramo || "(Sin dato)");
+    const r26 = sumBy(rowsGeneral2026, (r) => r.ramo || "(Sin dato)");
+    const r25 = sumBy(rowsGeneral2025, (r) => r.ramo || "(Sin dato)");
     const cats = Object.keys(r26).concat(Object.keys(r25).filter((k) => !(k in r26)));
     cats.sort((a, b) => (r26[b] || 0) - (r26[a] || 0));
-    const n26 = sumBy(rows2026.map((r) => ({ ramo: r.ramo, prima: 1 })), (r) => r.ramo || "(Sin dato)");
-    const n25 = sumBy(rows2025.map((r) => ({ ramo: r.ramo, prima: 1 })), (r) => r.ramo || "(Sin dato)");
+    const n26 = sumBy(rowsGeneral2026.map((r) => ({ ramo: r.ramo, prima: 1 })), (r) => r.ramo || "(Sin dato)");
+    const n25 = sumBy(rowsGeneral2025.map((r) => ({ ramo: r.ramo, prima: 1 })), (r) => r.ramo || "(Sin dato)");
     return { cats, v26: cats.map((c) => r26[c] || 0), v25: cats.map((c) => r25[c] || 0), n26, n25 };
-  }, [rows2026, rows2025]);
+  }, [rowsGeneral2026, rowsGeneral2025]);
 
   const insights = useMemo(() => buildInsights(periodRaw2026, periodRaw2025), [periodRaw2026, periodRaw2025]);
-  const renewalList = useMemo(() => buildRenewalTable(rows2025, rows2026), [rows2025, rows2026]);
+
+  // Retención / "clientes sin renovar" -- solo tiene sentido dentro de un
+  // ramo puntual (no en General, no en Escolares que usa su propia vista).
+  const renewalList = useMemo(
+    () => (esGeneral || esEscolares) ? [] : buildRenewalTable(rows2025, rows2026),
+    [esGeneral, esEscolares, rows2025, rows2026]
+  );
   const renewalCohort2025 = renewalList.filter((t) => !t.esNuevo);
   const renewalNuevos = renewalList.filter((t) => t.esNuevo);
   const renewedCount = renewalCohort2025.filter((t) => t.renovo).length;
   const atRiskPrima = renewalCohort2025.filter((t) => !t.renovo).reduce((a, t) => a + t.prima2025, 0);
-  const escList = useMemo(() => buildEscolaresData(periodRaw2026, periodRaw2025), [periodRaw2026, periodRaw2025]);
-
   const pctRenovo = renewalCohort2025.length ? (renewedCount / renewalCohort2025.length) * 100 : null;
 
-  // Cross-sell: usa SIEMPRE el libro completo sin filtrar (rawRows2026) --
-  // si se filtrara por ramo, todo el mundo tendría "1 solo ramo" por
-  // definición y el dato dejaría de significar algo.
-  const crossSell = useMemo(() => buildCrossSellData(rawRows2026), [rawRows2026]);
+  const escList = useMemo(() => esEscolares ? buildEscolaresData(periodRaw2026, periodRaw2025) : [], [esEscolares, periodRaw2026, periodRaw2025]);
 
-  // Vence pronto: respeta ramo/compañía (tiene sentido acotar a un ramo
-  // puntual) pero NO el período seleccionado -- es hacia adelante desde
-  // hoy, no depende de qué meses históricos se estén mirando.
+  // Vence pronto: NO depende del período seleccionado (es hacia adelante
+  // desde hoy, no de qué meses históricos se estén mirando) -- sí respeta
+  // compañía y el ramo de la pestaña activa. No se calcula en General, en
+  // Escolares (anexo, sin vigencia propia) ni en Eventos (cobertura puntual).
   const vencePronto = useMemo(() => {
-    const r25 = applyCategoryOnly(rawRows2025, filterRamo, filterCompania);
-    const r26 = applyCategoryOnly(rawRows2026, filterRamo, filterCompania);
-    return buildVencePronto(r25, r26, new Date());
-  }, [rawRows2025, rawRows2026, filterRamo, filterCompania]);
+    if (esGeneral || esEscolares || esEventos) return [];
+    const r25 = applyCategoryOnly(rawRows2025, ramoActivo, filterCompania);
+    const r26 = applyCategoryOnly(rawRows2026, ramoActivo, filterCompania);
+    return buildVencePronto(r25, r26, new Date(), esCumplimiento);
+  }, [esGeneral, esEscolares, esEventos, esCumplimiento, rawRows2025, rawRows2026, ramoActivo, filterCompania]);
   const vencePrimaTotal = vencePronto.reduce((a, v) => a + v.prima, 0);
 
   // Registros individuales (uno por póliza) del tomador seleccionado en el
@@ -680,13 +656,13 @@ export default function PulsoPrimasPage() {
   const compOptions = useMemo(() => uniqueValues([...rawRows2026, ...rawRows2025], (r) => r.compania || "(Sin dato)"), [rawRows2026, rawRows2025]);
   const mesActual = mesEnCurso();
   const periodoDefault = ini2026 === 0 && finToUse2026 === mesActual && ini2025 === 0 && fin2025 === mesActual;
-  const filtersActive = !!(filterRamo || filterCompania || !periodoDefault);
+  const filtersActive = !!(filterCompania || !periodoDefault);
 
   const label2026 = `${MESES_ABBR[ini2026]}–${MESES_ABBR[finToUse2026]}`;
   const label2025 = `${MESES_ABBR[ini2025]}–${MESES_ABBR[fin2025]}`;
 
   const limpiarFiltros = () => {
-    setFilterRamo(""); setFilterCompania("");
+    setFilterCompania("");
     setIni2026(0); setFin2026(mesActual);
     setIni2025(0); setFin2025(mesActual);
   };
@@ -727,14 +703,36 @@ export default function PulsoPrimasPage() {
         </div>
       </div>
 
+      {/* Pestañas por ramo (2026-10-21, pedido explícito): cada ramo es un
+          negocio distinto en esta agencia -- General compara entre ramos,
+          cada pestaña de ramo mira SOLO sus propias filas. */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14, borderBottom: `1px solid ${BLUE.border}`, paddingBottom: 10 }}>
+        <button
+          onClick={() => setActiveTab(TAB_GENERAL)}
+          style={{
+            padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+            background: esGeneral ? BLUE.primary : "#fff", color: esGeneral ? "#fff" : BLUE.text,
+            boxShadow: esGeneral ? "none" : `0 0 0 1px ${BLUE.border} inset`,
+          }}
+        >
+          General
+        </button>
+        {ramoOptions.map((r) => (
+          <button
+            key={r}
+            onClick={() => setActiveTab(r)}
+            style={{
+              padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+              background: activeTab === r ? BLUE.primary : "#fff", color: activeTab === r ? "#fff" : BLUE.text,
+              boxShadow: activeTab === r ? "none" : `0 0 0 1px ${BLUE.border} inset`,
+            }}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+
       <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={S.label}>Ramo</label>
-          <select style={{ ...S.select, width: "auto", minWidth: 170 }} value={filterRamo} onChange={(e) => setFilterRamo(e.target.value)}>
-            <option value="">Todos los ramos</option>
-            {ramoOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={S.label}>Compañía</label>
           <select style={{ ...S.select, width: "auto", minWidth: 170 }} value={filterCompania} onChange={(e) => setFilterCompania(e.target.value)}>
@@ -779,7 +777,7 @@ export default function PulsoPrimasPage() {
       )}
 
       <div style={S.statGrid}>
-        <StatCard label="Primas 2026" value={fmt(totalPrima2026)} color={COLOR_2026} sub={`${rows2026.length} pólizas · ${label2026}`} />
+        <StatCard label={esGeneral ? "Primas 2026" : `Primas 2026 — ${activeTab}`} value={fmt(totalPrima2026)} color={COLOR_2026} sub={`${rows2026.length} pólizas · ${label2026}`} />
         <StatCard label={`Primas 2025${mismoPeriodo ? " (mismo período)" : ""}`} value={fmt(totalPrima2025Periodo)} color={COLOR_2025} sub={`${rows2025.length} pólizas · ${label2025}`} />
         <StatCard
           label="Variación"
@@ -790,174 +788,166 @@ export default function PulsoPrimasPage() {
         <StatCard label="Total año 2025" value={fmt(totalPrima2025FullYear)} color="#6b87b0" sub={`${countPrima2025FullYear} pólizas · año completo`} />
       </div>
 
-      {/* Cabecera ejecutiva (2026-10-21): lo primero que debe verse es si el
-          negocio está sano (retención), qué urge llamar (vence pronto) y
-          dónde crecer sin buscar clientes nuevos (cross-sell) -- antes esto
-          vivía enterrado al final de la página como "insights". */}
-      <div style={S.statGrid}>
-        <StatCard
-          label="Retención 2025 → 2026"
-          value={pctRenovo == null ? "—" : `${pctRenovo.toFixed(0)}%`}
-          color={pctRenovo == null ? "#6b87b0" : pctRenovo >= 93 ? COLOR_GOOD : pctRenovo >= 88 ? "#f59e0b" : COLOR_BAD}
-          sub={pctRenovo == null ? "Sin base de comparación" : `Meta sana 93%+ · ${renewalCohort2025.length - renewedCount} de ${renewalCohort2025.length} sin renovar`}
-        />
-        <StatCard
-          label="Vencen en 90 días"
-          value={String(vencePronto.length)}
-          color={vencePronto.some((v) => v.dias < 0) ? COLOR_BAD : vencePronto.length ? "#f59e0b" : COLOR_GOOD}
-          sub={vencePronto.length ? `${fmt(vencePrimaTotal)} en prima · estimado (emisión + 1 año)` : "Nada venciendo pronto"}
-        />
-        <StatCard
-          label="Ramos por cliente"
-          value={crossSell.promedio.toFixed(1)}
-          color={crossSell.promedio >= 2.2 ? COLOR_GOOD : crossSell.promedio >= 1.5 ? "#f59e0b" : COLOR_BAD}
-          sub={`Benchmark agencias top 2.2+ · ${crossSell.unRamo.length} clientes con 1 solo ramo`}
-        />
-      </div>
-
-      <Card
-        title="Clientes sin renovar"
-        desc={`${renewedCount} de ${renewalCohort2025.length} clientes de 2025 (sin contar Accidentes Escolares) ya renovaron en 2026 · ${fmt(atRiskPrima)} en prima 2025 todavía sin renovar${renewalNuevos.length ? ` · ${renewalNuevos.length} clientes nuevos en 2026 (sin cruce en 2025)` : ""}`}
-      >
-        <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
-            <span>Tomador</span><span>Renovó en 2026</span><span>Prima 2026</span><span>Prima 2025</span>
-          </div>
-          {renewalList.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "#aaa" }}>Sin datos para los filtros elegidos.</div>
-          ) : renewalList.map((t, i) => (
-            <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr 1fr" }}>
-              <div
-                style={{ fontWeight: 600, cursor: "pointer", color: BLUE.primary }}
-                onClick={() => setDetalleTomador(t)}
-                title="Ver detalle de pólizas"
-              >
-                {t.nombre}
-                {t.cruceAutomatico && <span title="Nombre distinto en cada año, cruzado automáticamente por coincidencia de palabras" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: COLOR_2025, cursor: "help" }}>🔗</span>}
-              </div>
-              <span style={S.badge(t.esNuevo ? COLOR_2026 : t.renovo ? COLOR_GOOD : COLOR_BAD)}>{t.esNuevo ? "Cliente nuevo" : t.renovo ? "Renovó" : "No ha renovado"}</span>
-              <div style={{ fontWeight: 600 }}>{t.renovo ? fmt(t.prima2026) : "—"}</div>
-              <div>{fmt(t.prima2025)}</div>
-            </div>
-          ))}
+      {/* Retención / Vence pronto -- SOLO dentro de una pestaña de ramo (no
+          General, que mezclaría ramos distintos; no Escolares/Eventos, que
+          no tienen vigencia anual propia). */}
+      {!esGeneral && !esEscolares && (
+        <div style={S.statGrid}>
+          <StatCard
+            label={`Retención 2025 → 2026 — ${activeTab}`}
+            value={pctRenovo == null ? "—" : `${pctRenovo.toFixed(0)}%`}
+            color={pctRenovo == null ? "#6b87b0" : pctRenovo >= 93 ? COLOR_GOOD : pctRenovo >= 88 ? "#f59e0b" : COLOR_BAD}
+            sub={pctRenovo == null ? "Sin base de comparación" : `Meta sana 93%+ · ${renewalCohort2025.length - renewedCount} de ${renewalCohort2025.length} sin renovar`}
+          />
+          {esEventos ? (
+            <StatCard label="Vence pronto" value="No aplica" color="#6b87b0" sub="Eventos cubre una fecha puntual, no se renueva cada año" />
+          ) : (
+            <StatCard
+              label="Vencen en 90 días"
+              value={String(vencePronto.length)}
+              color={vencePronto.some((v) => v.dias < 0) ? COLOR_BAD : vencePronto.length ? "#f59e0b" : COLOR_GOOD}
+              sub={vencePronto.length ? `${fmt(vencePrimaTotal)} en prima · estimado (emisión + 1 año)` : "Nada venciendo pronto"}
+            />
+          )}
         </div>
-        <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>Cruce por nombre de tomador (no por número de póliza, que puede cambiar entre años).</div>
-      </Card>
+      )}
+      {esEscolares && (
+        <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 16, marginTop: -10 }}>
+          Accidentes Escolares es un anexo a otra póliza, sin vigencia/vencimiento propio -- por eso acá no se muestra retención ni vence pronto, solo el seguimiento por colegio de abajo.
+        </div>
+      )}
 
-      <Card
-        title="Vence pronto (próximos 90 días)"
-        desc="Estimado: fecha de emisión + 1 año de vigencia · excluye Eventos (fecha puntual) y Accidentes Escolares (es un anexo, no vigencia propia) · Cumplimiento marcado como estimado porque su plazo real depende del contrato garantizado"
-      >
-        {vencePronto.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Nada vence en los próximos 90 días con los filtros elegidos.</div>
-        ) : (
-          <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
+      {!esGeneral && !esEscolares && (
+        <Card
+          title="Clientes sin renovar"
+          desc={`${renewedCount} de ${renewalCohort2025.length} clientes de 2025 en ${activeTab} ya renovaron en 2026 · ${fmt(atRiskPrima)} en prima 2025 todavía sin renovar${renewalNuevos.length ? ` · ${renewalNuevos.length} clientes nuevos en 2026 (sin cruce en 2025)` : ""}`}
+        >
+          <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
             <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
-              <span>Tomador</span><span>Ramo</span><span>Vence</span><span>Prima 2025</span>
+              <span>Tomador</span><span>Renovó en 2026</span><span>Prima 2026</span><span>Prima 2025</span>
             </div>
-            {vencePronto.map((v, i) => (
+            {renewalList.length === 0 ? (
+              <div style={{ padding: 32, textAlign: "center", color: "#aaa" }}>Sin datos para los filtros elegidos.</div>
+            ) : renewalList.map((t, i) => (
               <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr 1fr" }}>
-                <div style={{ fontWeight: 600 }}>{v.nombre}</div>
-                <div>{v.ramo}{v.estimado && <span title="Plazo estimado en 1 año -- Cumplimiento puede variar según el contrato garantizado" style={{ marginLeft: 5, fontSize: 10.5, color: "#f59e0b", cursor: "help" }}>≈</span>}</div>
-                <span style={S.badge(v.dias < 0 ? COLOR_BAD : v.dias <= 30 ? COLOR_BAD : v.dias <= 60 ? "#f59e0b" : COLOR_GOOD)}>
-                  {v.dias < 0 ? `Venció hace ${-v.dias}d` : `En ${v.dias}d`}
-                </span>
-                <div>{fmt(v.prima)}</div>
+                <div
+                  style={{ fontWeight: 600, cursor: "pointer", color: BLUE.primary }}
+                  onClick={() => setDetalleTomador(t)}
+                  title="Ver detalle de pólizas"
+                >
+                  {t.nombre}
+                  {t.cruceAutomatico && <span title="Nombre distinto en cada año, cruzado automáticamente por coincidencia de palabras" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: COLOR_2025, cursor: "help" }}>🔗</span>}
+                </div>
+                <span style={S.badge(t.esNuevo ? COLOR_2026 : t.renovo ? COLOR_GOOD : COLOR_BAD)}>{t.esNuevo ? "Cliente nuevo" : t.renovo ? "Renovó" : "No ha renovado"}</span>
+                <div style={{ fontWeight: 600 }}>{t.renovo ? fmt(t.prima2026) : "—"}</div>
+                <div>{fmt(t.prima2025)}</div>
               </div>
             ))}
           </div>
-        )}
-      </Card>
+          <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>Cruce por nombre de tomador (no por número de póliza, que puede cambiar entre años).</div>
+        </Card>
+      )}
 
-      <Card
-        title="Oportunidades de venta cruzada"
-        desc={`Promedio del libro: ${crossSell.promedio.toFixed(1)} ramos por cliente (${crossSell.totalTomadores} clientes) · clientes top de la lista son los de mayor prima con un solo ramo contratado`}
-      >
-        {crossSell.unRamo.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Todos los clientes tienen 2 o más ramos contratados.</div>
-        ) : (
-          <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
-            <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr", position: "sticky", top: 0 }}>
-              <span>Tomador</span><span>Ramo actual</span><span>Prima 2026</span>
-            </div>
-            {crossSell.unRamo.slice(0, 20).map((c, i) => (
-              <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr" }}>
-                <div style={{ fontWeight: 600 }}>{c.nombre}</div>
-                <div>{c.ramo}</div>
-                <div>{fmt(c.prima)}</div>
+      {!esGeneral && !esEscolares && !esEventos && (
+        <Card
+          title="Vence pronto (próximos 90 días)"
+          desc={`Estimado: fecha de emisión + 1 año de vigencia${esCumplimiento ? " · marcado como estimado porque el plazo real de Cumplimiento depende del contrato garantizado" : ""}`}
+        >
+          {vencePronto.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Nada vence en los próximos 90 días con los filtros elegidos.</div>
+          ) : (
+            <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
+              <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1fr", position: "sticky", top: 0 }}>
+                <span>Tomador</span><span>Vence</span><span>Prima 2025</span>
               </div>
-            ))}
-          </div>
-        )}
-        {crossSell.unRamo.length > 20 && (
-          <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 10 }}>Mostrando los 20 de mayor prima de {crossSell.unRamo.length} clientes con un solo ramo.</div>
-        )}
-      </Card>
+              {vencePronto.map((v, i) => (
+                <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1fr" }}>
+                  <div style={{ fontWeight: 600 }}>{v.nombre}{v.estimado && <span title="Plazo estimado en 1 año -- Cumplimiento puede variar según el contrato garantizado" style={{ marginLeft: 5, fontSize: 10.5, color: "#f59e0b", cursor: "help" }}>≈</span>}</div>
+                  <span style={S.badge(v.dias < 0 ? COLOR_BAD : v.dias <= 30 ? COLOR_BAD : v.dias <= 60 ? "#f59e0b" : COLOR_GOOD)}>
+                    {v.dias < 0 ? `Venció hace ${-v.dias}d` : `En ${v.dias}d`}
+                  </span>
+                  <div>{fmt(v.prima)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {esEscolares && (
+        <Card title="Seguimiento por colegio">
+          {escList.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Sin pólizas de Accidentes Escolares registradas todavía.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 0.8fr 1fr 1fr 0.8fr" }}>
+                <span>Colegio</span><span>Pólizas 2026</span><span>{`Prima 2026 (${label2026})`}</span><span>{`Prima 2025 (${label2025})`}</span><span>Variación</span>
+              </div>
+              {escList.map((x, i) => (
+                <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 0.8fr 1fr 1fr 0.8fr" }}>
+                  <div>{x.colegio}</div>
+                  <div>{x.n2026}</div>
+                  <div>{fmt(x.prima2026)}</div>
+                  <div>{fmt(x.prima2025)}</div>
+                  <div><DeltaChip delta={x.delta} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card title="Evolución mensual de primas">
         <Legend />
         <MonthlyChart s2025={s2025} s2026={s2026} />
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 0 }}>
-        <Card title="Primas por compañía" desc="Cifras en millones de pesos (COP)">
+      {esGeneral ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 0 }}>
+          <Card title="Primas por compañía" desc="Cifras en millones de pesos (COP)">
+            <Legend /><CategoryChart categories={compCats.cats} v2026={compCats.v26} v2025={compCats.v25} />
+          </Card>
+          <Card title="Primas por ramo" desc="Cifras en millones de pesos (COP)">
+            <Legend /><HorizontalCategoryChart categories={ramoCats.cats} v2026={ramoCats.v26} v2025={ramoCats.v25} />
+          </Card>
+        </div>
+      ) : (
+        <Card title="Primas por compañía" desc={`Cifras en millones de pesos (COP) — solo ${activeTab}`}>
           <Legend /><CategoryChart categories={compCats.cats} v2026={compCats.v26} v2025={compCats.v25} />
         </Card>
-        <Card title="Primas por ramo" desc="Cifras en millones de pesos (COP)">
-          <Legend /><HorizontalCategoryChart categories={ramoCats.cats} v2026={ramoCats.v26} v2025={ramoCats.v25} />
-        </Card>
-      </div>
+      )}
 
-      <Card title="Escolares — seguimiento por colegio">
-        {escList.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Sin pólizas de Accidentes Escolares registradas todavía.</div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 0.8fr 1fr 1fr 0.8fr" }}>
-              <span>Colegio</span><span>Pólizas 2026</span><span>{`Prima 2026 (${label2026})`}</span><span>{`Prima 2025 (${label2025})`}</span><span>Variación</span>
-            </div>
-            {escList.map((x, i) => (
-              <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 0.8fr 1fr 1fr 0.8fr" }}>
-                <div>{x.colegio}</div>
-                <div>{x.n2026}</div>
-                <div>{fmt(x.prima2026)}</div>
-                <div>{fmt(x.prima2025)}</div>
-                <div><DeltaChip delta={x.delta} /></div>
+      {esGeneral && (
+        <Card title="Detalle por ramo" desc={`Con los filtros de arriba aplicados — ${label2026} 2026 vs ${label2025} 2025${filtersActive ? "" : " (sin filtros activos)"}`}>
+          {ramoCats.cats.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Sin datos para los filtros elegidos.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ ...S.tableHead, gridTemplateColumns: "1.4fr 0.8fr 1fr 0.8fr 1fr 0.8fr" }}>
+                <span>Ramo</span><span>Pólizas 2026</span><span>Prima 2026</span><span>Pólizas 2025</span><span>Prima 2025</span><span>Variación</span>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card title="Detalle por ramo" desc={`Con los filtros de arriba aplicados — ${label2026} 2026 vs ${label2025} 2025${filtersActive ? "" : " (sin filtros activos)"}`}>
-        {ramoCats.cats.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "#9aa8c7" }}>Sin datos para los filtros elegidos.</div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ ...S.tableHead, gridTemplateColumns: "1.4fr 0.8fr 1fr 0.8fr 1fr 0.8fr" }}>
-              <span>Ramo</span><span>Pólizas 2026</span><span>Prima 2026</span><span>Pólizas 2025</span><span>Prima 2025</span><span>Variación</span>
+              {ramoCats.cats.map((cat, i) => {
+                const v26 = ramoCats.v26[i], v25 = ramoCats.v25[i];
+                const delta = v25 !== 0 ? ((v26 - v25) / Math.abs(v25)) * 100 : null;
+                return (
+                  <div key={cat} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 0.8fr 1fr 0.8fr 1fr 0.8fr" }}>
+                    <div>{cat}</div>
+                    <div>{ramoCats.n26[cat] || 0}</div>
+                    <div>{fmt(v26)}</div>
+                    <div>{ramoCats.n25[cat] || 0}</div>
+                    <div>{fmt(v25)}</div>
+                    <div><DeltaChip delta={delta} /></div>
+                  </div>
+                );
+              })}
             </div>
-            {ramoCats.cats.map((cat, i) => {
-              const v26 = ramoCats.v26[i], v25 = ramoCats.v25[i];
-              const delta = v25 !== 0 ? ((v26 - v25) / Math.abs(v25)) * 100 : null;
-              return (
-                <div key={cat} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 0.8fr 1fr 0.8fr 1fr 0.8fr" }}>
-                  <div>{cat}</div>
-                  <div>{ramoCats.n26[cat] || 0}</div>
-                  <div>{fmt(v26)}</div>
-                  <div>{ramoCats.n25[cat] || 0}</div>
-                  <div>{fmt(v25)}</div>
-                  <div><DeltaChip delta={delta} /></div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+          )}
+        </Card>
+      )}
 
       {insights.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <SectionLabel>En resumen</SectionLabel>
+          <SectionLabel>En resumen{esGeneral ? "" : ` — ${activeTab}`}</SectionLabel>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {insights.map((ins, i) => (
               <div key={i} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", borderTop: `3px solid ${ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD}`, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
