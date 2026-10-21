@@ -214,15 +214,18 @@ function diffDias(a, b) { return Math.round((a.getTime() - b.getTime()) / 864000
 
 // Pólizas de 2025 (de UN SOLO ramo, el de la pestaña activa) que, estimando
 // vigencia anual, vencen dentro de los próximos 90 días Y cuyo tomador
-// todavía NO aparece en 2026 para ese mismo ramo.
-function buildVencePronto(rows2025, rows2026, hoy, ramoEsEstimado) {
-  const renovados = new Set();
-  rows2026.forEach((r) => { renovados.add(normTomador(r.tomador)); });
-
+// todavía NO renovó ese ramo en 2026. "renovadosKeys" es el MISMO set que
+// ya resolvió buildRenewalTable (cruce exacto + difuso) -- bug real
+// encontrado 2026-10-21: antes acá se recalculaba el cruce con un simple
+// Set de nombres exactos, que no veía los cruces difusos (ej. "GUILLERMO
+// MORENO" en 2025 vs "MORENO LUIS GUILLERMO" en 2026), así que alguien que
+// "Clientes sin renovar" ya marcaba como renovado seguía apareciendo acá
+// como si no hubiera renovado. Pasar el mismo set elimina la divergencia.
+function buildVencePronto(rows2025, renovadosKeys, hoy, ramoEsEstimado) {
   const porTomador = {};
   rows2025.forEach((r) => {
     const k = normTomador(r.tomador);
-    if (!k || renovados.has(k)) return;
+    if (!k || renovadosKeys.has(k)) return;
     const fecha = parseFechaDDMMYYYY(r.fecha);
     if (!fecha) return;
     const vence = addYears(fecha, 1);
@@ -630,11 +633,18 @@ export default function PulsoPrimasPage() {
   // desde hoy, no de qué meses históricos se estén mirando) -- sí respeta
   // compañía y el ramo de la pestaña activa. No se calcula en General, en
   // Escolares (anexo, sin vigencia propia) ni en Eventos (cobertura puntual).
+  // Usa su PROPIO cruce (año completo, sin acotar por período) para decidir
+  // quién ya renovó -- si usara el "renewalList" de arriba (que sí respeta
+  // el período 2026 elegido), alguien que renovó en un mes FUERA del
+  // período seleccionado se vería incorrectamente como "sin renovar" acá.
   const vencePronto = useMemo(() => {
     if (esGeneral || esEscolares || esEventos) return [];
     const r25 = applyCategoryOnly(rawRows2025, ramoActivo, filterCompania);
     const r26 = applyCategoryOnly(rawRows2026, ramoActivo, filterCompania);
-    return buildVencePronto(r25, r26, new Date(), esCumplimiento);
+    const renovadosKeys = new Set(
+      buildRenewalTable(r25, r26).filter((t) => t.renovo).map((t) => t.key2025).filter(Boolean)
+    );
+    return buildVencePronto(r25, renovadosKeys, new Date(), esCumplimiento);
   }, [esGeneral, esEscolares, esEventos, esCumplimiento, rawRows2025, rawRows2026, ramoActivo, filterCompania]);
   const vencePrimaTotal = vencePronto.reduce((a, v) => a + v.prima, 0);
 
