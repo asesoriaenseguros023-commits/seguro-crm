@@ -2,14 +2,15 @@ import { useState } from "react";
 import { S, BLUE } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import CertificadosCajaPage from "./CertificadosCaja.jsx";
+import CertificadosOperativaPage from "./CertificadosOperativa.jsx";
 
 // Entrada al módulo de Certificados Escolares: dos áreas. "Gestión de Caja"
 // es el tablero que ya existía (ventas vs certificados, vía Google Sheets).
-// "Gestión Operativa" todavía no existe — se construye aparte.
+// "Gestión Operativa" muestra los certificados de cada colegio y sus diferencias con Seguros 2026.
 
 const OPCIONES = [
   { id: "caja", titulo: "Gestión de Caja", icon: "chart", color: BLUE.primary, texto: "Lo vendido frente a lo certificado con la aseguradora, caja por colegio, duplicados y certificados por pagar.", disponible: true },
-  { id: "operativa", titulo: "Gestión Operativa", icon: "settings", color: "#f59e0b", texto: "Seguimiento del trabajo diario con los colegios y las aseguradoras.", disponible: false },
+  { id: "operativa", titulo: "Gestión Operativa", icon: "settings", color: "#f59e0b", texto: "Certificados de cada colegio, si están archivados, diferencias con Seguros 2026 y estudiantes sin certificado.", disponible: true },
 ];
 
 export default function CertificadosEscolaresPage() {
@@ -17,24 +18,7 @@ export default function CertificadosEscolaresPage() {
 
   if (vista === "caja") return <CertificadosCajaPage onBack={() => setVista("menu")} />;
 
-  if (vista === "operativa") {
-    return (
-      <div>
-        <div style={S.pageHeader}>
-          <div>
-            <div style={S.pageTitle}>Gestión Operativa</div>
-            <div style={S.pageSub}>Certificados escolares</div>
-          </div>
-          <button style={S.btn("secondary")} onClick={() => setVista("menu")}>← Certificados Escolares</button>
-        </div>
-        <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🚧</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>En construcción</div>
-          <div style={{ fontSize: 13 }}>Esta área se arma en el siguiente paso.</div>
-        </div>
-      </div>
-    );
-  }
+  if (vista === "operativa") return <CertificadosOperativaPage onBack={() => setVista("menu")} />;
 
   return (
     <div>

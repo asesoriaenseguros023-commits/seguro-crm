@@ -209,6 +209,28 @@ export default function CertificadosCajaPage({ onBack }) {
         ))}
       </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <StatCard label="Pólizas vendidas" value={fmtNum.format(t.unicas)} secondary={fmt(t.valorVendido)} sub="Una por persona, sin anulados ni duplicados" color={COLOR_ACCENT} />
+        <StatCard label="Duplicados" value={fmtNum.format(t.duplicados)} secondary={fmt(t.valorDuplicados)} sub="Informativo: este valor no entra en caja" color={t.duplicados ? COLOR_AVISO : undefined} />
+        <StatCard label="Certificados" value={fmt(t.totalCert)} secondary={`${fmtNum.format(certificadosDelColegio.length)} certificados`} sub="Todo lo certificado, esté o no pagado" color={COLOR_ACCENT} />
+        <StatCard label="Por pagar (DEBE)" value={fmt(t.debe)} sub="Certificados que aún se deben a la aseguradora" color={t.debe ? COLOR_WARN : undefined} />
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, padding: "20px 22px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 8 }}>Caja {colegioActivo === "todos" ? "(todos los colegios)" : `· ${colegioActivo}`}</div>
+        <div style={{ fontSize: 34, fontWeight: 700, color: t.caja < 0 ? COLOR_WARN : t.caja > 0 ? COLOR_OK : BLUE.text, letterSpacing: -0.5 }}>{fmt(t.caja)}</div>
+        <div style={{ fontSize: 12, color: "#9aa8c7", marginTop: 2 }}>Valor vendido − valor certificados</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BLUE.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>Valor vendido ({fmtNum.format(t.unicas)} pólizas × tarifa)</span><b style={{ color: BLUE.text }}>{fmt(t.valorVendido)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>(−) Valor certificados</span><b style={{ color: BLUE.text }}>{fmt(t.totalCert)}</b></div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: 12, color: "#6b87b0" }}>
+          <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Duplicados: {fmt(t.valorDuplicados)} (no cuentan en caja)</span>
+          <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Ya pagado a la aseguradora: {fmt(t.pagado)}</span>
+          {t.debe > 0 && <span style={{ background: "#fef2f2", color: COLOR_WARN, borderRadius: 6, padding: "4px 9px" }}>Falta pagar {fmt(t.debe)}</span>}
+        </div>
+      </div>
+
       <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 14px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 10 }}>Para revisar{colegioActivo !== "todos" && ` · ${colegioActivo}`} {alertas.length > 0 && `(${alertas.length})`}</div>
         {alertas.length === 0 ? (
@@ -230,28 +252,6 @@ export default function CertificadosCajaPage({ onBack }) {
             {alertas.length > 5 && <button style={{ ...S.btn("secondary"), marginTop: 10 }} onClick={() => setVerTodasAlertas((v) => !v)}>{verTodasAlertas ? "Ver menos" : `Ver las ${alertas.length}`}</button>}
           </>
         )}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <StatCard label="Pólizas vendidas" value={fmtNum.format(t.unicas)} secondary={fmt(t.valorVendido)} sub="Una por persona, sin anulados ni duplicados" color={COLOR_ACCENT} />
-        <StatCard label="Duplicados" value={fmtNum.format(t.duplicados)} secondary={fmt(t.valorDuplicados)} sub="Informativo: este valor no entra en caja" color={t.duplicados ? COLOR_AVISO : undefined} />
-        <StatCard label="Certificados" value={fmt(t.totalCert)} secondary={`${fmtNum.format(certificadosDelColegio.length)} certificados`} sub="Todo lo certificado, esté o no pagado" color={COLOR_ACCENT} />
-        <StatCard label="Por pagar (DEBE)" value={fmt(t.debe)} sub="Certificados que aún se deben a la aseguradora" color={t.debe ? COLOR_WARN : undefined} />
-      </div>
-
-      <div style={{ background: "#fff", borderRadius: 12, padding: "20px 22px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 8 }}>Caja {colegioActivo === "todos" ? "(todos los colegios)" : `· ${colegioActivo}`}</div>
-        <div style={{ fontSize: 34, fontWeight: 700, color: t.caja < 0 ? COLOR_WARN : t.caja > 0 ? COLOR_OK : BLUE.text, letterSpacing: -0.5 }}>{fmt(t.caja)}</div>
-        <div style={{ fontSize: 12, color: "#9aa8c7", marginTop: 2 }}>Valor vendido − valor certificados</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BLUE.border}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>Valor vendido ({fmtNum.format(t.unicas)} pólizas × tarifa)</span><b style={{ color: BLUE.text }}>{fmt(t.valorVendido)}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>(−) Valor certificados</span><b style={{ color: BLUE.text }}>{fmt(t.totalCert)}</b></div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: 12, color: "#6b87b0" }}>
-          <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Duplicados: {fmt(t.valorDuplicados)} (no cuentan en caja)</span>
-          <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Ya pagado a la aseguradora: {fmt(t.pagado)}</span>
-          {t.debe > 0 && <span style={{ background: "#fef2f2", color: COLOR_WARN, borderRadius: 6, padding: "4px 9px" }}>Falta pagar {fmt(t.debe)}</span>}
-        </div>
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 14px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
