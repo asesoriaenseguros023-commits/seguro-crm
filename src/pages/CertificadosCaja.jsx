@@ -315,7 +315,7 @@ export default function CertificadosCajaPage({ onBack }) {
           <div style={{ ...S.tableHead, gridTemplateColumns: "1.5fr 0.7fr 0.8fr 1fr 1fr 1fr 0.9fr", minWidth: 840 }}>
             <span>Colegio</span><span style={{ textAlign: "right" }}>Pólizas</span><span style={{ textAlign: "right" }}>Duplicados</span><span style={{ textAlign: "right" }}>Vendido</span><span style={{ textAlign: "right" }}>Certificados</span><span style={{ textAlign: "right" }}>Caja</span><span style={{ textAlign: "right" }}>Por pagar</span>
           </div>
-          {analisisTodos.porColegio.map((d) => (
+          {analisisTodos.porColegio.filter((d) => colegioActivo === "todos" || d.colegio === colegioActivo).map((d) => (
             <div
               key={d.colegio}
               style={{ ...S.tableRow, gridTemplateColumns: "1.5fr 0.7fr 0.8fr 1fr 1fr 1fr 0.9fr", minWidth: 840, cursor: "pointer", background: colegioActivo === d.colegio ? BLUE.light : undefined }}
