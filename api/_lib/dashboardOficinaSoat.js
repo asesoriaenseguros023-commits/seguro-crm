@@ -56,6 +56,9 @@ function parseHistoricoSOAT(matrix, hoyIso) {
     nombre: ["nombre y apellidos"],
     tipo: ["tipo vehiculo"],
     valor: ["valor cobrado"],
+    telefono: ["telefono", "teléfono"],
+    medio: ["medio de pago"],
+    placa: ["placa"],
   });
   const out = [];
   filas.forEach((r) => {
@@ -65,7 +68,18 @@ function parseHistoricoSOAT(matrix, hoyIso) {
     const nombre = String(r.nombre || "").trim().toUpperCase();
     if (!nombre) return;
     const tipoRaw = String(r.tipo || "").trim();
-    out.push({ fecha, nombre, tipo: tipoRaw ? normalizarTipo(tipoRaw) : "Otros", valor: Math.round(toNumber(r.valor)) });
+    const placaRaw = String(r.placa || "").trim().toUpperCase();
+    const medioRaw = String(r.medio || "").trim().toUpperCase();
+    out.push({
+      fecha, nombre,
+      tipo: tipoRaw ? normalizarTipo(tipoRaw) : "Otros",
+      valor: Math.round(toNumber(r.valor)),
+      telefono: String(r.telefono || "").replace(/\.0$/, "").trim(),
+      // "No Aplica" es el valor que la oficina escribe cuando no hay placa
+      // (p. ej. motos sin matricular) — se deja vacío en vez de mostrarlo.
+      placa: /^(NO APLICA|N\/A|NA|-)?$/.test(placaRaw) ? "" : placaRaw,
+      medio: medioRaw || "SIN DATO",
+    });
   });
   return out;
 }

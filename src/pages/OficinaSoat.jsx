@@ -175,11 +175,12 @@ const DeltaTd = ({ curr, prev }) => {
   return <div style={{ textAlign: "right", fontWeight: 700, color: d.up ? COLOR_GOOD : COLOR_BAD }}>{d.up ? "+" : ""}{d.pct.toFixed(0)}%</div>;
 };
 
-const KpiTile = ({ color, label, value, hint, hintTone }) => (
-  <div style={{ background: "#fff", borderRadius: 10, padding: "13px 15px 14px", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${color}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)" }}>
+const KpiTile = ({ color, label, value, hint, hintTone, onClick }) => (
+  <div onClick={onClick} title={onClick ? "Ver detalle" : undefined} style={{ background: "#fff", borderRadius: 10, padding: "13px 15px 14px", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${color}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", cursor: onClick ? "pointer" : "default" }}>
     <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 6 }}>{label}</div>
     <div style={{ fontSize: 20, fontWeight: 800, color: BLUE.text, letterSpacing: -0.3 }}>{value}</div>
     {hint && <div style={{ fontSize: 11.5, marginTop: 4, fontWeight: hintTone ? 700 : 400, color: hintTone === "good" ? COLOR_GOOD : hintTone === "bad" ? COLOR_BAD : "#6b87b0" }}>{hint}</div>}
+    {onClick && <div style={{ fontSize: 11, marginTop: 5, color: BLUE.primary, fontWeight: 600 }}>Ver detalle →</div>}
   </div>
 );
 
@@ -218,6 +219,111 @@ function EvolutionChart({ months, values, activeIdx, fmtValue }) {
   );
 }
 
+// ---------- detalle (drill-down) ----------
+const DIAS_SEM = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+function fmtFecha(iso) { return iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "—"; }
+function diaSemana(iso) { const [y, m, d] = iso.split("-").map(Number); return DIAS_SEM[new Date(y, m - 1, d).getDay()]; }
+function masReciente(a, b) { return a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0; }
+function ventasDe(soat, start, end) { return soat.filter((r) => enRango(r.fecha, start, end)).sort(masReciente); }
+
+// Agrupa ventas por cliente. `primeraCompra` es el mapa global (no solo del
+// periodo) para poder mostrar desde cuándo es cliente.
+function agruparClientes(recs, primeraCompra) {
+  const m = {};
+  recs.forEach((r) => {
+    const c = m[r.nombre] || (m[r.nombre] = { nombre: r.nombre, count: 0, valor: 0, ultima: "", telefono: "" });
+    c.count++; c.valor += r.valor;
+    if (r.fecha > c.ultima) { c.ultima = r.fecha; if (r.telefono) c.telefono = r.telefono; }
+    if (!c.telefono && r.telefono) c.telefono = r.telefono;
+  });
+  return Object.values(m).map((c) => ({ ...c, primera: primeraCompra[c.nombre] })).sort((a, b) => b.valor - a.valor);
+}
+
+function fmtDiaCorto(iso) { return `${diaSemana(iso).slice(0, 3)} ${iso.slice(8, 10)}/${iso.slice(5, 7)}`; }
+
+const COLS_VENTAS = "0.85fr 1.7fr 1fr 1.1fr 0.9fr 1fr 0.9fr";
+const COLS_CLIENTES = "1.8fr 1fr 0.6fr 0.9fr 0.9fr 1fr";
+
+function DetalleModal({ detalle, canBack, onBack, onClose, onCliente }) {
+  const [q, setQ] = useState("");
+  const qn = q.trim().toUpperCase();
+  const esVentas = detalle.tipo === "ventas";
+  const filas = useMemo(() => {
+    const base = esVentas ? detalle.ventas : detalle.clientes;
+    if (!qn) return base;
+    return base.filter((r) => r.nombre.includes(qn) || (r.telefono || "").includes(qn) || (r.placa || "").includes(qn));
+  }, [detalle, esVentas, qn]);
+  const totalValor = filas.reduce((sum, r) => sum + r.valor, 0);
+  const totalPolizas = esVentas ? filas.length : filas.reduce((sum, r) => sum + r.count, 0);
+
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={{ ...S.modal, maxWidth: 940 }} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHeader}>
+          <div>
+            <div style={S.modalTitle}>{detalle.titulo}</div>
+            {detalle.sub && <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 3 }}>{detalle.sub}</div>}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {canBack && <button style={S.btn("secondary")} onClick={onBack}>← Volver</button>}
+            <button style={S.btn("secondary")} onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+        <div style={{ padding: "14px 24px 6px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input style={{ ...S.input, flex: 1, minWidth: 200 }} placeholder="Buscar por nombre, teléfono o placa…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <span style={{ fontSize: 12.5, color: "#6b87b0" }}>
+            <b style={{ color: BLUE.text }}>{fmtInt.format(totalPolizas)}</b> {esVentas ? "pólizas" : "compras"}{!esVentas && <> · <b style={{ color: BLUE.text }}>{fmtInt.format(filas.length)}</b> clientes</>} · <b style={{ color: BLUE.text }}>{fmt(totalValor)}</b>
+          </span>
+        </div>
+        <div style={{ padding: "6px 24px 20px" }}>
+          {filas.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", color: "#9aa8c7", fontSize: 13 }}>Sin resultados.</div>
+          ) : (
+            <div style={{ overflowX: "auto", maxHeight: "60vh", overflowY: "auto", border: `1px solid ${BLUE.border}`, borderRadius: 8 }}>
+              <div style={{ minWidth: 720 }}>
+                {esVentas ? (
+                  <>
+                    <div style={{ ...S.tableHead, gridTemplateColumns: COLS_VENTAS, position: "sticky", top: 0 }}>
+                      <span>Fecha</span><span>Cliente</span><span>Teléfono</span><span>Tipo</span><span>Placa</span><span>Pago</span><span style={{ textAlign: "right" }}>Valor</span>
+                    </div>
+                    {filas.map((r, i) => (
+                      <div key={i} style={{ ...S.tableRow, gridTemplateColumns: COLS_VENTAS, padding: "10px 18px", fontSize: 13 }}>
+                        <div>{fmtFecha(r.fecha)}</div>
+                        <div><button onClick={() => onCliente(r.nombre)} style={{ all: "unset", cursor: "pointer", color: BLUE.primary, fontWeight: 600 }}>{r.nombre}</button></div>
+                        <div style={{ color: "#6b87b0" }}>{r.telefono || "—"}</div>
+                        <div>{r.tipo}</div>
+                        <div style={{ fontFamily: "monospace" }}>{r.placa || "—"}</div>
+                        <div style={{ fontSize: 12 }}>{r.medio}</div>
+                        <div style={{ textAlign: "right", fontWeight: 700 }}>{fmt(r.valor)}</div>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ ...S.tableHead, gridTemplateColumns: COLS_CLIENTES, position: "sticky", top: 0 }}>
+                      <span>Cliente</span><span>Teléfono</span><span style={{ textAlign: "right" }}>Compras</span><span style={{ textAlign: "right" }}>Valor</span><span style={{ textAlign: "right" }}>Cliente desde</span><span style={{ textAlign: "right" }}>Última compra</span>
+                    </div>
+                    {filas.map((c) => (
+                      <div key={c.nombre} onClick={() => onCliente(c.nombre)} style={{ ...S.tableRow, gridTemplateColumns: COLS_CLIENTES, padding: "10px 18px", fontSize: 13, cursor: "pointer" }}>
+                        <div style={{ color: BLUE.primary, fontWeight: 600 }}>{c.nombre}</div>
+                        <div style={{ color: "#6b87b0" }}>{c.telefono || "—"}</div>
+                        <div style={{ textAlign: "right" }}>{fmtInt.format(c.count)}</div>
+                        <div style={{ textAlign: "right", fontWeight: 700 }}>{fmt(c.valor)}</div>
+                        <div style={{ textAlign: "right" }}>{fmtFecha(c.primera)}</div>
+                        <div style={{ textAlign: "right" }}>{fmtFecha(c.ultima)}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Card = ({ title, desc, children }) => (
   <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", border: `1px solid ${BLUE.border}`, padding: "18px 20px 16px", marginBottom: 16 }}>
     <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: desc ? 4 : 12 }}>{title}</div>
@@ -239,6 +345,8 @@ export default function OficinaSoatPage() {
   const [selMes, setSelMes] = useState(null);
   const [selAnio, setSelAnio] = useState(null);
   const [catCols, setCatCols] = useState(null);
+  const [pila, setPila] = useState([]);
+  const [diaSel, setDiaSel] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -341,6 +449,42 @@ export default function OficinaSoatPage() {
   const ingresosMes = cajaDelMes.filter((r) => r.monto > 0).reduce((s, r) => s + r.monto, 0);
   const salidasMes = cajaDelMes.filter((r) => r.monto < 0).reduce((s, r) => s + r.monto, 0);
 
+  const ultimaFecha = useMemo(() => soat.reduce((mx, r) => (r.fecha > mx ? r.fecha : mx), ""), [soat]);
+  const diaActivo = diaSel || ultimaFecha;
+  const ventasDia = useMemo(() => (diaActivo ? soat.filter((r) => r.fecha === diaActivo) : []), [soat, diaActivo]);
+
+  const [ventasPeriodo, mediosPeriodo] = useMemo(() => {
+    if (!key) return [[], []];
+    const [a, b] = periodBounds(mode, key);
+    const recs = ventasDe(soat, a, b);
+    const m = {};
+    recs.forEach((r) => { const x = m[r.medio] || (m[r.medio] = { medio: r.medio, count: 0, valor: 0 }); x.count++; x.valor += r.valor; });
+    return [recs, Object.values(m).sort((x, y) => y.valor - x.valor)];
+  }, [soat, mode, key]);
+
+  const resumenPeriodo = useMemo(() => {
+    if (!ventasPeriodo.length) return null;
+    const porDia = {};
+    ventasPeriodo.forEach((r) => { const d = (porDia[r.fecha] ||= { fecha: r.fecha, count: 0, valor: 0 }); d.count++; d.valor += r.valor; });
+    const dias = Object.values(porDia);
+    const mejor = dias.reduce((a, b) => (b.valor > a.valor ? b : a));
+    const valor = ventasPeriodo.reduce((sum, r) => sum + r.valor, 0);
+    return { diasConVentas: dias.length, mejor, ticket: valor / ventasPeriodo.length, promedioDia: valor / dias.length };
+  }, [ventasPeriodo]);
+
+  const abrir = (d) => setPila((p) => [...p, d]);
+  const abrirCliente = (nombre) => {
+    const v = soat.filter((r) => r.nombre === nombre).sort(masReciente);
+    abrir({ titulo: nombre, sub: `Historial completo · ${v.length} compra${v.length === 1 ? "" : "s"}`, tipo: "ventas", ventas: v });
+  };
+  const etiquetaPeriodo = key ? (mode === "mes" ? ymLabel(key) : key) : "";
+  const abrirVentas = (titulo, ventas) => abrir({ titulo, sub: etiquetaPeriodo, tipo: "ventas", ventas });
+  const abrirClientes = (titulo, nombresSet) => {
+    const recs = ventasPeriodo.filter((r) => nombresSet.has(r.nombre));
+    abrir({ titulo, sub: etiquetaPeriodo, tipo: "clientes", clientes: agruparClientes(recs, primeraCompra) });
+  };
+  const abrirDia = (iso) => abrir({ titulo: `Ventas del ${fmtFecha(iso)}`, sub: diaSemana(iso), tipo: "ventas", ventas: soat.filter((r) => r.fecha === iso) });
+
   if (loading) {
     return (
       <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
@@ -413,8 +557,8 @@ export default function OficinaSoatPage() {
       {tab === "ventas" && mVentas && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
-            <KpiTile color={COLOR_VENTAS} label="Pólizas" value={fmtInt.format(mVentas.count)} />
-            <KpiTile color={COLOR_VENTAS} label="Valor cobrado" value={fmtCOPShort(mVentas.valor)} />
+            <KpiTile color={COLOR_VENTAS} label="Pólizas" value={fmtInt.format(mVentas.count)} onClick={() => abrirVentas(`Pólizas · ${etiquetaPeriodo}`, ventasPeriodo)} />
+            <KpiTile color={COLOR_VENTAS} label="Valor cobrado" value={fmtCOPShort(mVentas.valor)} hint={fmt(mVentas.valor)} onClick={() => abrirVentas(`Valor cobrado · ${etiquetaPeriodo}`, ventasPeriodo)} />
             <KpiTile
               color={COLOR_VENTAS} label="Var. cantidad"
               value={mVentasBase ? `${deltaInfo(mVentas.count, mVentasBase.count)?.up ? "+" : ""}${deltaInfo(mVentas.count, mVentasBase.count)?.pct.toFixed(0)}%` : "—"}
@@ -424,10 +568,57 @@ export default function OficinaSoatPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
             <KpiTile color={COLOR_CLIENTES} label="% Recurrencia" value={`${mVentas.pctRecurrencia.toFixed(0)}%`} hint={`${mVentas.recurrentes} de ${mVentas.clientesUnicos}`} />
-            <KpiTile color={COLOR_CLIENTES} label="Clientes nuevos" value={fmtInt.format(mVentas.nuevos)} />
-            <KpiTile color={COLOR_CLIENTES} label="Clientes antiguos" value={fmtInt.format(mVentas.recurrentes)} hint="ya habían comprado antes" />
-            <KpiTile color={COLOR_CLIENTES} label="Buenos clientes" value={fmtInt.format(mVentas.buenosClientes)} hint="2+ compras en el año" />
+            <KpiTile color={COLOR_CLIENTES} label="Clientes nuevos" value={fmtInt.format(mVentas.nuevos)} hint="primera compra en el periodo"
+              onClick={() => abrirClientes(`Clientes nuevos · ${etiquetaPeriodo}`, new Set(mVentas.top.filter((c) => enRango(primeraCompra[c.nombre], ...periodBounds(mode, key))).map((c) => c.nombre)))} />
+            <KpiTile color={COLOR_CLIENTES} label="Clientes antiguos" value={fmtInt.format(mVentas.recurrentes)} hint="ya habían comprado antes"
+              onClick={() => abrirClientes(`Clientes antiguos · ${etiquetaPeriodo}`, new Set(mVentas.top.filter((c) => !enRango(primeraCompra[c.nombre], ...periodBounds(mode, key))).map((c) => c.nombre)))} />
+            <KpiTile color={COLOR_CLIENTES} label="Buenos clientes" value={fmtInt.format(mVentas.buenosClientes)} hint="2+ compras en el año" onClick={() => {
+              const anio = mode === "mes" ? key.slice(0, 4) : key;
+              const recs = ventasDe(soat, `${anio}-01-01`, `${parseInt(anio, 10) + 1}-01-01`);
+              const por = agruparClientes(recs, primeraCompra).filter((c) => c.count >= 2);
+              abrir({ titulo: `Buenos clientes ${anio}`, sub: "2 o más compras en el año", tipo: "clientes", clientes: por });
+            }} />
           </div>
+          {resumenPeriodo && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <KpiTile color={COLOR_VENTAS} label="Ticket promedio" value={fmt(Math.round(resumenPeriodo.ticket))} hint="valor por póliza" />
+              <KpiTile color={COLOR_VENTAS} label="Promedio por día con ventas" value={fmt(Math.round(resumenPeriodo.promedioDia))} hint={`${resumenPeriodo.diasConVentas} días con ventas`} />
+              <KpiTile color={COLOR_VENTAS} label="Mejor día" value={fmtDiaCorto(resumenPeriodo.mejor.fecha)} hint={`${resumenPeriodo.mejor.count} pólizas · ${fmt(resumenPeriodo.mejor.valor)}`} onClick={() => abrirDia(resumenPeriodo.mejor.fecha)} />
+            </div>
+          )}
+
+          <Card title="Ventas del día" desc="quién compró, qué vehículo y cómo pagó">
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+              <button style={S.btn("secondary")} onClick={() => { const d = new Date(diaActivo + "T12:00:00"); d.setDate(d.getDate() - 1); setDiaSel(d.toISOString().slice(0, 10)); }}>←</button>
+              <input type="date" style={{ ...S.input, width: "auto" }} value={diaActivo} max={ultimaFecha} onChange={(e) => e.target.value && setDiaSel(e.target.value)} />
+              <button style={S.btn("secondary")} disabled={diaActivo >= ultimaFecha} onClick={() => { const d = new Date(diaActivo + "T12:00:00"); d.setDate(d.getDate() + 1); setDiaSel(d.toISOString().slice(0, 10)); }}>→</button>
+              {diaActivo !== ultimaFecha && <button style={S.btn("secondary")} onClick={() => setDiaSel(null)}>Último día con datos</button>}
+              <span style={{ fontSize: 13, color: "#6b87b0", marginLeft: "auto" }}>
+                {diaSemana(diaActivo)} {fmtFecha(diaActivo)} · <b style={{ color: BLUE.text }}>{ventasDia.length}</b> pólizas · <b style={{ color: BLUE.text }}>{fmt(ventasDia.reduce((sum, r) => sum + r.valor, 0))}</b>
+              </span>
+            </div>
+            {ventasDia.length === 0 ? (
+              <div style={{ fontSize: 13, color: "#9aa8c7" }}>Sin ventas registradas este día.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <div style={{ minWidth: 640 }}>
+                  <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 1.1fr 0.9fr 1fr 0.9fr" }}>
+                    <span>Cliente</span><span>Teléfono</span><span>Tipo</span><span>Placa</span><span>Pago</span><span style={{ textAlign: "right" }}>Valor</span>
+                  </div>
+                  {ventasDia.map((r, i) => (
+                    <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1.1fr 0.9fr 1fr 0.9fr", padding: "10px 18px" }}>
+                      <div><button onClick={() => abrirCliente(r.nombre)} style={{ all: "unset", cursor: "pointer", color: BLUE.primary, fontWeight: 600 }}>{r.nombre}</button></div>
+                      <div style={{ color: "#6b87b0" }}>{r.telefono || "—"}</div>
+                      <div>{r.tipo}</div>
+                      <div style={{ fontFamily: "monospace" }}>{r.placa || "—"}</div>
+                      <div style={{ fontSize: 12 }}>{r.medio}</div>
+                      <div style={{ textAlign: "right", fontWeight: 700 }}>{fmt(r.valor)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
 
           <Card title={`Comparativo — ${mode === "mes" ? ymLabel(key) : key}`} desc="pólizas y valor cobrado, con variación">
             <div style={{ overflowX: "auto" }}>
@@ -457,13 +648,31 @@ export default function OficinaSoatPage() {
                 {Object.entries(mVentas.tipos).sort((a, b) => b[1] - a[1]).map(([t, c]) => {
                   const totalTipos = Object.values(mVentas.tipos).reduce((s, v) => s + v, 0);
                   return (
-                    <div key={t} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 1fr 0.8fr" }}>
-                      <div>{t}</div>
+                    <div key={t} onClick={() => abrirVentas(`${t} · ${etiquetaPeriodo}`, ventasPeriodo.filter((r) => r.tipo === t))} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 1fr 0.8fr", cursor: "pointer" }}>
+                      <div style={{ color: BLUE.primary, fontWeight: 600 }}>{t}</div>
                       <div style={{ textAlign: "right" }}>{fmtInt.format(c)}</div>
                       <div style={{ textAlign: "right" }}>{totalTipos ? ((c / totalTipos) * 100).toFixed(0) : 0}%</div>
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Medio de pago" desc="cómo pagaron los clientes en el periodo — clic en una fila para ver las pólizas">
+            {mediosPeriodo.length === 0 ? <div style={{ fontSize: 13, color: "#9aa8c7" }}>Sin pólizas en este periodo.</div> : (
+              <div style={{ overflowX: "auto" }}>
+                <div style={{ ...S.tableHead, gridTemplateColumns: "1.4fr 0.8fr 1fr 0.7fr" }}>
+                  <span>Medio</span><span style={{ textAlign: "right" }}>Pólizas</span><span style={{ textAlign: "right" }}>Valor</span><span style={{ textAlign: "right" }}>%</span>
+                </div>
+                {mediosPeriodo.map((m2) => (
+                  <div key={m2.medio} onClick={() => abrirVentas(`${m2.medio} · ${etiquetaPeriodo}`, ventasPeriodo.filter((r) => r.medio === m2.medio))} style={{ ...S.tableRow, gridTemplateColumns: "1.4fr 0.8fr 1fr 0.7fr", cursor: "pointer" }}>
+                    <div style={{ color: BLUE.primary, fontWeight: 600 }}>{m2.medio}</div>
+                    <div style={{ textAlign: "right" }}>{fmtInt.format(m2.count)}</div>
+                    <div style={{ textAlign: "right" }}>{fmt(m2.valor)}</div>
+                    <div style={{ textAlign: "right" }}>{mVentas.valor ? ((m2.valor / mVentas.valor) * 100).toFixed(0) : 0}%</div>
+                  </div>
+                ))}
               </div>
             )}
           </Card>
@@ -477,27 +686,34 @@ export default function OficinaSoatPage() {
             </Card>
           </div>
 
-          <Card title="Top clientes" desc={`${mVentas.top.length} clientes en el periodo`}>
+          <Card title="Top clientes" desc={`${mVentas.top.length} clientes en el periodo — clic en un cliente para ver todas sus compras`}>
             {mVentas.top.length === 0 ? (
               <div style={{ fontSize: 13, color: "#9aa8c7" }}>Sin datos.</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
-                <div style={{ ...S.tableHead, gridTemplateColumns: "1.6fr 1fr 1fr" }}>
-                  <span>Cliente</span><span style={{ textAlign: "right" }}>Compras</span><span style={{ textAlign: "right" }}>Valor</span>
+                <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 0.7fr 1fr 1fr" }}>
+                  <span>Cliente</span><span>Teléfono</span><span style={{ textAlign: "right" }}>Compras</span><span style={{ textAlign: "right" }}>Valor</span><span style={{ textAlign: "right" }}>Última compra</span>
                 </div>
-                {mVentas.top.slice(0, 12).map((c, i) => (
-                  <div key={c.nombre} style={{ ...S.tableRow, gridTemplateColumns: "1.6fr 1fr 1fr" }}>
-                    <div><span style={{ color: "#9aa8c7", marginRight: 8 }}>{i + 1}</span>{c.nombre}</div>
+                {agruparClientes(ventasPeriodo, primeraCompra).slice(0, 12).map((c, i) => (
+                  <div key={c.nombre} onClick={() => abrirCliente(c.nombre)} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 0.7fr 1fr 1fr", cursor: "pointer" }}>
+                    <div><span style={{ color: "#9aa8c7", marginRight: 8 }}>{i + 1}</span><span style={{ color: BLUE.primary, fontWeight: 600 }}>{c.nombre}</span></div>
+                    <div style={{ color: "#6b87b0" }}>{c.telefono || "—"}</div>
                     <div style={{ textAlign: "right" }}>{fmtInt.format(c.count)}</div>
                     <div style={{ textAlign: "right" }}>{fmt(c.valor)}</div>
+                    <div style={{ textAlign: "right" }}>{fmtFecha(c.ultima)}</div>
                   </div>
                 ))}
+                {mVentas.top.length > 12 && (
+                  <div style={{ padding: "12px 18px" }}>
+                    <button style={S.btn("secondary")} onClick={() => abrirClientes(`Todos los clientes · ${etiquetaPeriodo}`, new Set(mVentas.top.map((c) => c.nombre)))}>Ver los {mVentas.top.length} clientes</button>
+                  </div>
+                )}
               </div>
             )}
           </Card>
 
           {diaDia && (
-            <Card title="Día a día" desc={`${diaDia.labelActual} vs ${diaDia.labelPasado}`}>
+            <Card title="Día a día" desc={`${diaDia.labelActual} vs ${diaDia.labelPasado} — clic en un día para ver sus ventas`}>
               <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
                 <div style={{ ...S.tableHead, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
                   <span>Día</span><span style={{ textAlign: "right" }}>{diaDia.labelActual}</span><span style={{ textAlign: "right" }}>Acumulado</span><span style={{ textAlign: "right" }}>{diaDia.labelPasado}</span><span style={{ textAlign: "right" }}>Acumulado</span>
@@ -509,8 +725,8 @@ export default function OficinaSoatPage() {
                     const cA = diaDia.porDiaActual[d] || 0, cP = diaDia.porDiaPasado[d] || 0;
                     acumA += cA; acumP += cP;
                     filas.push(
-                      <div key={d} style={{ ...S.tableRow, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr" }}>
-                        <div>{d}</div>
+                      <div key={d} onClick={cA > 0 ? () => abrirDia(`${selMes}-${pad2(d)}`) : undefined} style={{ ...S.tableRow, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", cursor: cA > 0 ? "pointer" : "default" }} title={cA > 0 ? "Ver las ventas de este día" : undefined}>
+                        <div style={cA > 0 ? { color: BLUE.primary, fontWeight: 700 } : undefined}>{d}</div>
                         <div style={{ textAlign: "right" }}>{fmtInt.format(cA)}</div>
                         <div style={{ textAlign: "right" }}>{fmtInt.format(acumA)}</div>
                         <div style={{ textAlign: "right" }}>{fmtInt.format(cP)}</div>
@@ -633,6 +849,11 @@ export default function OficinaSoatPage() {
             )}
           </Card>
         </>
+      )}
+
+      {pila.length > 0 && (
+        <DetalleModal key={pila.length} detalle={pila[pila.length - 1]} canBack={pila.length > 1}
+          onBack={() => setPila((p) => p.slice(0, -1))} onClose={() => setPila([])} onCliente={abrirCliente} />
       )}
 
       <div style={{ textAlign: "center", color: "#9aa8c7", fontSize: 11.5, lineHeight: 1.6, marginTop: 8 }}>
