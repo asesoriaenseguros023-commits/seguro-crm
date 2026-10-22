@@ -134,11 +134,12 @@ export default function CertificadosCajaPage({ onBack }) {
     });
   }, [certificadosFiltrados, orden, tarifaPorColegio]);
 
-  // Los cálculos viven en certificadosCaja.js (puros y probados). La tabla por
-  // colegio y los mensajes siempre usan TODOS los colegios; las tarjetas usan el filtro.
+  // Los cálculos viven en certificadosCaja.js (puros y probados). Solo la tabla
+  // por colegio usa TODOS los colegios (es el selector); lo demás sigue el filtro.
   const analisisTodos = useMemo(() => analizarCaja(resumen, certificados), [resumen, certificados]);
-  const { totales: t } = useMemo(() => analizarCaja(resumenFiltrado, certificadosDelColegio), [resumenFiltrado, certificadosDelColegio]);
-  const alertas = useMemo(() => calcularAlertas(analisisTodos.porColegio, certificados, fmt), [analisisTodos, certificados]);
+  const { totales: t, porColegio: porColegioFiltrado } = useMemo(() => analizarCaja(resumenFiltrado, certificadosDelColegio), [resumenFiltrado, certificadosDelColegio]);
+  // Los mensajes siguen el filtro: con un colegio elegido solo salen los de ese colegio.
+  const alertas = useMemo(() => calcularAlertas(porColegioFiltrado, certificadosDelColegio, fmt), [porColegioFiltrado, certificadosDelColegio]);
   const alertasVisibles = verTodasAlertas ? alertas : alertas.slice(0, 5);
   const rankEstado = useMemo(() => calcularRankEstado(certificadosDelColegio), [certificadosDelColegio]);
 
@@ -232,9 +233,9 @@ export default function CertificadosCajaPage({ onBack }) {
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 14px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 10 }}>Para revisar {alertas.length > 0 && `(${alertas.length})`}</div>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 10 }}>Para revisar{colegioActivo !== "todos" && ` · ${colegioActivo}`} {alertas.length > 0 && `(${alertas.length})`}</div>
         {alertas.length === 0 ? (
-          <div style={{ fontSize: 13, color: COLOR_OK, fontWeight: 600 }}>✓ Todo cuadra: no hay diferencias ni certificados sin estado.</div>
+          <div style={{ fontSize: 13, color: COLOR_OK, fontWeight: 600 }}>{colegioActivo === "todos" ? "✓ Todo cuadra: no hay diferencias ni certificados sin estado." : `✓ ${colegioActivo} cuadra: sin diferencias ni certificados sin estado.`}</div>
         ) : (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
