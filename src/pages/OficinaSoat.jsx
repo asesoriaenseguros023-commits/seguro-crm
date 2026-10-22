@@ -324,6 +324,31 @@ function DetalleModal({ detalle, canBack, onBack, onClose, onCliente }) {
   );
 }
 
+// Dos líneas acumuladas (mes actual vs mismo mes del año pasado); marca el día elegido.
+function AcumuladoChart({ cumA, cumP, dia, tope, labelA, labelP }) {
+  const width = 640, height = 190, padL = 34, padR = 10, padT = 12, padB = 22;
+  const n = Math.max(cumA.length, cumP.length);
+  const maxV = Math.max(...cumA, ...cumP, 1) * 1.1;
+  const x = (d) => padL + ((width - padL - padR) * (d - 1)) / Math.max(n - 1, 1);
+  const y = (v) => padT + (height - padT - padB) * (1 - v / maxV);
+  const linea = (arr, hasta) => arr.slice(0, hasta).map((v, k) => `${k ? "L" : "M"}${x(k + 1).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {[0, 0.5, 1].map((f, i) => <g key={i}><line x1={padL} x2={width - padR} y1={y(maxV / 1.1 * f)} y2={y(maxV / 1.1 * f)} stroke={BLUE.border} /><text x={padL - 5} y={y(maxV / 1.1 * f) + 3} fontSize={10} fill="#9aa8c7" textAnchor="end">{Math.round(maxV / 1.1 * f)}</text></g>)}
+        <line x1={x(dia)} x2={x(dia)} y1={padT} y2={height - padB} stroke={COLOR_CLIENTES} strokeDasharray="3 3" />
+        <path d={linea(cumP, cumP.length)} fill="none" stroke={COLOR_CLIENTES} strokeWidth={2} />
+        <path d={linea(cumA, tope)} fill="none" stroke={COLOR_VENTAS} strokeWidth={2.5} />
+        {[1, 5, 10, 15, 20, 25, n].filter((d, i, a) => d <= n && a.indexOf(d) === i).map((d) => <text key={d} x={x(d)} y={height - 6} fontSize={10} fill="#9aa8c7" textAnchor="middle">{d}</text>)}
+      </svg>
+      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#6b87b0", justifyContent: "center" }}>
+        <span><span style={{ display: "inline-block", width: 12, height: 3, background: COLOR_VENTAS, marginRight: 6, verticalAlign: "middle" }} />{labelA}</span>
+        <span><span style={{ display: "inline-block", width: 12, height: 3, background: COLOR_CLIENTES, marginRight: 6, verticalAlign: "middle" }} />{labelP}</span>
+      </div>
+    </div>
+  );
+}
+
 const Card = ({ title, desc, children }) => (
   <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", border: `1px solid ${BLUE.border}`, padding: "18px 20px 16px", marginBottom: 16 }}>
     <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: desc ? 4 : 12 }}>{title}</div>
@@ -347,6 +372,8 @@ export default function OficinaSoatPage() {
   const [catCols, setCatCols] = useState(null);
   const [pila, setPila] = useState([]);
   const [diaSel, setDiaSel] = useState(null);
+  const [diaAcum, setDiaAcum] = useState(null);
+  const [verEvol, setVerEvol] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -425,17 +452,35 @@ export default function OficinaSoatPage() {
   const serieNuevos = useMemo(() => mesAsc.map((ym) => ventasMetrics(soat, primeraCompra, "mes", ym).nuevos), [mesAsc, soat, primeraCompra]);
   const activeIdxEvol = key ? mesAsc.indexOf(key) : -1;
 
-  const diaDia = useMemo(() => {
+  const ultimaFecha = useMemo(() => soat.reduce((mx, r) => (r.fecha > mx ? r.fecha : mx), ""), [soat]);
+
+  // Acumulado del mes hasta un día D, contra el mismo día del año pasado.
+  // Con el mes en curso el tope es el último día con datos; en un mes cerrado,
+  // el último día del mes.
+  const acum = useMemo(() => {
     if (!selMes) return null;
-    const ymPasado = addMonths(selMes, -12);
-    const nDias = diasEnMes(selMes);
-    const porDiaActual = {}, porDiaPasado = {};
-    soat.forEach((r) => {
-      if (r.fecha.slice(0, 7) === selMes) { const d = parseInt(r.fecha.slice(8, 10), 10); porDiaActual[d] = (porDiaActual[d] || 0) + 1; }
-      if (r.fecha.slice(0, 7) === ymPasado) { const d = parseInt(r.fecha.slice(8, 10), 10); porDiaPasado[d] = (porDiaPasado[d] || 0) + 1; }
-    });
-    return { nDias, porDiaActual, porDiaPasado, labelActual: ymLabel(selMes), labelPasado: ymLabel(ymPasado) };
-  }, [soat, selMes]);
+    const ymPas = addMonths(selMes, -12);
+    const nA = diasEnMes(selMes), nP = diasEnMes(ymPas);
+    const tope = ultimaFecha && ultimaFecha.slice(0, 7) === selMes ? parseInt(ultimaFecha.slice(8, 10), 10) : nA;
+    const dia = Math.max(1, Math.min(diaAcum ?? tope, tope));
+    const diaPas = Math.min(dia, nP);
+    const porDia = (ym, n) => {
+      const c = Array(n + 1).fill(0), v = Array(n + 1).fill(0);
+      soat.forEach((r) => { if (r.fecha.slice(0, 7) === ym) { const d = parseInt(r.fecha.slice(8, 10), 10); c[d]++; v[d] += r.valor; } });
+      return { c, v };
+    };
+    const A = porDia(selMes, nA), P = porDia(ymPas, nP);
+    const hasta = (x, d) => ({ count: x.c.slice(1, d + 1).reduce((a, b) => a + b, 0), valor: x.v.slice(1, d + 1).reduce((a, b) => a + b, 0) });
+    const cum = (x, n) => { let a = 0; return Array.from({ length: n }, (_, k) => (a += x.c[k + 1])); };
+    return {
+      dia, tope, nA, nP, ymPas,
+      actual: hasta(A, dia), pasado: hasta(P, diaPas),
+      finActual: hasta(A, nA), finPasado: hasta(P, nP),
+      mesCompleto: tope === nA,
+      cumA: cum(A, nA), cumP: cum(P, nP),
+      porDiaA: A.c, porDiaP: P.c,
+    };
+  }, [soat, selMes, ultimaFecha, diaAcum]);
 
   const metricsCatCols = useMemo(() => (catCols ? catCols.map((k2) => gastosMetrics(gastos, "mes", k2)) : []), [catCols, gastos]);
   const gruposCatCols = useMemo(() => {
@@ -449,7 +494,6 @@ export default function OficinaSoatPage() {
   const ingresosMes = cajaDelMes.filter((r) => r.monto > 0).reduce((s, r) => s + r.monto, 0);
   const salidasMes = cajaDelMes.filter((r) => r.monto < 0).reduce((s, r) => s + r.monto, 0);
 
-  const ultimaFecha = useMemo(() => soat.reduce((mx, r) => (r.fecha > mx ? r.fecha : mx), ""), [soat]);
   const diaActivo = diaSel || ultimaFecha;
   const ventasDia = useMemo(() => (diaActivo ? soat.filter((r) => r.fecha === diaActivo) : []), [soat, diaActivo]);
 
@@ -686,59 +730,64 @@ export default function OficinaSoatPage() {
             </Card>
           </div>
 
-          <Card title="Top clientes" desc={`${mVentas.top.length} clientes en el periodo — clic en un cliente para ver todas sus compras`}>
-            {mVentas.top.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#9aa8c7" }}>Sin datos.</div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <div style={{ ...S.tableHead, gridTemplateColumns: "1.8fr 1fr 0.7fr 1fr 1fr" }}>
-                  <span>Cliente</span><span>Teléfono</span><span style={{ textAlign: "right" }}>Compras</span><span style={{ textAlign: "right" }}>Valor</span><span style={{ textAlign: "right" }}>Última compra</span>
+
+          {acum && (() => {
+            const fechaTxt = `${acum.dia} de ${ymLabel(selMes).split(" ")[0].toLowerCase()}`;
+            const mesAct = ymLabel(selMes), mesPas = ymLabel(acum.ymPas);
+            const Tarjeta = ({ titulo, sub, d, base, color, destacada }) => {
+              const dv = base ? deltaInfo(d.count, base.count) : null;
+              return (
+                <div style={{ background: destacada ? BLUE.light : "#fff", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${color}`, borderRadius: 10, padding: "13px 15px 14px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7" }}>{titulo}</div>
+                  <div style={{ fontSize: 11.5, color: "#6b87b0", marginBottom: 8 }}>{sub}</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: BLUE.text, letterSpacing: -0.5 }}>{fmtInt.format(d.count)} <span style={{ fontSize: 13, fontWeight: 600, color: "#6b87b0" }}>pólizas</span></div>
+                  <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 2 }}>{fmt(d.valor)}</div>
+                  {dv && <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, color: dv.up ? COLOR_GOOD : COLOR_BAD }}>{dv.up ? "▲ +" : "▼ "}{dv.pct.toFixed(0)}% vs {mesPas}</div>}
                 </div>
-                {agruparClientes(ventasPeriodo, primeraCompra).slice(0, 12).map((c, i) => (
-                  <div key={c.nombre} onClick={() => abrirCliente(c.nombre)} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 0.7fr 1fr 1fr", cursor: "pointer" }}>
-                    <div><span style={{ color: "#9aa8c7", marginRight: 8 }}>{i + 1}</span><span style={{ color: BLUE.primary, fontWeight: 600 }}>{c.nombre}</span></div>
-                    <div style={{ color: "#6b87b0" }}>{c.telefono || "—"}</div>
-                    <div style={{ textAlign: "right" }}>{fmtInt.format(c.count)}</div>
-                    <div style={{ textAlign: "right" }}>{fmt(c.valor)}</div>
-                    <div style={{ textAlign: "right" }}>{fmtFecha(c.ultima)}</div>
-                  </div>
-                ))}
-                {mVentas.top.length > 12 && (
-                  <div style={{ padding: "12px 18px" }}>
-                    <button style={S.btn("secondary")} onClick={() => abrirClientes(`Todos los clientes · ${etiquetaPeriodo}`, new Set(mVentas.top.map((c) => c.nombre)))}>Ver los {mVentas.top.length} clientes</button>
+              );
+            };
+            const paso = (n) => setDiaAcum(Math.max(1, Math.min(acum.tope, acum.dia + n)));
+            return (
+              <Card title="Acumulado" desc="cómo vamos hasta un día del mes frente al mismo día del año pasado">
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+                  <button style={S.btn("secondary")} disabled={acum.dia <= 1} onClick={() => paso(-1)}>←</button>
+                  <div style={{ minWidth: 150, textAlign: "center", fontWeight: 700, color: BLUE.text }}>Al {fechaTxt}</div>
+                  <button style={S.btn("secondary")} disabled={acum.dia >= acum.tope} onClick={() => paso(1)}>→</button>
+                  {diaAcum != null && <button style={S.btn("secondary")} onClick={() => setDiaAcum(null)}>Hoy</button>}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                  <Tarjeta titulo="Acumulado a hoy" sub={`${mesAct} · 1 al ${acum.dia}`} d={acum.actual} base={acum.pasado} color={COLOR_VENTAS} destacada />
+                  <Tarjeta titulo="Año anterior" sub={`${mesPas} · 1 al ${Math.min(acum.dia, acum.nP)}`} d={acum.pasado} color={COLOR_CLIENTES} />
+                  <Tarjeta titulo="Fin de mes" sub={`${mesAct}${acum.mesCompleto ? "" : " · lo que va"}`} d={acum.finActual} base={acum.finPasado} color={COLOR_VENTAS} />
+                  <Tarjeta titulo="Fin de mes año anterior" sub={`${mesPas} · mes completo`} d={acum.finPasado} color={COLOR_CLIENTES} />
+                </div>
+                <button style={{ ...S.btn("secondary"), marginTop: 14 }} onClick={() => setVerEvol((v) => !v)}>{verEvol ? "Ocultar evolución ▲" : "Ver evolución día a día ▼"}</button>
+                {verEvol && (
+                  <div style={{ marginTop: 14 }}>
+                    <AcumuladoChart cumA={acum.cumA} cumP={acum.cumP} dia={acum.dia} tope={acum.tope} labelA={mesAct} labelP={mesPas} />
+                    <div style={{ overflowX: "auto", maxHeight: 380, overflowY: "auto", marginTop: 12 }}>
+                      <div style={{ ...S.tableHead, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
+                        <span>Día</span><span style={{ textAlign: "right" }}>{mesAct}</span><span style={{ textAlign: "right" }}>Acumulado</span><span style={{ textAlign: "right" }}>{mesPas}</span><span style={{ textAlign: "right" }}>Acumulado</span>
+                      </div>
+                      {Array.from({ length: Math.max(acum.nA, acum.nP) }, (_, k) => {
+                        const d = k + 1, cA = acum.porDiaA[d] || 0, cP = acum.porDiaP[d] || 0;
+                        return (
+                          <div key={d} onClick={cA > 0 ? () => abrirDia(`${selMes}-${pad2(d)}`) : undefined} title={cA > 0 ? "Ver las ventas de este día" : undefined}
+                            style={{ ...S.tableRow, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", cursor: cA > 0 ? "pointer" : "default", background: d === acum.dia ? BLUE.light : undefined }}>
+                            <div style={cA > 0 ? { color: BLUE.primary, fontWeight: 700 } : undefined}>{d}</div>
+                            <div style={{ textAlign: "right" }}>{d <= acum.nA ? fmtInt.format(cA) : "—"}</div>
+                            <div style={{ textAlign: "right" }}>{d <= acum.nA ? fmtInt.format(acum.cumA[k]) : "—"}</div>
+                            <div style={{ textAlign: "right" }}>{d <= acum.nP ? fmtInt.format(cP) : "—"}</div>
+                            <div style={{ textAlign: "right" }}>{d <= acum.nP ? fmtInt.format(acum.cumP[k]) : "—"}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
-              </div>
-            )}
-          </Card>
-
-          {diaDia && (
-            <Card title="Día a día" desc={`${diaDia.labelActual} vs ${diaDia.labelPasado} — clic en un día para ver sus ventas`}>
-              <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
-                <div style={{ ...S.tableHead, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", position: "sticky", top: 0 }}>
-                  <span>Día</span><span style={{ textAlign: "right" }}>{diaDia.labelActual}</span><span style={{ textAlign: "right" }}>Acumulado</span><span style={{ textAlign: "right" }}>{diaDia.labelPasado}</span><span style={{ textAlign: "right" }}>Acumulado</span>
-                </div>
-                {(() => {
-                  let acumA = 0, acumP = 0;
-                  const filas = [];
-                  for (let d = 1; d <= diaDia.nDias; d++) {
-                    const cA = diaDia.porDiaActual[d] || 0, cP = diaDia.porDiaPasado[d] || 0;
-                    acumA += cA; acumP += cP;
-                    filas.push(
-                      <div key={d} onClick={cA > 0 ? () => abrirDia(`${selMes}-${pad2(d)}`) : undefined} style={{ ...S.tableRow, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", cursor: cA > 0 ? "pointer" : "default" }} title={cA > 0 ? "Ver las ventas de este día" : undefined}>
-                        <div style={cA > 0 ? { color: BLUE.primary, fontWeight: 700 } : undefined}>{d}</div>
-                        <div style={{ textAlign: "right" }}>{fmtInt.format(cA)}</div>
-                        <div style={{ textAlign: "right" }}>{fmtInt.format(acumA)}</div>
-                        <div style={{ textAlign: "right" }}>{fmtInt.format(cP)}</div>
-                        <div style={{ textAlign: "right" }}>{fmtInt.format(acumP)}</div>
-                      </div>
-                    );
-                  }
-                  return filas;
-                })()}
-              </div>
-            </Card>
-          )}
+              </Card>
+            );
+          })()}
         </>
       )}
 
