@@ -310,7 +310,7 @@ export default function CertificadosCajaPage({ onBack }) {
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 14px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 4 }}>Caja por colegio</div>
-        <div style={{ fontSize: 12.5, color: "#6b87b0", margin: "-2px 0 14px" }}>Clic en una fila para filtrar el resto del tablero.</div>
+        <div style={{ height: 10 }} />
         <div style={{ overflowX: "auto" }}>
           <div style={{ ...S.tableHead, gridTemplateColumns: "1.5fr 0.7fr 0.8fr 1fr 1fr 1fr 0.9fr", minWidth: 840 }}>
             <span>Colegio</span><span style={{ textAlign: "right" }}>Pólizas</span><span style={{ textAlign: "right" }}>Duplicados</span><span style={{ textAlign: "right" }}>Vendido</span><span style={{ textAlign: "right" }}>Certificados</span><span style={{ textAlign: "right" }}>Caja</span><span style={{ textAlign: "right" }}>Por pagar</span>
