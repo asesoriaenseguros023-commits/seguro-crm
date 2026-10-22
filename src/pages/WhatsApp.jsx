@@ -1,10 +1,27 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../supabase.js";
-import { S, BLUE, FM_MENSAJE_WA } from "../constants.js";
+import { S, FM_MENSAJE_WA, FM_SOAT } from "../constants.js";
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 
 const VENTANA_24H_MS = 24 * 60 * 60 * 1000;
+
+// Paleta propia de este módulo -- a diferencia de los otros dashboards
+// (unificados a BLUE.primary, ver [[project-seguro-crm]]), acá el usuario
+// pidió explícitamente que se vea y se sienta como la app real de WhatsApp,
+// con sus verdes característicos.
+const WA = {
+  header: "#008069",
+  bubbleOut: "#d9fdd3",
+  bubbleOutBorder: "#bbf0ae",
+  bubbleIn: "#ffffff",
+  bubbleInBorder: "#e9e9e9",
+  chatBg: "#efeae2",
+  accent: "#25d366",
+  accentDark: "#1da851",
+  listSelected: "#f0f2f5",
+  textMuted: "#667781",
+};
 
 const fmtHora = (iso) => {
   if (!iso) return "";
@@ -22,7 +39,7 @@ const TickMensaje = ({ estado, error }) => {
   const fm = FM_MENSAJE_WA[estado];
   if (estado === "fallido") return <span title={error || "Falló"} style={{ color: fm?.color, fontSize: 11 }}>⚠ Falló</span>;
   const marca = estado === "enviado" ? "✓" : "✓✓";
-  return <span title={fm?.label || estado} style={{ color: fm?.color || "#999", fontSize: 11, fontWeight: estado === "leido" ? 700 : 400 }}>{marca}</span>;
+  return <span title={fm?.label || estado} style={{ color: estado === "leido" ? fm?.color : WA.textMuted, fontSize: 12, fontWeight: estado === "leido" ? 700 : 400 }}>{marca}</span>;
 };
 
 // Chat real del módulo WhatsApp: lista de conversaciones a la izquierda,
@@ -44,7 +61,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
 
   useEffect(() => {
     Promise.all([
-      supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase)").order("updated_at", { ascending: false }),
+      supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase, fecha_vencimiento)").order("updated_at", { ascending: false }),
       supabase.from("whatsapp_mensajes").select("*").order("created_at", { ascending: true }),
     ]).then(([convRes, msgRes]) => {
       if (convRes.data) setConversaciones(convRes.data);
@@ -141,9 +158,14 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   return (
     <div>
       <div style={S.pageHeader}>
-        <div>
-          <div style={S.pageTitle}>WhatsApp</div>
-          <div style={S.pageSub}>Conversaciones iniciadas desde Seguimiento SOAT</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: WA.accent, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
+            <Icon name="whatsapp" size={20} />
+          </div>
+          <div>
+            <div style={S.pageTitle}>WhatsApp</div>
+            <div style={S.pageSub}>Conversaciones iniciadas desde Seguimiento SOAT</div>
+          </div>
         </div>
       </div>
 
@@ -156,20 +178,20 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
       ) : (
         <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 190px)", minHeight: 420 }}>
           {/* ─── Lista de conversaciones ─── */}
-          <div style={{ width: 300, flexShrink: 0, borderRight: `1px solid ${BLUE.border}`, overflowY: "auto" }}>
+          <div style={{ width: 300, flexShrink: 0, borderRight: "1px solid #e9e9e9", overflowY: "auto" }}>
             {conversaciones.map((c) => {
               const ultimo = ultimoPorConversacion[c.id];
               const activa = c.id === seleccionadaId;
               return (
                 <div key={c.id} onClick={() => setSeleccionadaId(c.id)}
-                  style={{ padding: "12px 16px", borderBottom: "1px solid #e8f0fe", cursor: "pointer", background: activa ? BLUE.light : "#fff" }}>
+                  style={{ padding: "12px 16px", borderBottom: "1px solid #f0f0f0", cursor: "pointer", background: activa ? WA.listSelected : "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13.5, color: BLUE.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {c.soat_clientes?.nombre || c.nombre || "—"}
                     </div>
-                    <div style={{ fontSize: 11, color: "#999", flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
+                    <div style={{ fontSize: 11, color: WA.textMuted, flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
                   </div>
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ fontSize: 12.5, color: WA.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ""}` : "—"}
                   </div>
                 </div>
@@ -185,28 +207,37 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
               </div>
             ) : (
               <>
-                <div style={{ padding: "14px 20px", borderBottom: `1px solid ${BLUE.border}`, background: BLUE.light }}>
-                  <div style={{ fontWeight: 700, fontSize: 14.5, color: BLUE.text }}>{seleccionada.soat_clientes?.nombre || seleccionada.nombre || "—"}</div>
-                  <div style={{ fontSize: 12, color: "#6b87b0" }}>{seleccionada.telefono}</div>
+                <div style={{ padding: "12px 20px", background: WA.header, color: "#fff" }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{seleccionada.soat_clientes?.nombre || seleccionada.nombre || "—"}</div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 2, fontSize: 12, color: "rgba(255,255,255,0.8)" }}>
+                    <span>{seleccionada.telefono}</span>
+                    {seleccionada.soat_clientes?.placa && <span>Placa: {seleccionada.soat_clientes.placa}</span>}
+                    {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence SOAT: {seleccionada.soat_clientes.fecha_vencimiento}</span>}
+                    {seleccionada.soat_clientes?.fase && (() => {
+                      const f = FM_SOAT[seleccionada.soat_clientes.fase];
+                      return <span style={{ background: "rgba(255,255,255,0.2)", color: "#fff", padding: "1px 10px", borderRadius: 12, fontWeight: 700, fontSize: 11.5 }}>{f?.label || seleccionada.soat_clientes.fase}</span>;
+                    })()}
+                  </div>
                 </div>
 
-                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8, background: WA.chatBg }}>
                   {mensajesSeleccionados.length === 0 && (
-                    <div style={{ textAlign: "center", color: "#aaa", fontSize: 13, marginTop: 20 }}>Sin mensajes todavía</div>
+                    <div style={{ textAlign: "center", color: WA.textMuted, fontSize: 13, marginTop: 20 }}>Sin mensajes todavía</div>
                   )}
                   {mensajesSeleccionados.map((m) => {
                     const saliente = m.direccion === "saliente";
                     return (
                       <div key={m.id} style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start" }}>
                         <div style={{
-                          maxWidth: "70%", borderRadius: 14, padding: "8px 13px",
-                          background: saliente ? BLUE.light : "#f8faff",
-                          border: `1px solid ${saliente ? BLUE.border : "#e8f0fe"}`,
+                          maxWidth: "70%", borderRadius: 8, padding: "7px 12px",
+                          background: saliente ? WA.bubbleOut : WA.bubbleIn,
+                          border: `1px solid ${saliente ? WA.bubbleOutBorder : WA.bubbleInBorder}`,
+                          boxShadow: "0 1px 1px rgba(0,0,0,0.08)",
                         }}>
-                          <div style={{ fontSize: 13.5, color: "#1a1a1a", whiteSpace: "pre-wrap" }}>{m.contenido}</div>
+                          <div style={{ fontSize: 13.5, color: "#111b21", whiteSpace: "pre-wrap" }}>{m.contenido}</div>
                           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", marginTop: 4 }}>
-                            {m.tipo === "plantilla" && <span style={{ fontSize: 10.5, color: "#999" }}>Plantilla</span>}
-                            <span style={{ fontSize: 10.5, color: "#999" }}>{fmtHora(m.created_at)}</span>
+                            {m.tipo === "plantilla" && <span style={{ fontSize: 10.5, color: WA.textMuted }}>Plantilla</span>}
+                            <span style={{ fontSize: 10.5, color: WA.textMuted }}>{fmtHora(m.created_at)}</span>
                             {saliente && <TickMensaje estado={m.estado} error={m.error} />}
                           </div>
                         </div>
@@ -215,22 +246,28 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                   })}
                 </div>
 
-                <div style={{ padding: "12px 16px", borderTop: `1px solid ${BLUE.border}` }}>
+                <div style={{ padding: "10px 16px", background: "#f0f2f5" }}>
                   {errorEnvio && <div style={{ color: "#dc2626", fontSize: 12, marginBottom: 8 }}>{errorEnvio}</div>}
                   {ventanaAbierta ? (
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                       <textarea value={texto} onChange={(e) => setTexto(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarMensaje(); } }}
                         placeholder="Escribe un mensaje…" rows={1}
-                        style={{ ...S.input, resize: "none", fontFamily: "inherit" }} />
-                      <button onClick={enviarMensaje} disabled={enviando || !texto.trim()} style={S.btn("primary")}>
-                        <Icon name="send" size={14} />
+                        style={{ ...S.input, resize: "none", fontFamily: "inherit", borderRadius: 20, background: "#fff" }} />
+                      <button onClick={enviarMensaje} disabled={enviando || !texto.trim()}
+                        style={{ width: 38, height: 38, borderRadius: "50%", border: "none", background: WA.accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, opacity: enviando || !texto.trim() ? 0.6 : 1 }}>
+                        <Icon name="send" size={16} />
                       </button>
                     </div>
                   ) : (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ fontSize: 12.5, color: "#888" }}>La ventana de 24 horas está cerrada — hay que reenviar la plantilla.</div>
-                      <button onClick={reenviarPlantilla} disabled={enviando} style={S.btn("secondary")}>Reenviar plantilla de seguimiento</button>
+                      <div style={{ fontSize: 12.5, color: WA.textMuted }}>La ventana de 24 horas está cerrada — hay que reenviar la plantilla.</div>
+                      <button onClick={reenviarPlantilla} disabled={enviando}
+                        style={{ ...S.btn("primary"), background: WA.accent, opacity: enviando ? 0.6 : 1 }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = WA.accentDark; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = WA.accent; }}>
+                        Reenviar plantilla de seguimiento
+                      </button>
                     </div>
                   )}
                 </div>
