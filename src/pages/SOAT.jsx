@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
-import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT, FM_WHATSAPP } from "../constants.js";
+import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
 import { parseDateSoat, mapSoat, toSoatRow, authHeaders, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import { generarInformeIA, informeIABase64 } from "../pdfReporteIA.js";
@@ -73,7 +73,7 @@ const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
   );
 };
 
-const SoatPage = ({ showConfirm, softphone, comerciales }) => {
+const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   const [clientes, setClientes] = useState([]);
   const [loadingSoat, setLoadingSoat] = useState(true);
   const [filtroFase, setFiltroFase] = useState("Todos");
@@ -214,14 +214,17 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
     softphone.startCall(c.telefono, c.nombre, c.id);
   };
 
-  // Manda la plantilla "soat_seguimiento_lead" (WhatsApp Business Cloud API,
-  // ver api/whatsapp.js) al número del lead. "enviandoWA" solo da feedback
-  // visual inmediato en el botón -- el estado real (entregado/leído/
-  // respondió) llega después por el webhook y se ve vía "conversacionesWA"
-  // (suscripción realtime más abajo), que es la misma tabla que lee
-  // WhatsApp.jsx -- por eso no hace falta sincronizar nada a mano.
+  // Primer clic (sin conversación todavía) manda la plantilla
+  // "soat_seguimiento_lead" (WhatsApp Business Cloud API, ver
+  // api/whatsapp.js) y crea la conversación. Si ya existe conversación, el
+  // clic ya no reenvía nada -- lleva al agente al chat real en el módulo
+  // WhatsApp (onAbrirWhatsapp, ver App.jsx) para que siga desde ahí.
+  // "enviandoWA" solo da feedback visual inmediato en el botón del primer
+  // envío -- conversacionesWA (suscripción realtime más abajo) es la misma
+  // tabla que lee WhatsApp.jsx, por eso no hace falta sincronizar nada más.
   const [enviandoWA, setEnviandoWA] = useState({});
   const enviarWhatsapp = async (c) => {
+    if (conversacionesWA[c.id]) { onAbrirWhatsapp?.(c.id); return; }
     setEnviandoWA(p => ({ ...p, [c.id]: "enviando" }));
     try {
       const res = await fetch("/api/whatsapp?action=enviar-seguimiento-soat", {
@@ -239,17 +242,12 @@ const SoatPage = ({ showConfirm, softphone, comerciales }) => {
   };
 
   // Color/título del botón de WhatsApp: primero el feedback inmediato del
-  // clic (enviandoWA), si no hay nada de eso el estado real guardado en
-  // whatsapp_conversaciones (conversacionesWA), y si tampoco hay eso, el
-  // verde por defecto de "nunca se le ha escrito".
+  // clic (enviandoWA), si no hay nada de eso si ya existe conversación
+  // (conversacionesWA) o si nunca se le ha escrito.
   const estadoIconoWA_ = (clienteId) => {
     if (enviandoWA[clienteId] === "enviando") return { color: "#999", title: "Enviando…" };
     if (enviandoWA[clienteId] === "error") return { color: "#dc2626", title: "No se pudo enviar" };
-    const conv = conversacionesWA[clienteId];
-    if (conv) {
-      const fm = FM_WHATSAPP[conv.estado];
-      return { color: fm?.color || "#25D366", title: `WhatsApp: ${fm?.label || conv.estado}` };
-    }
+    if (conversacionesWA[clienteId]) return { color: "#25D366", title: "Ver conversación de WhatsApp" };
     return { color: "#25D366", title: "Enviar WhatsApp" };
   };
 

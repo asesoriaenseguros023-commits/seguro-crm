@@ -17,8 +17,8 @@ const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KE
 const WHATSAPP_API_VERSION = "v21.0";
 
 // Cuerpo real de la plantilla aprobada "soat_seguimiento_lead" (Marketing,
-// Spanish (COL)) -- se usa solo para guardar un "ultimo_mensaje" legible en
-// whatsapp_conversaciones, Meta no devuelve el texto final en su respuesta.
+// Spanish (COL)) -- se usa para guardar el texto legible del mensaje en
+// whatsapp_mensajes, Meta no devuelve el texto final en su respuesta.
 // Si el dia de mañana se edita la plantilla en Meta, hay que actualizar
 // esto tambien para que coincida.
 function textoPlantillaSoat_(nombre) {
@@ -47,38 +47,14 @@ function normalizarTelefonoCO_(telefono) {
   return limpio;
 }
 
-async function enviarPlantilla_({ to, nombre, plantilla }) {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneNumberId) {
-    throw new Error("Faltan WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID en las variables de entorno.");
-  }
-
+async function enviarAMeta_(phoneNumberId, token, body) {
   const resp = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "template",
-      template: {
-        name: plantilla,
-        language: { code: "es_CO" },
-        // parameter_name: la plantilla "soat_seguimiento_lead" en la cuenta
-        // de PRUEBA usa variable nombrada {{nombre}} (la cuenta real exigía
-        // parámetros nombrados al crearla; la plantilla original en la
-        // cuenta real quedó con {{1}} posicional de antes de ese cambio).
-        // Si el día de mañana se envía desde la cuenta real con esa
-        // plantilla posicional, hay que quitar parameter_name aquí o volver
-        // a someter esa plantilla también con {{nombre}}.
-        components: [
-          { type: "body", parameters: [{ type: "text", parameter_name: "nombre", text: nombre || "" }] },
-        ],
-      },
-    }),
+    body: JSON.stringify(body),
   });
 
   const json = await resp.json().catch(() => null);
@@ -89,15 +65,69 @@ async function enviarPlantilla_({ to, nombre, plantilla }) {
   return json;
 }
 
+async function enviarPlantilla_({ to, nombre, plantilla }) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) {
+    throw new Error("Faltan WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID en las variables de entorno.");
+  }
+  return enviarAMeta_(phoneNumberId, token, {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: {
+      name: plantilla,
+      language: { code: "es_CO" },
+      // parameter_name: la plantilla "soat_seguimiento_lead" en la cuenta
+      // de PRUEBA usa variable nombrada {{nombre}} (la cuenta real exigía
+      // parámetros nombrados al crearla; la plantilla original en la
+      // cuenta real quedó con {{1}} posicional de antes de ese cambio).
+      // Si el día de mañana se envía desde la cuenta real con esa
+      // plantilla posicional, hay que quitar parameter_name aquí o volver
+      // a someter esa plantilla también con {{nombre}}.
+      components: [
+        { type: "body", parameters: [{ type: "text", parameter_name: "nombre", text: nombre || "" }] },
+      ],
+    },
+  });
+}
+
+async function enviarTexto_({ to, texto }) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) {
+    throw new Error("Faltan WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID en las variables de entorno.");
+  }
+  return enviarAMeta_(phoneNumberId, token, {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: { body: texto },
+  });
+}
+
+// La API de WhatsApp Business solo deja mandar texto libre (fuera de
+// plantilla) dentro de las 24h siguientes al último mensaje ENTRANTE del
+// cliente -- fuera de esa ventana hay que volver a mandar una plantilla
+// aprobada. Se valida acá, en el servidor, para no depender solo del
+// chequeo del lado del cliente (WhatsApp.jsx hace el mismo chequeo para no
+// mostrar la caja de texto, pero esto es lo que de verdad lo hace cumplir).
+const VENTANA_24H_MS = 24 * 60 * 60 * 1000;
+function ventanaAbierta_(conversacion) {
+  if (!conversacion?.ultima_entrante_at) return false;
+  return Date.now() - new Date(conversacion.ultima_entrante_at).getTime() < VENTANA_24H_MS;
+}
+
 // ── Webhook de Meta (sin auth de agente -- lo llama Meta directo) ──────────
 //
 // GET: handshake de verificacion (Meta lo llama una vez al configurar el
 // webhook en el dashboard, comparando WHATSAPP_WEBHOOK_VERIFY_TOKEN).
-// POST: eventos en tiempo real -- "statuses" (entregado/leido/fallido del
-// mensaje que mandamos) y "messages" (el lead respondio). Ambos actualizan
-// whatsapp_conversaciones, que es lo que leen en vivo SOAT.jsx y
+// POST: eventos en tiempo real -- "statuses" (entregado/leido/fallido de un
+// mensaje saliente, actualiza whatsapp_mensajes) y "messages" (el lead
+// respondió, inserta en whatsapp_mensajes y marca ultima_entrante_at en
+// whatsapp_conversaciones). Ambas tablas se leen en vivo desde SOAT.jsx y
 // WhatsApp.jsx (realtime de Supabase) -- por eso no hace falta "sincronizar"
-// nada mas: las dos pantallas miran la misma fila.
+// nada mas, las pantallas miran las mismas filas.
 async function manejarWebhookGet_(req, res) {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -116,30 +146,42 @@ async function manejarWebhookPost_(req, res) {
     for (const cambio of entrada.changes || []) {
       const valor = cambio.value || {};
 
-      // Confirmaciones de entrega/lectura/fallo del mensaje que mandamos.
+      // Confirmaciones de entrega/lectura/fallo de un mensaje saliente que
+      // mandamos -- ahora vive por-mensaje en whatsapp_mensajes, no en la
+      // conversación.
       for (const status of valor.statuses || []) {
         const estado = ESTADO_POR_STATUS_META[status.status];
         if (!estado) continue;
-        const patch = { estado, updated_at: new Date().toISOString() };
+        const patch = { estado };
         if (status.status === "failed") {
           patch.error = status.errors?.[0]?.title || status.errors?.[0]?.message || "Error desconocido";
         }
-        await supabase.from("whatsapp_conversaciones").update(patch).eq("wa_message_id", status.id);
+        await supabase.from("whatsapp_mensajes").update(patch).eq("wa_message_id", status.id);
       }
 
       // Respuestas entrantes del lead -- se buscan por telefono (no hay
-      // wa_message_id del saliente en este evento) y se marca la fila mas
-      // reciente de ese numero como "respondido".
+      // wa_message_id del saliente en este evento, Meta solo manda el
+      // numero) y se asocian a la conversación más reciente de ese numero.
+      // Nota: si dos clientes distintos comparten el mismo teléfono, esto
+      // puede asociar el mensaje a la conversación equivocada -- no hay
+      // forma de distinguir solo con lo que manda Meta, limitación conocida.
       for (const msg of valor.messages || []) {
         const desde = String(msg.from || "").replace(/[^\d]/g, "");
         if (!desde) continue;
         const texto = msg.text?.body || `[${msg.type}]`;
-        const { data: fila } = await supabase.from("whatsapp_conversaciones")
+        const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
           .select("id").eq("telefono", desde).order("updated_at", { ascending: false }).limit(1).maybeSingle();
-        if (fila) {
+        if (conversacion) {
+          const ahora = new Date().toISOString();
+          await supabase.from("whatsapp_mensajes").insert({
+            conversacion_id: conversacion.id,
+            direccion: "entrante",
+            tipo: "texto",
+            contenido: texto,
+          });
           await supabase.from("whatsapp_conversaciones")
-            .update({ estado: "respondido", ultimo_mensaje: texto, updated_at: new Date().toISOString() })
-            .eq("id", fila.id);
+            .update({ ultima_entrante_at: ahora, updated_at: ahora })
+            .eq("id", conversacion.id);
         }
       }
     }
@@ -168,18 +210,51 @@ export default async function handler(req, res) {
     try {
       const resultado = await enviarPlantilla_({ to, nombre, plantilla: "soat_seguimiento_lead" });
       const waMessageId = resultado?.messages?.[0]?.id || null;
-      await supabase.from("whatsapp_conversaciones").insert({
-        cliente_id: clienteId,
-        telefono: to,
-        nombre,
-        plantilla: "soat_seguimiento_lead",
+      const { data: conversacion, error: convError } = await supabase.from("whatsapp_conversaciones")
+        .upsert({ cliente_id: clienteId, telefono: to, nombre }, { onConflict: "cliente_id" })
+        .select("id").single();
+      if (convError) throw new Error(convError.message);
+      await supabase.from("whatsapp_mensajes").insert({
+        conversacion_id: conversacion.id,
+        direccion: "saliente",
+        tipo: "plantilla",
+        contenido: textoPlantillaSoat_(nombre),
         wa_message_id: waMessageId,
         estado: "enviado",
-        ultimo_mensaje: textoPlantillaSoat_(nombre),
       });
       return res.status(200).json({ ok: true, resultado });
     } catch (err) {
       return res.status(502).json({ error: `No se pudo enviar el WhatsApp: ${err.message}` });
+    }
+  }
+
+  if (action === "enviar-mensaje") {
+    const { conversacionId, texto } = req.body || {};
+    if (!conversacionId) return res.status(400).json({ error: "Falta el ID de la conversación." });
+    if (!texto || !texto.trim()) return res.status(400).json({ error: "El mensaje no puede estar vacío." });
+
+    const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
+      .select("id, telefono, ultima_entrante_at").eq("id", conversacionId).maybeSingle();
+    if (!conversacion) return res.status(404).json({ error: "Conversación no encontrada." });
+    if (!ventanaAbierta_(conversacion)) {
+      return res.status(409).json({ error: "La ventana de 24 horas está cerrada — hay que reenviar la plantilla de seguimiento." });
+    }
+
+    try {
+      const resultado = await enviarTexto_({ to: conversacion.telefono, texto: texto.trim() });
+      const waMessageId = resultado?.messages?.[0]?.id || null;
+      await supabase.from("whatsapp_mensajes").insert({
+        conversacion_id: conversacion.id,
+        direccion: "saliente",
+        tipo: "texto",
+        contenido: texto.trim(),
+        wa_message_id: waMessageId,
+        estado: "enviado",
+      });
+      await supabase.from("whatsapp_conversaciones").update({ updated_at: new Date().toISOString() }).eq("id", conversacion.id);
+      return res.status(200).json({ ok: true, resultado });
+    } catch (err) {
+      return res.status(502).json({ error: `No se pudo enviar el mensaje: ${err.message}` });
     }
   }
 

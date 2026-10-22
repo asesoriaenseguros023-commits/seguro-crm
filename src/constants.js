@@ -129,18 +129,18 @@ export const MOTIVOS_SOAT = [
   "No le interesa renovar aún",
 ];
 
-// ─── WhatsApp (whatsapp_conversaciones) ─────────────────────────────────────
-// Mismo orden que el ciclo real de un mensaje: enviado -> entregado -> leido,
-// con "respondido" (el lead escribió de vuelta) y "fallido" como ramas aparte.
-export const ESTADOS_WHATSAPP = [
-  { id: "enviado",    label: "Enviado",    color: "#64748b", bg: "#f1f5f9", text: "#334155" },
-  { id: "entregado",  label: "Entregado",  color: "#3b82f6", bg: "#dbeafe", text: "#1d4ed8" },
-  { id: "leido",      label: "Leído",      color: "#8b5cf6", bg: "#ede9fe", text: "#5b21b6" },
-  { id: "respondido", label: "Respondió",  color: "#22c55e", bg: "#dcfce7", text: "#166534" },
-  { id: "fallido",    label: "Falló",      color: "#ef4444", bg: "#fee2e2", text: "#991b1b" },
+// ─── WhatsApp (whatsapp_conversaciones / whatsapp_mensajes) ─────────────────
+// Estado real de entrega por MENSAJE saliente (lo que manda Meta vía
+// webhook) -- ya no es un estado manual por conversación, ver
+// [[project-seguro-crm]] / supabase_whatsapp_chat.sql.
+export const ESTADOS_MENSAJE_WA = [
+  { id: "enviado",   label: "Enviado",   color: "#64748b", bg: "#f1f5f9", text: "#334155" },
+  { id: "entregado", label: "Entregado", color: "#3b82f6", bg: "#dbeafe", text: "#1d4ed8" },
+  { id: "leido",     label: "Leído",     color: "#8b5cf6", bg: "#ede9fe", text: "#5b21b6" },
+  { id: "fallido",   label: "Falló",     color: "#ef4444", bg: "#fee2e2", text: "#991b1b" },
 ];
 
-export const FM_WHATSAPP = Object.fromEntries(ESTADOS_WHATSAPP.map(e => [e.id, e]));
+export const FM_MENSAJE_WA = Object.fromEntries(ESTADOS_MENSAJE_WA.map(e => [e.id, e]));
 
 // "Número equivocado" salió de acá — ahora es su propia fase (FASES_SOAT),
 // no un motivo dentro de Ilocalizable. Pedido explícito del usuario.

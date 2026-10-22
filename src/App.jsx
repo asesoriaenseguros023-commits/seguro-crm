@@ -129,6 +129,11 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [seccion, setSeccion] = useState("inicio");
   const [configTab, setConfigTab] = useState("ramos");
+  // Cliente a seleccionar al entrar al módulo WhatsApp -- lo usa el ícono de
+  // WhatsApp en Seguimiento SOAT cuando el cliente ya tiene conversación
+  // (ver onAbrirWhatsapp más abajo y SOAT.jsx/WhatsApp.jsx).
+  const [waClienteId, setWaClienteId] = useState(null);
+  const abrirWhatsapp = (clienteId) => { setWaClienteId(clienteId); setSeccion("whatsapp"); };
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState("");
   const [userRol, setUserRol] = useState(ROL_AGENTE);
@@ -360,9 +365,9 @@ export default function App() {
       );
     }
 
-    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} comerciales={agentes.filter((a) => a.rol === "Comercial")} />;
+    if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} comerciales={agentes.filter((a) => a.rol === "Comercial")} onAbrirWhatsapp={abrirWhatsapp} />;
 
-    if (seccion === "whatsapp") return <WhatsAppPage />;
+    if (seccion === "whatsapp") return <WhatsAppPage clienteIdInicial={waClienteId} />;
 
     if (seccion === "primas") return <PulsoPrimasPage />;
 
