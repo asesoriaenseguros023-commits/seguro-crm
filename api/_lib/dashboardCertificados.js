@@ -51,6 +51,7 @@ function parseCertificados(matrix) {
     cantidadEstudiantes: ["cantidadestudiantes"],
     montoCertificado: ["montocertificado"],
     estadoPago: ["estadopago"],
+    observaciones: ["observaciones"],
   }).filter((r) => r.colegio != null && String(r.colegio).trim() !== "");
 
   return filas.map((r) => ({
@@ -60,6 +61,7 @@ function parseCertificados(matrix) {
     cantidadEstudiantes: Math.trunc(toNumber(r.cantidadEstudiantes)),
     montoCertificado: toNumber(r.montoCertificado),
     estadoPago: String(r.estadoPago || "SIN ESTADO").trim().toUpperCase(),
+    observaciones: String(r.observaciones || "").trim(),
   }));
 }
 
