@@ -2,8 +2,8 @@
 // React, para poder probarlas con datos reales fuera del navegador.
 //
 // Definiciones (las mismas del artefacto original, ahora explícitas):
-//  - Valor vendido  = pólizas vendidas (filas de BASE sin anulados, con
-//    duplicados incluidos) × tarifa del colegio.
+//  - Valor vendido  = estudiantes asegurados ÚNICOS × tarifa del colegio (es el
+//    ValorVendido de la hoja). Los duplicados se informan aparte y NO entran en caja.
 //  - Valor certificados = suma de MontoCertificado de TODOS los certificados,
 //    sin importar su estado de pago.
 //  - Caja = Valor vendido − Valor certificados.
@@ -19,7 +19,7 @@ export function analizarCaja(resumen, certificados) {
 
   const porColegio = resumen.map((d) => {
     const cs = certPorColegio[d.colegio] || [];
-    const vendido = Math.round(d.polizasVendidas * d.tarifa);
+    const vendido = d.valorVendido;
     const totalCert = suma(cs, (c) => c.montoCertificado);
     return {
       ...d,
@@ -35,11 +35,9 @@ export function analizarCaja(resumen, certificados) {
   });
 
   const totales = {
-    polizas: suma(porColegio, (d) => d.polizasVendidas),
     unicas: suma(porColegio, (d) => d.estudiantesAsegurados),
     duplicados: suma(porColegio, (d) => d.duplicados),
     valorVendido: suma(porColegio, (d) => d.vendido),
-    valorUnicas: suma(porColegio, (d) => d.valorVendido),
     valorDuplicados: suma(porColegio, (d) => d.valorDuplicados),
     nCertificados: suma(porColegio, (d) => d.nCertificados),
     totalCert: suma(porColegio, (d) => d.totalCert),
