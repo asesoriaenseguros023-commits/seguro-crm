@@ -373,6 +373,7 @@ export default function OficinaSoatPage() {
   const [pila, setPila] = useState([]);
   const [diaSel, setDiaSel] = useState(null);
   const [diaAcum, setDiaAcum] = useState(null);
+  const [mesAcum, setMesAcum] = useState(null);
   const [verEvol, setVerEvol] = useState(false);
 
   useEffect(() => {
@@ -457,11 +458,12 @@ export default function OficinaSoatPage() {
   // Acumulado del mes hasta un día D, contra el mismo día del año pasado.
   // Con el mes en curso el tope es el último día con datos; en un mes cerrado,
   // el último día del mes.
+  const mesAcumActivo = mesAcum && mesOptions.includes(mesAcum) ? mesAcum : selMes;
   const acum = useMemo(() => {
-    if (!selMes) return null;
-    const ymPas = addMonths(selMes, -12);
-    const nA = diasEnMes(selMes), nP = diasEnMes(ymPas);
-    const tope = ultimaFecha && ultimaFecha.slice(0, 7) === selMes ? parseInt(ultimaFecha.slice(8, 10), 10) : nA;
+    if (!mesAcumActivo) return null;
+    const ymPas = addMonths(mesAcumActivo, -12);
+    const nA = diasEnMes(mesAcumActivo), nP = diasEnMes(ymPas);
+    const tope = ultimaFecha && ultimaFecha.slice(0, 7) === mesAcumActivo ? parseInt(ultimaFecha.slice(8, 10), 10) : nA;
     const dia = Math.max(1, Math.min(diaAcum ?? tope, tope));
     const diaPas = Math.min(dia, nP);
     const porDia = (ym, n) => {
@@ -469,7 +471,7 @@ export default function OficinaSoatPage() {
       soat.forEach((r) => { if (r.fecha.slice(0, 7) === ym) { const d = parseInt(r.fecha.slice(8, 10), 10); c[d]++; v[d] += r.valor; } });
       return { c, v };
     };
-    const A = porDia(selMes, nA), P = porDia(ymPas, nP);
+    const A = porDia(mesAcumActivo, nA), P = porDia(ymPas, nP);
     const hasta = (x, d) => ({ count: x.c.slice(1, d + 1).reduce((a, b) => a + b, 0), valor: x.v.slice(1, d + 1).reduce((a, b) => a + b, 0) });
     const cum = (x, n) => { let a = 0; return Array.from({ length: n }, (_, k) => (a += x.c[k + 1])); };
     return {
@@ -480,7 +482,7 @@ export default function OficinaSoatPage() {
       cumA: cum(A, nA), cumP: cum(P, nP),
       porDiaA: A.c, porDiaP: P.c,
     };
-  }, [soat, selMes, ultimaFecha, diaAcum]);
+  }, [soat, mesAcumActivo, ultimaFecha, diaAcum]);
 
   const metricsCatCols = useMemo(() => (catCols ? catCols.map((k2) => gastosMetrics(gastos, "mes", k2)) : []), [catCols, gastos]);
   const gruposCatCols = useMemo(() => {
@@ -732,8 +734,8 @@ export default function OficinaSoatPage() {
 
 
           {acum && (() => {
-            const fechaTxt = `${acum.dia} de ${ymLabel(selMes).split(" ")[0].toLowerCase()}`;
-            const mesAct = ymLabel(selMes), mesPas = ymLabel(acum.ymPas);
+            const fechaTxt = `${acum.dia} de ${ymLabel(mesAcumActivo).split(" ")[0].toLowerCase()}`;
+            const mesAct = ymLabel(mesAcumActivo), mesPas = ymLabel(acum.ymPas);
             const Tarjeta = ({ titulo, sub, d, base, color, destacada }) => {
               const dv = base ? deltaInfo(d.count, base.count) : null;
               return (
@@ -754,6 +756,9 @@ export default function OficinaSoatPage() {
                   <div style={{ minWidth: 150, textAlign: "center", fontWeight: 700, color: BLUE.text }}>Al {fechaTxt}</div>
                   <button style={S.btn("secondary")} disabled={acum.dia >= acum.tope} onClick={() => paso(1)}>→</button>
                   {diaAcum != null && <button style={S.btn("secondary")} onClick={() => setDiaAcum(null)}>Hoy</button>}
+                  <select style={{ ...S.select, width: "auto", marginLeft: "auto" }} value={mesAcumActivo} onChange={(e) => { setMesAcum(e.target.value); setDiaAcum(null); }}>
+                    {mesOptions.map((ym) => <option key={ym} value={ym}>{ymLabel(ym)}</option>)}
+                  </select>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
                   <Tarjeta titulo="Acumulado a hoy" sub={`${mesAct} · 1 al ${acum.dia}`} d={acum.actual} base={acum.pasado} color={COLOR_VENTAS} destacada />
@@ -772,7 +777,7 @@ export default function OficinaSoatPage() {
                       {Array.from({ length: Math.max(acum.nA, acum.nP) }, (_, k) => {
                         const d = k + 1, cA = acum.porDiaA[d] || 0, cP = acum.porDiaP[d] || 0;
                         return (
-                          <div key={d} onClick={cA > 0 ? () => abrirDia(`${selMes}-${pad2(d)}`) : undefined} title={cA > 0 ? "Ver las ventas de este día" : undefined}
+                          <div key={d} onClick={cA > 0 ? () => abrirDia(`${mesAcumActivo}-${pad2(d)}`) : undefined} title={cA > 0 ? "Ver las ventas de este día" : undefined}
                             style={{ ...S.tableRow, gridTemplateColumns: "0.6fr 1fr 1fr 1fr 1fr", cursor: cA > 0 ? "pointer" : "default", background: d === acum.dia ? BLUE.light : undefined }}>
                             <div style={cA > 0 ? { color: BLUE.primary, fontWeight: 700 } : undefined}>{d}</div>
                             <div style={{ textAlign: "right" }}>{d <= acum.nA ? fmtInt.format(cA) : "—"}</div>
