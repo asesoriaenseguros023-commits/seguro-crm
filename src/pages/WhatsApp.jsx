@@ -3,6 +3,7 @@ import { supabase } from "../supabase.js";
 import { S, FM_MENSAJE_WA, FM_SOAT } from "../constants.js";
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
+import Cotizador from "../components/Cotizador.jsx";
 
 const VENTANA_24H_MS = 24 * 60 * 60 * 1000;
 
@@ -83,6 +84,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState("");
+  const [cotizando, setCotizando] = useState(false);
   // "ahora" en state (no Date.now() directo en el render, que es impuro) --
   // se refresca cada minuto para que la ventana de 24h se cierre sola en
   // pantalla sin que el agente tenga que recargar.
@@ -207,7 +209,9 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
             <div style={S.pageSub}>Conversaciones iniciadas desde Seguimiento SOAT</div>
           </div>
         </div>
+        <button style={S.btn("primary")} onClick={() => setCotizando(true)}>Cotizar SOAT</button>
       </div>
+      {cotizando && <Cotizador onClose={() => setCotizando(false)} />}
 
       {loading ? (
         <div style={{ padding: 48, textAlign: "center", color: "#aaa" }}>Cargando…</div>
