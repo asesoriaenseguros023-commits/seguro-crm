@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { S, BLUE } from "../constants.js";
 import { fmt, authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
+import Tabla from "../components/Tabla.jsx";
 import { analizarCaja, calcularAlertas, estudiantesDe } from "../certificadosCaja.js";
 
 // Módulo nativo que replica el artefacto "Control de Certificados Escolares"
@@ -144,10 +145,17 @@ export default function CertificadosCajaPage({ onBack }) {
   // Estudiantes de la base (pestaña Estudiantes) que todavía no tienen certificado,
   // valorados a la tarifa de su colegio. Es informativo: NO entra en caja ni en
   // los totales de certificados.
+  const certificadosDeben = useMemo(
+    () => certificadosDelColegio
+      .filter((c) => c.estadoPago === "DEBE")
+      .map((c) => ({ ...c, estudiantes: estudiantesDe(c, tarifaPorColegio[c.colegio]) ?? 0 })),
+    [certificadosDelColegio, tarifaPorColegio]
+  );
+
   const pendientes = useMemo(() => {
     const lista = (data?.estudiantesSinCertificado || []).filter((e) => colegioActivo === "todos" || e.colegio === colegioActivo);
     const valor = lista.reduce((s, e) => s + (tarifaPorColegio[e.colegio] || 0), 0);
-    return { cantidad: lista.length, valor: Math.round(valor) };
+    return { cantidad: lista.length, valor: Math.round(valor), lista };
   }, [data, colegioActivo, tarifaPorColegio]);
 
   const cambiarOrden = (campo) => {
@@ -324,6 +332,37 @@ export default function CertificadosCajaPage({ onBack }) {
           ))}
         </div>
       </div>
+
+      {(certificadosDeben.length > 0 || pendientes.cantidad > 0) && (
+        <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 4 }}>Detalle de lo que se debe{colegioActivo !== "todos" && ` · ${colegioActivo}`}</div>
+          <div style={{ fontSize: 12.5, color: "#6b87b0", marginBottom: 14 }}>Total por pagar {fmt(t.debe + pendientes.valor)}: certificados que ya llegaron y no se han pagado, más estudiantes vendidos que todavía no tienen certificado.</div>
+
+          {certificadosDeben.length > 0 && (
+            <>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: BLUE.text, marginBottom: 8 }}>Certificados por pagar (DEBE) · {certificadosDeben.length} · {fmt(t.debe)}</div>
+              <Tabla
+                minWidth={640}
+                cols={[{ h: "Colegio" }, { h: "Certificado" }, { h: "Estudiantes", right: true }, { h: "Monto", right: true }, { h: "Observaciones" }]}
+                filas={certificadosDeben.map((c, i) => ({ key: i, cells: [c.colegio, <b>{c.certificado}</b>, fmtNum.format(c.estudiantes), fmt(c.montoCertificado), <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</span>] }))}
+                total={["Total", "", fmtNum.format(certificadosDeben.reduce((x, c) => x + c.estudiantes, 0)), fmt(t.debe), ""]}
+              />
+            </>
+          )}
+
+          {pendientes.cantidad > 0 && (
+            <>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: BLUE.text, margin: "18px 0 8px" }}>Vendidos sin certificado · {fmtNum.format(pendientes.cantidad)} · {fmt(pendientes.valor)}</div>
+              <Tabla
+                minWidth={560} maxHeight={320}
+                cols={[{ h: "Colegio" }, { h: "Documento" }, { h: "Nombre" }, { h: "Valor", right: true }]}
+                filas={pendientes.lista.map((e, i) => ({ key: i, cells: [e.colegio, e.documento, e.nombre || "—", fmt(Math.round(tarifaPorColegio[e.colegio] || 0))] }))}
+                total={["Total", "", "", fmt(pendientes.valor)]}
+              />
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ textAlign: "center", color: "#9aa8c7", fontSize: 11.5, lineHeight: 1.6, marginTop: 8 }}>
         Fuente: "Control Ejecutivo Colegios", pestañas ResumenVentas y Certificados (generadas por consolidarDatos() en Apps Script). Tarifa del colegio = valor vendido ÷ asegurados únicos. Caja = pólizas únicas × tarifa − suma de certificados de cualquier estado; los duplicados se informan aparte. Se actualiza sola cada 20 minutos.
