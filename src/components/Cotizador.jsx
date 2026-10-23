@@ -23,8 +23,11 @@ export default function Cotizador({ onClose }) {
 
   const cambiarTipo = (v) => { setTipo(v); setModelo(""); setCc(""); setTon(""); setSub(""); setCopiado(false); };
 
-  // Lo que se le copia al cliente: un solo total (SOAT + costo del servicio), sin desglose.
-  const texto = r?.tarifa ? `SOAT 2026 · ${r.descripcion}\nTotal a pagar: ${fmt(r.totalCliente)}` : "";
+  // Lo que se le copia al cliente: costo del SOAT, tarifa de servicio y total
+  // (sin el desglose de prima, contribución y tasa RUNT).
+  const texto = r?.tarifa
+    ? `SOAT 2026 · ${r.descripcion}\nCosto SOAT: ${fmt(r.tarifa.total)}\nTarifa de servicio: ${fmt(r.servicio)}\nTotal a pagar: ${fmt(r.totalCliente)}`
+    : "";
   const copiar = async () => {
     try { await navigator.clipboard.writeText(texto); setCopiado(true); setTimeout(() => setCopiado(false), 2000); } catch { /* sin permiso de portapapeles */ }
   };
@@ -87,7 +90,7 @@ export default function Cotizador({ onClose }) {
                   <div style={{ fontSize: 34, fontWeight: 700, color: BLUE.primary, letterSpacing: -0.5 }}>{fmt(r.totalCliente)}</div>
                   <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 12 }}>Total a pagar (SOAT + servicio)</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#9aa8c7", borderTop: `1px dashed ${BLUE.border}`, paddingTop: 10 }}>
-                    <div style={{ fontStyle: "italic" }}>Detalle interno (no se copia al cliente)</div>
+                    <div style={{ fontStyle: "italic" }}>Desglose de la tarifa (prima, contribución y RUNT no se copian al cliente)</div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}><span>Prima</span><span>{fmt(r.tarifa.prima)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}><span>Contribución 52 %</span><span>{fmt(r.tarifa.contribucion)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}><span>Tasa RUNT</span><span>{fmt(r.tarifa.runt)}</span></div>
