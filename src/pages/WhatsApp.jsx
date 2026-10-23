@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../supabase.js";
-import { S, FM_MENSAJE_WA, FM_SOAT, FASES_SOAT } from "../constants.js";
+import { S, FM_MENSAJE_WA, FM_SOAT, FASES_SOAT, ACCIONES_SOAT } from "../constants.js";
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Cotizador from "../components/Cotizador.jsx";
@@ -103,7 +103,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
 
   useEffect(() => {
     Promise.all([
-      supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase, fecha_vencimiento)").order("updated_at", { ascending: false }),
+      supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
       supabase.from("whatsapp_mensajes").select("*").order("created_at", { ascending: true }),
     ]).then(([convRes, msgRes]) => {
       if (convRes.data) setConversaciones(convRes.data);
@@ -119,7 +119,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soat_clientes" }, (payload) => {
         const n = payload.new;
-        setConversaciones(p => p.map(x => x.cliente_id === n.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: n.fase, nombre: n.nombre, fecha_vencimiento: n.fecha_vencimiento } } : x));
+        setConversaciones(p => p.map(x => x.cliente_id === n.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: n.fase, nombre: n.nombre, fecha_vencimiento: n.fecha_vencimiento, proxima_accion: n.proxima_accion, fecha_proxima: n.fecha_proxima } } : x));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_mensajes" }, (payload) => {
         if (payload.eventType === "INSERT") setMensajes(p => p.some(x => x.id === payload.new.id) ? p : [...p, payload.new]);
@@ -189,6 +189,17 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
     if (error) {
       setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: antes } } : x));
       setErrorEnvio(`No se pudo cambiar el estado: ${error.message}`);
+    }
+  };
+
+  // Próxima acción y fecha: mismos campos que en Seguimiento SOAT (soat_clientes).
+  const cambiarProximaAccion = async (conv, campo, valor) => {
+    const previo = conv.soat_clientes?.[campo] ?? "";
+    setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, soat_clientes: { ...x.soat_clientes, [campo]: valor } } : x));
+    const { error } = await supabase.from("soat_clientes").update({ [campo]: valor }).eq("id", conv.cliente_id);
+    if (error) {
+      setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, soat_clientes: { ...x.soat_clientes, [campo]: previo } } : x));
+      setErrorEnvio(`No se pudo guardar: ${error.message}`);
     }
   };
 
@@ -314,6 +325,23 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                         </label>
                       );
                     })()}
+                    {seleccionada.soat_clientes && !["compro", "no_interes"].includes(seleccionada.soat_clientes.fase) && (
+                      <>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
+                          <span style={{ opacity: 0.85 }}>Próxima acción:</span>
+                          <select value={seleccionada.soat_clientes.proxima_accion || ""} onChange={(e) => cambiarProximaAccion(seleccionada, "proxima_accion", e.target.value)}
+                            style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.6)", background: "#fff", color: "#111b21", fontWeight: 600, cursor: "pointer", outline: "none" }}>
+                            <option value="">Sin definir</option>
+                            {ACCIONES_SOAT.map(a => <option key={a} value={a}>{a}</option>)}
+                          </select>
+                        </label>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
+                          <span style={{ opacity: 0.85 }}>Fecha:</span>
+                          <input type="date" value={seleccionada.soat_clientes.fecha_proxima || ""} onChange={(e) => cambiarProximaAccion(seleccionada, "fecha_proxima", e.target.value)}
+                            style={{ fontSize: 11.5, padding: "1px 6px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.6)", background: "#fff", color: "#111b21", fontWeight: 600, outline: "none" }} />
+                        </label>
+                      </>
+                    )}
                   </div>
                 </div>
 
