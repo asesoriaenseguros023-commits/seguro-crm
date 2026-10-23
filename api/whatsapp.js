@@ -228,7 +228,7 @@ async function manejarWebhookPost_(req, res) {
         const datosMedia = esMedia ? msg[msg.type] || {} : null;
         const texto = esMedia ? (datosMedia.caption || "") : textoDeMensaje_(msg);
         const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
-          .select("id").eq("telefono", desde).order("updated_at", { ascending: false }).limit(1).maybeSingle();
+          .select("id, cliente_id").eq("telefono", desde).order("updated_at", { ascending: false }).limit(1).maybeSingle();
         if (conversacion) {
           const ahora = new Date().toISOString();
           const fila = {
@@ -263,6 +263,12 @@ async function manejarWebhookPost_(req, res) {
           await supabase.from("whatsapp_conversaciones")
             .update({ ultima_entrante_at: ahora, updated_at: ahora })
             .eq("id", conversacion.id);
+          // Por defecto, si el cliente respondió pasa de "Pendiente" a "En gestión"
+          // (no se toca si ya está en otra fase: interesado, compró, etc.).
+          if (conversacion.cliente_id) {
+            await supabase.from("soat_clientes").update({ fase: "en_gestion" })
+              .eq("id", conversacion.cliente_id).eq("fase", "pendiente");
+          }
         }
       }
     }

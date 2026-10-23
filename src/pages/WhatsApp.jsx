@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../supabase.js";
-import { S, FM_MENSAJE_WA, FM_SOAT } from "../constants.js";
+import { S, FM_MENSAJE_WA, FM_SOAT, FASES_SOAT } from "../constants.js";
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Cotizador from "../components/Cotizador.jsx";
@@ -117,6 +117,10 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
         if (payload.eventType === "UPDATE") setConversaciones(p => p.map(x => x.id === payload.new.id ? { ...x, ...payload.new } : x));
         if (payload.eventType === "DELETE") setConversaciones(p => p.filter(x => x.id !== payload.old.id));
       })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soat_clientes" }, (payload) => {
+        const n = payload.new;
+        setConversaciones(p => p.map(x => x.cliente_id === n.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: n.fase, nombre: n.nombre, fecha_vencimiento: n.fecha_vencimiento } } : x));
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_mensajes" }, (payload) => {
         if (payload.eventType === "INSERT") setMensajes(p => p.some(x => x.id === payload.new.id) ? p : [...p, payload.new]);
         if (payload.eventType === "UPDATE") setMensajes(p => p.map(x => x.id === payload.new.id ? { ...x, ...payload.new } : x));
@@ -173,6 +177,20 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   );
   const ventanaAbierta = !!seleccionada?.ultima_entrante_at && !!ahora
     && ahora - new Date(seleccionada.ultima_entrante_at).getTime() < VENTANA_24H_MS;
+
+  // Mismo campo (soat_clientes.fase) y mismas reglas que Seguimiento SOAT:
+  // "Compró" y "No interesado" limpian la próxima acción. Seguimiento SOAT se
+  // entera solo por realtime, y viceversa (suscripción más abajo).
+  const cambiarEstado = async (conv, fase) => {
+    const antes = conv.soat_clientes?.fase;
+    setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase } } : x));
+    const patch = { fase, ...(["compro", "no_interes"].includes(fase) ? { proxima_accion: "", fecha_proxima: "" } : {}) };
+    const { error } = await supabase.from("soat_clientes").update(patch).eq("id", conv.cliente_id);
+    if (error) {
+      setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: antes } } : x));
+      setErrorEnvio(`No se pudo cambiar el estado: ${error.message}`);
+    }
+  };
 
   const reaccionar = async (m, emoji) => {
     setPickerMsg(null); setErrorEnvio("");
@@ -284,9 +302,17 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                     <span>{seleccionada.telefono}</span>
                     {seleccionada.soat_clientes?.placa && <span>Placa: {seleccionada.soat_clientes.placa}</span>}
                     {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence SOAT: {seleccionada.soat_clientes.fecha_vencimiento}</span>}
-                    {seleccionada.soat_clientes?.fase && (() => {
-                      const f = FM_SOAT[seleccionada.soat_clientes.fase];
-                      return <span style={{ background: "rgba(255,255,255,0.2)", color: "#fff", padding: "1px 10px", borderRadius: 12, fontWeight: 700, fontSize: 11.5 }}>{f?.label || seleccionada.soat_clientes.fase}</span>;
+                    {seleccionada.soat_clientes && (() => {
+                      const f = FM_SOAT[seleccionada.soat_clientes.fase] || FM_SOAT.pendiente;
+                      return (
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
+                          <span style={{ opacity: 0.85 }}>Estado:</span>
+                          <select value={seleccionada.soat_clientes.fase || "pendiente"} onChange={(e) => cambiarEstado(seleccionada, e.target.value)}
+                            style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 12, border: `1.5px solid ${f.color}`, background: f.bg, color: f.text, fontWeight: 700, cursor: "pointer", outline: "none" }}>
+                            {FASES_SOAT.map(x => <option key={x.id} value={x.id} disabled={x.id === "ilocalizable"} title={x.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta" : undefined}>{x.label}</option>)}
+                          </select>
+                        </label>
+                      );
                     })()}
                   </div>
                 </div>
