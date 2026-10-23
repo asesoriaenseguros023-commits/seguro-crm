@@ -88,7 +88,10 @@ function parseEstudiantes(matrix) {
     if (String(r.duplicado || "").toUpperCase() === "ANULADO") return;
     const colegio = String(r.colegio).trim();
     porColegio[colegio] = (porColegio[colegio] || 0) + 1;
-    if (!String(r.certificado ?? "").trim()) {
+    // Sin certificado = celda vacía o la palabra "Pendiente" (así lo deja la hoja
+    // base de Casa de la Cultura mientras el anexo no llega).
+    const cert = String(r.certificado ?? "").trim();
+    if (!cert || /^pendiente/i.test(cert)) {
       sinCertificado.push({ colegio, documento: String(r.documento ?? "").trim(), nombre: String(r.nombre || "").trim() });
     }
   });
