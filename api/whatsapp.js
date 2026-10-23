@@ -114,6 +114,40 @@ function ventanaAbierta_(conversacion) {
   return Date.now() - new Date(conversacion.ultima_entrante_at).getTime() < VENTANA_24H_MS;
 }
 
+
+// ── Archivos entrantes (foto, audio, video, documento) ─────────────────────
+// Meta no manda el archivo en el webhook: manda un id. Hay que pedir su URL
+// (que caduca) y bajarlo con el mismo token; se guarda en Supabase Storage
+// para poder mostrarlo después. Requiere supabase_whatsapp_media.sql.
+const TIPOS_MEDIA = ["image", "audio", "video", "document", "sticker"];
+const EXT_POR_MIME = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+  "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac", "audio/amr": "amr",
+  "video/mp4": "mp4", "video/3gpp": "3gp", "application/pdf": "pdf",
+};
+
+async function descargarMedia_({ mediaId, mime, nombre, conversacionId, waMessageId }) {
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!token) throw new Error("falta WHATSAPP_TOKEN");
+  const auth = { Authorization: `Bearer ${token}` };
+
+  const meta = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${mediaId}`, { headers: auth });
+  const metaJson = await meta.json().catch(() => null);
+  if (!meta.ok || !metaJson?.url) throw new Error(metaJson?.error?.message || `Meta respondió ${meta.status}`);
+
+  const archivo = await fetch(metaJson.url, { headers: auth });
+  if (!archivo.ok) throw new Error(`descarga ${archivo.status}`);
+  const buffer = Buffer.from(await archivo.arrayBuffer());
+
+  // "audio/ogg; codecs=opus" -> "audio/ogg"
+  const mimeBase = String(metaJson.mime_type || mime || "application/octet-stream").split(";")[0].trim();
+  const ext = EXT_POR_MIME[mimeBase] || mimeBase.split("/")[1] || "bin";
+  const path = `${conversacionId}/${waMessageId}.${ext}`;
+  const { error } = await supabase.storage.from("whatsapp-media").upload(path, buffer, { contentType: mimeBase, upsert: true });
+  if (error) throw new Error(error.message);
+  return { media_path: path, media_mime: mimeBase, media_nombre: nombre || null };
+}
+
 // ── Webhook de Meta (sin auth de agente -- lo llama Meta directo) ──────────
 //
 // GET: handshake de verificacion (Meta lo llama una vez al configurar el
@@ -164,17 +198,42 @@ async function manejarWebhookPost_(req, res) {
       for (const msg of valor.messages || []) {
         const desde = String(msg.from || "").replace(/[^\d]/g, "");
         if (!desde) continue;
-        const texto = msg.text?.body || `[${msg.type}]`;
+        const esMedia = TIPOS_MEDIA.includes(msg.type);
+        const datosMedia = esMedia ? msg[msg.type] || {} : null;
+        const texto = esMedia ? (datosMedia.caption || "") : (msg.text?.body || `[${msg.type}]`);
         const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
           .select("id").eq("telefono", desde).order("updated_at", { ascending: false }).limit(1).maybeSingle();
         if (conversacion) {
           const ahora = new Date().toISOString();
-          await supabase.from("whatsapp_mensajes").insert({
+          const fila = {
             conversacion_id: conversacion.id,
             direccion: "entrante",
-            tipo: "texto",
+            tipo: esMedia ? (msg.type === "sticker" ? "image" : msg.type) : "texto",
             contenido: texto,
-          });
+            wa_message_id: msg.id || null,
+          };
+          if (esMedia) {
+            try {
+              Object.assign(fila, await descargarMedia_({
+                mediaId: datosMedia.id, mime: datosMedia.mime_type, nombre: datosMedia.filename,
+                conversacionId: conversacion.id, waMessageId: msg.id || datosMedia.id,
+              }));
+            } catch (err) {
+              console.error("WhatsApp: no se pudo descargar el archivo entrante", msg.type, err.message);
+              fila.contenido = [texto, `[${msg.type}: no se pudo descargar el archivo (${err.message})]`].filter(Boolean).join("\n");
+            }
+          }
+          const { error: insError } = await supabase.from("whatsapp_mensajes").insert(fila);
+          // 23505 = Meta reenvió el mismo evento (wa_message_id ya existe): ignorar.
+          if (insError?.code === "23505") continue;
+          if (insError && esMedia) {
+            // Si falta correr supabase_whatsapp_media.sql (columnas nuevas), guardar al menos el aviso.
+            console.error("WhatsApp: no se pudo guardar el archivo entrante", insError.message);
+            await supabase.from("whatsapp_mensajes").insert({
+              conversacion_id: conversacion.id, direccion: "entrante", tipo: "texto",
+              contenido: `[${msg.type}] ${texto}`.trim(),
+            });
+          }
           await supabase.from("whatsapp_conversaciones")
             .update({ ultima_entrante_at: ahora, updated_at: ahora })
             .eq("id", conversacion.id);

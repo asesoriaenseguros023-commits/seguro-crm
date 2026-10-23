@@ -42,6 +42,35 @@ const TickMensaje = ({ estado, error }) => {
   return <span title={fm?.label || estado} style={{ color: estado === "leido" ? fm?.color : WA.textMuted, fontSize: 12, fontWeight: estado === "leido" ? 700 : 400 }}>{marca}</span>;
 };
 
+// Archivo adjunto de un mensaje (foto, audio, video, documento). El bucket
+// "whatsapp-media" es privado: se pide un link firmado de una hora. Los
+// audios de WhatsApp son OGG/Opus: Chrome, Edge y Firefox los reproducen; en
+// Safari puede no sonar, por eso siempre se deja el link para abrir/descargar.
+const ETIQUETA_MEDIA = { image: "📷 Foto", audio: "🎤 Audio", video: "🎥 Video", document: "📄 Documento" };
+
+const MediaMensaje = ({ m }) => {
+  const [url, setUrl] = useState(null);
+  const [fallo, setFallo] = useState(false);
+  useEffect(() => {
+    let cancelado = false;
+    async function pedir() {
+      const { data, error } = await supabase.storage.from("whatsapp-media").createSignedUrl(m.media_path, 3600);
+      if (cancelado) return;
+      if (error || !data?.signedUrl) setFallo(true); else setUrl(data.signedUrl);
+    }
+    pedir();
+    return () => { cancelado = true; };
+  }, [m.media_path]);
+
+  if (fallo) return <div style={{ fontSize: 12.5, color: "#dc2626" }}>No se pudo cargar el archivo.</div>;
+  if (!url) return <div style={{ fontSize: 12.5, color: WA.textMuted }}>Cargando archivo…</div>;
+  const enlace = <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: WA.header }}>Abrir / descargar</a>;
+  if (m.tipo === "image") return <div><a href={url} target="_blank" rel="noreferrer"><img src={url} alt="Foto recibida" style={{ maxWidth: 260, maxHeight: 300, borderRadius: 6, display: "block" }} /></a></div>;
+  if (m.tipo === "video") return <div><video src={url} controls preload="metadata" style={{ maxWidth: 280, borderRadius: 6, display: "block" }} />{enlace}</div>;
+  if (m.tipo === "audio") return <div><audio src={url} controls preload="metadata" style={{ width: 240, display: "block" }} />{enlace}</div>;
+  return <div style={{ fontSize: 13 }}>📄 {m.media_nombre || "Documento"} · {enlace}</div>;
+};
+
 // Chat real del módulo WhatsApp: lista de conversaciones a la izquierda,
 // hilo de whatsapp_mensajes + caja de texto a la derecha (ver
 // supabase_whatsapp_chat.sql y api/whatsapp.js). whatsapp_conversaciones es
@@ -192,7 +221,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                     <div style={{ fontSize: 11, color: WA.textMuted, flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
                   </div>
                   <div style={{ fontSize: 12.5, color: WA.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ""}` : "—"}
+                    {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ETIQUETA_MEDIA[ultimo.tipo] || ""}` : "—"}
                   </div>
                 </div>
               );
@@ -234,7 +263,8 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                           border: `1px solid ${saliente ? WA.bubbleOutBorder : WA.bubbleInBorder}`,
                           boxShadow: "0 1px 1px rgba(0,0,0,0.08)",
                         }}>
-                          <div style={{ fontSize: 13.5, color: "#111b21", whiteSpace: "pre-wrap" }}>{m.contenido}</div>
+                          {m.media_path && <MediaMensaje m={m} />}
+                          {(m.contenido || !m.media_path) && <div style={{ fontSize: 13.5, color: "#111b21", whiteSpace: "pre-wrap" }}>{m.contenido}</div>}
                           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", marginTop: 4 }}>
                             {m.tipo === "plantilla" && <span style={{ fontSize: 10.5, color: WA.textMuted }}>Plantilla</span>}
                             <span style={{ fontSize: 10.5, color: WA.textMuted }}>{fmtHora(m.created_at)}</span>
