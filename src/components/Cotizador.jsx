@@ -23,12 +23,15 @@ export default function Cotizador({ onClose }) {
 
   const cambiarTipo = (v) => { setTipo(v); setModelo(""); setCc(""); setTon(""); setSub(""); setCopiado(false); };
 
-  const texto = r?.tarifa
-    ? `SOAT 2026 · ${r.descripcion}\nPrima: ${fmt(r.tarifa.prima)}\nContribución 52 %: ${fmt(r.tarifa.contribucion)}\nTasa RUNT: ${fmt(r.tarifa.runt)}\nTotal a pagar: ${fmt(r.tarifa.total)}`
-    : "";
+  // Lo que se le copia al cliente: un solo total (SOAT + costo del servicio), sin desglose.
+  const texto = r?.tarifa ? `SOAT 2026 · ${r.descripcion}\nTotal a pagar: ${fmt(r.totalCliente)}` : "";
   const copiar = async () => {
     try { await navigator.clipboard.writeText(texto); setCopiado(true); setTimeout(() => setCopiado(false), 2000); } catch { /* sin permiso de portapapeles */ }
   };
+
+  const opcionesSub = t?.opciones || [];
+  const off = (campoNombre) => !!t && !pide.includes(campoNombre);
+  const apagado = (c) => (c ? { opacity: 0.45, background: "#f4f6fb" } : null);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }} onClick={onClose}>
@@ -36,7 +39,7 @@ export default function Cotizador({ onClose }) {
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: BLUE.text }}>Cotizar SOAT</div>
-            <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 2 }}>Tarifas 2026 · elige el tipo de vehículo</div>
+            <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 2 }}>Tarifas 2026 + costo del servicio · llena los datos del vehículo</div>
           </div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: 22, color: "#9aa8c7", cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
@@ -50,39 +53,28 @@ export default function Cotizador({ onClose }) {
             </select>
           </div>
 
-          {pide.includes("sub") && (
+          <div>
+            <label style={etiqueta}>Clase / servicio (motocarros y buses)</label>
+            <select style={{ ...campo, ...apagado(off("sub")) }} value={sub} disabled={off("sub")} onChange={(e) => setSub(e.target.value)}>
+              <option value="">{off("sub") ? "No aplica" : "Selecciona…"}</option>
+              {opcionesSub.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
-              <label style={etiqueta}>{tipo === "bus" ? "Servicio" : "Clase"}</label>
-              <select style={campo} value={sub} onChange={(e) => setSub(e.target.value)}>
-                <option value="">Selecciona…</option>
-                {t.opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-              </select>
+              <label style={etiqueta}>Modelo (año)</label>
+              <input style={{ ...campo, ...apagado(off("modelo")) }} type="number" inputMode="numeric" placeholder="2020" value={modelo} disabled={off("modelo")} onChange={(e) => setModelo(e.target.value)} />
             </div>
-          )}
-
-          {(pide.includes("modelo") || pide.includes("cc")) && (
-            <div style={{ display: "grid", gridTemplateColumns: pide.includes("modelo") && pide.includes("cc") ? "1fr 1fr" : "1fr", gap: 12 }}>
-              {pide.includes("modelo") && (
-                <div>
-                  <label style={etiqueta}>Modelo (año)</label>
-                  <input style={campo} type="number" inputMode="numeric" placeholder="2020" value={modelo} onChange={(e) => setModelo(e.target.value)} />
-                </div>
-              )}
-              {pide.includes("cc") && (
-                <div>
-                  <label style={etiqueta}>Cilindraje (c.c.)</label>
-                  <input style={campo} type="number" inputMode="numeric" placeholder="1600" value={cc} onChange={(e) => setCc(e.target.value)} />
-                </div>
-              )}
+            <div>
+              <label style={etiqueta}>Cilindraje (c.c.)</label>
+              <input style={{ ...campo, ...apagado(off("cc")) }} type="number" inputMode="numeric" placeholder="1600" value={cc} disabled={off("cc")} onChange={(e) => setCc(e.target.value)} />
             </div>
-          )}
-
-          {pide.includes("ton") && (
             <div>
               <label style={etiqueta}>Toneladas</label>
-              <input style={campo} type="number" inputMode="decimal" placeholder="3" value={ton} onChange={(e) => setTon(e.target.value)} />
+              <input style={{ ...campo, ...apagado(off("ton")) }} type="number" inputMode="decimal" placeholder="3" value={ton} disabled={off("ton")} onChange={(e) => setTon(e.target.value)} />
             </div>
-          )}
+          </div>
 
           {r && (
             <div style={{ borderTop: `1px solid ${BLUE.border}`, paddingTop: 16 }}>
@@ -92,12 +84,15 @@ export default function Cotizador({ onClose }) {
                 <>
                   <div style={{ fontSize: 12.5, color: "#6b87b0", marginBottom: 4 }}>Tarifa {r.tarifa.codigo} · {r.descripcion}</div>
                   {r.antiguedad !== null && <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 8 }}>Antigüedad: {r.antiguedad} {r.antiguedad === 1 ? "año" : "años"} ({r.antiguedad >= 10 ? "10 años o más" : "0 a 9 años"})</div>}
-                  <div style={{ fontSize: 34, fontWeight: 700, color: BLUE.primary, letterSpacing: -0.5 }}>{fmt(r.tarifa.total)}</div>
-                  <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 12 }}>Total a pagar</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "#6b87b0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Prima</span><b style={{ color: BLUE.text }}>{fmt(r.tarifa.prima)}</b></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Contribución 52 %</span><b style={{ color: BLUE.text }}>{fmt(r.tarifa.contribucion)}</b></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Tasa RUNT</span><b style={{ color: BLUE.text }}>{fmt(r.tarifa.runt)}</b></div>
+                  <div style={{ fontSize: 34, fontWeight: 700, color: BLUE.primary, letterSpacing: -0.5 }}>{fmt(r.totalCliente)}</div>
+                  <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 12 }}>Total a pagar (SOAT + servicio)</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#9aa8c7", borderTop: `1px dashed ${BLUE.border}`, paddingTop: 10 }}>
+                    <div style={{ fontStyle: "italic" }}>Detalle interno (no se copia al cliente)</div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Prima</span><span>{fmt(r.tarifa.prima)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Contribución 52 %</span><span>{fmt(r.tarifa.contribucion)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Tasa RUNT</span><span>{fmt(r.tarifa.runt)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>SOAT</span><b style={{ color: BLUE.text }}>{fmt(r.tarifa.total)}</b></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span>Costo del servicio</span><b style={{ color: BLUE.text }}>{fmt(r.servicio)}</b></div>
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                     <button style={S.btn("primary")} onClick={copiar}>{copiado ? "✓ Copiado" : "Copiar para el cliente"}</button>

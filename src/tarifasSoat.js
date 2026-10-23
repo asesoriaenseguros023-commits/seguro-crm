@@ -7,6 +7,9 @@
 
 const T = (codigo, prima, contribucion, total, runt = 2400) => ({ codigo, prima, contribucion, runt, total });
 
+// Costo del servicio de la agencia: se suma a toda cotización.
+export const COSTO_SERVICIO = 31000;
+
 export const TARIFAS = {
   100: T(100, 80100, 41600, 124100),
   110: T(110, 167000, 86800, 256200),
@@ -98,5 +101,6 @@ export function cotizar({ tipo, modelo, cc, ton, sub }, anioActual = new Date().
       codigo = base + viejo + rangoCC(nCC) * 10;
     }
   }
-  return { tarifa: TARIFAS[codigo], descripcion: DESC[codigo], antiguedad: edad };
+  const tarifa = TARIFAS[codigo];
+  return { tarifa, descripcion: DESC[codigo], antiguedad: edad, servicio: COSTO_SERVICIO, totalCliente: tarifa.total + COSTO_SERVICIO };
 }
