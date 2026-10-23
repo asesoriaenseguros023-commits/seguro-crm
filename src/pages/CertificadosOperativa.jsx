@@ -30,6 +30,37 @@ const Tarjeta = ({ titulo, desc, children }) => (
   </div>
 );
 
+// Tabla con celdas separadas por líneas, márgenes en cada columna, encabezado fijo
+// y filas alternadas. cols: [{ h, right }]; filas: [{ key, cells, onClick, bg }].
+const BORDE = "#dbe4f3";
+const Tabla = ({ cols, filas, minWidth = 640, maxHeight, total }) => (
+  <div style={{ border: `1px solid ${BORDE}`, borderRadius: 10, overflow: "auto", maxHeight }}>
+    <table style={{ width: "100%", minWidth, borderCollapse: "separate", borderSpacing: 0, fontSize: 13.5 }}>
+      <thead>
+        <tr>
+          {cols.map((c, i) => (
+            <th key={i} style={{ position: "sticky", top: 0, zIndex: 1, background: BLUE.light, color: BLUE.primary, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", textAlign: c.right ? "right" : "left", padding: "11px 16px", borderBottom: `2px solid ${BORDE}`, borderRight: i < cols.length - 1 ? `1px solid ${BORDE}` : "none", whiteSpace: "nowrap" }}>{c.h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((f, r) => (
+          <tr key={f.key ?? r} onClick={f.onClick} style={{ cursor: f.onClick ? "pointer" : "default", background: f.bg || (r % 2 ? "#f8faff" : "#fff") }}>
+            {f.cells.map((cell, i) => (
+              <td key={i} style={{ textAlign: cols[i].right ? "right" : "left", padding: "11px 16px", verticalAlign: "middle", borderBottom: r < filas.length - 1 ? `1px solid ${BORDE}` : "none", borderRight: i < cols.length - 1 ? `1px solid ${BORDE}` : "none" }}>{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+      {total && (
+        <tfoot>
+          <tr>{total.map((cell, i) => <td key={i} style={{ textAlign: cols[i].right ? "right" : "left", padding: "11px 16px", fontWeight: 700, background: BLUE.light, borderTop: `2px solid ${BORDE}`, borderRight: i < cols.length - 1 ? `1px solid ${BORDE}` : "none" }}>{cell}</td>)}</tr>
+        </tfoot>
+      )}
+    </table>
+  </div>
+);
+
 export default function CertificadosOperativaPage({ onBack }) {
   const { data, loading, refreshing, error, lastUpdated, refresh, retry } = useCertificadosData();
   const [colegioActivo, setColegioActivo] = useState(null);
@@ -109,23 +140,33 @@ export default function CertificadosOperativaPage({ onBack }) {
       {!hayColumnaArchivo && <div style={S.alertBox("#d97706")}><Icon name="warning" size={16} /><span style={{ fontSize: 12.5 }}>La hoja maestra todavía no trae la columna <b>Archivo</b>: actualiza el script consolidarDatos() y córrelo una vez para ver si cada certificado está archivado.</span></div>}
 
       <Tarjeta titulo="Colegios" desc={`${totalDif ? `${totalDif} diferencias con Seguros 2026 en total. ` : "Sin diferencias con Seguros 2026. "}Haz clic en un colegio para ver sus certificados.`}>
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 0.9fr", minWidth: 820 }}>
-            <span>Colegio</span><span style={{ textAlign: "right" }}>Certificados</span><span style={{ textAlign: "right" }}>Archivados</span><span style={{ textAlign: "right" }}>Sin archivar</span><span style={{ textAlign: "right" }}>Estudiantes</span><span style={{ textAlign: "right" }}>Sin certificado</span><span style={{ textAlign: "right" }}>Diferencias</span>
-          </div>
-          {filas.map((f) => (
-            <div key={f.colegio} onClick={() => setColegioActivo(colegioActivo === f.colegio ? null : f.colegio)}
-              style={{ ...S.tableRow, gridTemplateColumns: "1.6fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 0.9fr", minWidth: 820, cursor: "pointer", background: colegioActivo === f.colegio ? BLUE.light : undefined }}>
-              <div><div style={{ fontWeight: 600, color: BLUE.text }}>{f.colegio}</div><div style={{ fontSize: 11.5, color: "#9aa8c7" }}>{f.aseguradora}</div></div>
-              <div style={{ textAlign: "right" }}>{fmtNum.format(f.nCert)}</div>
-              <div style={{ textAlign: "right" }}>{hayColumnaArchivo ? fmtNum.format(f.archivados) : "—"}</div>
-              <div style={{ textAlign: "right", color: f.sinArchivar ? COLOR_WARN : undefined, fontWeight: f.sinArchivar ? 700 : 400 }}>{hayColumnaArchivo ? (f.sinArchivar ? fmtNum.format(f.sinArchivar) : "—") : "—"}</div>
-              <div style={{ textAlign: "right" }}>{fmtNum.format(f.estudiantes)}</div>
-              <div style={{ textAlign: "right", color: f.sinCertificado ? COLOR_WARN : "#9aa8c7", fontWeight: f.sinCertificado ? 700 : 400 }}>{f.sinCertificado ? fmtNum.format(f.sinCertificado) : "—"}</div>
-              <div style={{ textAlign: "right" }}>{f.diferencias ? <span style={S.badge(COLOR_AVISO)}>{f.diferencias}</span> : <span style={{ color: COLOR_OK }}>✓</span>}</div>
-            </div>
-          ))}
-        </div>
+        <Tabla
+          minWidth={820}
+          cols={[{ h: "Colegio" }, { h: "Certificados", right: true }, { h: "Archivados", right: true }, { h: "Sin archivar", right: true }, { h: "Estudiantes", right: true }, { h: "Sin certificado", right: true }, { h: "Diferencias", right: true }]}
+          filas={filas.map((f) => ({
+            key: f.colegio,
+            onClick: () => setColegioActivo(colegioActivo === f.colegio ? null : f.colegio),
+            bg: colegioActivo === f.colegio ? BLUE.light : undefined,
+            cells: [
+              <><div style={{ fontWeight: 600, color: BLUE.text }}>{f.colegio}</div><div style={{ fontSize: 11.5, color: "#9aa8c7" }}>{f.aseguradora}</div></>,
+              fmtNum.format(f.nCert),
+              hayColumnaArchivo ? fmtNum.format(f.archivados) : "—",
+              <span style={{ color: f.sinArchivar ? COLOR_WARN : undefined, fontWeight: f.sinArchivar ? 700 : 400 }}>{hayColumnaArchivo ? (f.sinArchivar ? fmtNum.format(f.sinArchivar) : "—") : "—"}</span>,
+              fmtNum.format(f.estudiantes),
+              <span style={{ color: f.sinCertificado ? COLOR_WARN : "#9aa8c7", fontWeight: f.sinCertificado ? 700 : 400 }}>{f.sinCertificado ? fmtNum.format(f.sinCertificado) : "—"}</span>,
+              f.diferencias ? <span style={S.badge(COLOR_AVISO)}>{f.diferencias}</span> : <span style={{ color: COLOR_OK }}>✓</span>,
+            ],
+          }))}
+          total={[
+            "Total",
+            fmtNum.format(filas.reduce((x, f) => x + f.nCert, 0)),
+            hayColumnaArchivo ? fmtNum.format(filas.reduce((x, f) => x + f.archivados, 0)) : "—",
+            hayColumnaArchivo ? fmtNum.format(filas.reduce((x, f) => x + f.sinArchivar, 0)) : "—",
+            fmtNum.format(filas.reduce((x, f) => x + f.estudiantes, 0)),
+            fmtNum.format(filas.reduce((x, f) => x + f.sinCertificado, 0)),
+            totalDif ? fmtNum.format(totalDif) : "✓",
+          ]}
+        />
         {comparacion.sinColegio.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 12.5, color: COLOR_MUTED }}>
             {comparacion.sinColegio.length} póliza{comparacion.sinColegio.length === 1 ? "" : "s"} de Accidentes Escolares en Seguros 2026 no se pudo{comparacion.sinColegio.length === 1 ? "" : "ron"} asignar a ningún colegio.{" "}
@@ -142,56 +183,59 @@ export default function CertificadosOperativaPage({ onBack }) {
       {activo && (
         <>
           <Tarjeta titulo={`Certificados · ${activo.colegio}`} desc="Cada certificado del archivo del colegio y si ya está archivado.">
-            <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
-              <div style={{ ...S.tableHead, gridTemplateColumns: "1.2fr 0.9fr 0.9fr 1.4fr 0.8fr", position: "sticky", top: 0, minWidth: 640 }}>
-                <span>Certificado</span><span style={{ textAlign: "right" }}>Monto</span><span>Pago</span><span>Observaciones</span><span>Archivado</span>
-              </div>
-              {certsActivo.map((c, i) => (
-                <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.2fr 0.9fr 0.9fr 1.4fr 0.8fr", minWidth: 640, padding: "10px 18px" }}>
-                  <div style={{ fontWeight: 600 }}>{c.certificado}</div>
-                  <div style={{ textAlign: "right" }}>{fmt(c.montoCertificado)}</div>
-                  <div style={{ fontSize: 12.5 }}>{c.estadoPago}</div>
-                  <div style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</div>
-                  <div>{!hayColumnaArchivo ? <span style={{ color: "#9aa8c7" }}>—</span> : c.archivo === "SI" ? <span style={S.badge(COLOR_OK)}>SÍ</span> : <span style={S.badge(COLOR_WARN)}>NO</span>}</div>
-                </div>
-              ))}
-            </div>
+            <Tabla
+              minWidth={640} maxHeight={420}
+              cols={[{ h: "Certificado" }, { h: "Monto", right: true }, { h: "Pago" }, { h: "Observaciones" }, { h: "Archivado" }]}
+              filas={certsActivo.map((c, i) => ({
+                key: i,
+                cells: [
+                  <b>{c.certificado}</b>,
+                  fmt(c.montoCertificado),
+                  <span style={{ fontSize: 12.5 }}>{c.estadoPago}</span>,
+                  <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</span>,
+                  !hayColumnaArchivo ? <span style={{ color: "#9aa8c7" }}>—</span> : c.archivo === "SI" ? <span style={S.badge(COLOR_OK)}>SÍ</span> : <span style={S.badge(COLOR_WARN)}>NO</span>,
+                ],
+              }))}
+            />
           </Tarjeta>
 
           <Tarjeta titulo={`Archivo del colegio vs Seguros 2026 · ${activo.colegio}`} desc="A la izquierda lo que dice el archivo del colegio, a la derecha lo registrado en Base 2026. Mundial se cruza por número de certificado; Estado, por valor.">
-            <div style={{ overflowX: "auto", maxHeight: 460, overflowY: "auto" }}>
-              <div style={{ ...S.tableHead, gridTemplateColumns: "1fr 0.9fr 1.1fr 0.9fr 1fr", position: "sticky", top: 0, minWidth: 760 }}>
-                <span>Certificado</span><span style={{ textAlign: "right" }}>Valor colegio</span><span>Póliza en Base 2026</span><span style={{ textAlign: "right" }}>Valor Base 2026</span><span>Resultado</span>
-              </div>
-              {compActivo.filas.map((r, i) => (
-                <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1fr 0.9fr 1.1fr 0.9fr 1fr", minWidth: 760, padding: "10px 18px" }}>
-                  <div style={{ fontWeight: 600 }}>{r.cert.certificado}</div>
-                  <div style={{ textAlign: "right" }}>{fmt(r.cert.montoCertificado)}</div>
-                  <div style={{ fontSize: 12.5 }}>{r.filaBase ? <>{r.filaBase.poliza}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{r.filaBase.tomador}</div></> : "—"}</div>
-                  <div style={{ textAlign: "right" }}>{r.filaBase ? fmt(r.filaBase.prima) : "—"}</div>
-                  <div><span style={S.badge(colorResultado(r.resultado))}>{r.resultado}</span></div>
-                </div>
-              ))}
-              {compActivo.soloBase.map((b, i) => (
-                <div key={`b${i}`} style={{ ...S.tableRow, gridTemplateColumns: "1fr 0.9fr 1.1fr 0.9fr 1fr", minWidth: 760, padding: "10px 18px", background: "#fffbeb" }}>
-                  <div style={{ color: "#9aa8c7" }}>—</div>
-                  <div style={{ textAlign: "right", color: "#9aa8c7" }}>—</div>
-                  <div style={{ fontSize: 12.5 }}>{b.poliza}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{b.tomador}</div></div>
-                  <div style={{ textAlign: "right" }}>{fmt(b.prima)}</div>
-                  <div><span style={S.badge(COLOR_WARN)}>{RESULTADO.soloBase}</span></div>
-                </div>
-              ))}
-            </div>
+            <Tabla
+              minWidth={760} maxHeight={460}
+              cols={[{ h: "Certificado" }, { h: "Valor colegio", right: true }, { h: "Póliza en Base 2026" }, { h: "Valor Base 2026", right: true }, { h: "Resultado" }]}
+              filas={[
+                ...compActivo.filas.map((r, i) => ({
+                  key: i,
+                  cells: [
+                    <b>{r.cert.certificado}</b>,
+                    fmt(r.cert.montoCertificado),
+                    r.filaBase ? <span style={{ fontSize: 12.5 }}>{r.filaBase.poliza}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{r.filaBase.tomador}</div></span> : "—",
+                    r.filaBase ? fmt(r.filaBase.prima) : "—",
+                    <span style={S.badge(colorResultado(r.resultado))}>{r.resultado}</span>,
+                  ],
+                })),
+                ...compActivo.soloBase.map((b, i) => ({
+                  key: `b${i}`,
+                  bg: "#fffbeb",
+                  cells: [
+                    <span style={{ color: "#9aa8c7" }}>—</span>,
+                    <span style={{ color: "#9aa8c7" }}>—</span>,
+                    <span style={{ fontSize: 12.5 }}>{b.poliza}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{b.tomador}</div></span>,
+                    fmt(b.prima),
+                    <span style={S.badge(COLOR_WARN)}>{RESULTADO.soloBase}</span>,
+                  ],
+                })),
+              ]}
+            />
           </Tarjeta>
 
           <Tarjeta titulo={`Estudiantes sin certificado · ${activo.colegio}`} desc={sinCertActivo.length ? `${sinCertActivo.length} de ${fmtNum.format(activo.estudiantes)} estudiantes de la base todavía no tienen certificado asignado.` : "Todos los estudiantes de la base tienen certificado."}>
             {sinCertActivo.length > 0 && (
-              <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
-                <div style={{ ...S.tableHead, gridTemplateColumns: "1fr 2fr", position: "sticky", top: 0 }}><span>Documento</span><span>Nombre</span></div>
-                {sinCertActivo.map((e, i) => (
-                  <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1fr 2fr", padding: "9px 18px" }}><div>{e.documento}</div><div>{e.nombre || "—"}</div></div>
-                ))}
-              </div>
+              <Tabla
+                maxHeight={360} minWidth={420}
+                cols={[{ h: "Documento" }, { h: "Nombre" }]}
+                filas={sinCertActivo.map((e, i) => ({ key: i, cells: [e.documento, e.nombre || "—"] }))}
+              />
             )}
           </Tarjeta>
         </>
