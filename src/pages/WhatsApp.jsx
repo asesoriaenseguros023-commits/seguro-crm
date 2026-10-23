@@ -240,6 +240,9 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                             <span style={{ fontSize: 10.5, color: WA.textMuted }}>{fmtHora(m.created_at)}</span>
                             {saliente && <TickMensaje estado={m.estado} error={m.error} />}
                           </div>
+                          {saliente && m.estado === "fallido" && m.error && (
+                            <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 4, textAlign: "right" }}>{m.error}</div>
+                          )}
                         </div>
                       </div>
                     );
