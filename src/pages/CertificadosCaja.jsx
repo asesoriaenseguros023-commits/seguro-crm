@@ -147,7 +147,7 @@ export default function CertificadosCajaPage({ onBack }) {
   // los totales de certificados.
   const certificadosDeben = useMemo(
     () => certificadosDelColegio
-      .filter((c) => c.estadoPago === "DEBE")
+      .filter((c) => c.estadoPago !== "PAGADO")
       .map((c) => ({ ...c, estudiantes: estudiantesDe(c, tarifaPorColegio[c.colegio]) ?? 0 })),
     [certificadosDelColegio, tarifaPorColegio]
   );
@@ -157,6 +157,11 @@ export default function CertificadosCajaPage({ onBack }) {
     const valor = lista.reduce((s, e) => s + (tarifaPorColegio[e.colegio] || 0), 0);
     return { cantidad: lista.length, valor: Math.round(valor), lista };
   }, [data, colegioActivo, tarifaPorColegio]);
+
+  const certsSinPago = t.totalCert - t.pagado;
+  const cajaMano = t.valorVendido - t.pagado;
+  const porPagar = certsSinPago + pendientes.valor;
+  const cuadre = cajaMano - porPagar;
 
   const cambiarOrden = (campo) => {
     setOrden((prev) => (prev.campo === campo ? { campo, asc: !prev.asc } : { campo, asc: false }));
@@ -229,21 +234,34 @@ export default function CertificadosCajaPage({ onBack }) {
         <StatCard label="Duplicados" value={fmtNum.format(t.duplicados)} secondary={fmt(t.valorDuplicados)} sub="Informativo: este valor no entra en caja" color={t.duplicados ? COLOR_AVISO : undefined} />
         <StatCard label="Certificados" value={fmt(t.totalCert)} secondary={`${fmtNum.format(certificadosDelColegio.length)} certificados`} sub="Todo lo certificado, esté o no pagado" color={COLOR_ACCENT} />
         <StatCard label="Pendientes sin certificado" value={fmtNum.format(pendientes.cantidad)} secondary={fmt(pendientes.valor)} sub="Estudiantes de la base sin certificado asignado. No entra en caja" color={pendientes.cantidad ? COLOR_AVISO : undefined} />
-        <StatCard label="Por pagar" value={fmt(t.debe + pendientes.valor)} sub={`Certificados DEBE ${fmt(t.debe)} + sin certificado ${fmt(pendientes.valor)}`} color={t.debe + pendientes.valor ? COLOR_WARN : undefined} />
+        <StatCard label="Por pagar" value={fmt(porPagar)} sub={`Certificados sin pago ${fmt(certsSinPago)} + ventas sin certificado ${fmt(pendientes.valor)}`} color={porPagar ? COLOR_WARN : undefined} />
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "20px 22px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 8 }}>Caja {colegioActivo === "todos" ? "(todos los colegios)" : `· ${colegioActivo}`}</div>
-        <div style={{ fontSize: 34, fontWeight: 700, color: t.caja < 0 ? COLOR_WARN : t.caja > 0 ? COLOR_OK : BLUE.text, letterSpacing: -0.5 }}>{fmt(t.caja)}</div>
-        <div style={{ fontSize: 12, color: "#9aa8c7", marginTop: 2 }}>Valor vendido − valor certificados</div>
+        <div style={{ fontSize: 34, fontWeight: 700, color: cajaMano < 0 ? COLOR_WARN : BLUE.text, letterSpacing: -0.5 }}>{fmt(cajaMano)}</div>
+        <div style={{ fontSize: 12, color: "#9aa8c7", marginTop: 2 }}>Lo que tengo: valor vendido − lo ya pagado a la aseguradora</div>
+
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BLUE.border}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>Valor vendido ({fmtNum.format(t.unicas)} pólizas × tarifa)</span><b style={{ color: BLUE.text }}>{fmt(t.valorVendido)}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>(−) Valor certificados</span><b style={{ color: BLUE.text }}>{fmt(t.totalCert)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>Total certificados ({fmtNum.format(certificadosDelColegio.length)})</span><b style={{ color: BLUE.text }}>{fmt(t.totalCert)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0", paddingLeft: 14 }}><span>Certificados pagos</span><b style={{ color: COLOR_OK }}>{fmt(t.pagado)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0", paddingLeft: 14 }}><span>Certificados sin pago</span><b style={{ color: certsSinPago ? COLOR_WARN : BLUE.text }}>{fmt(certsSinPago)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>Ventas sin certificado ({fmtNum.format(pendientes.cantidad)})</span><b style={{ color: pendientes.valor ? COLOR_AVISO : BLUE.text }}>{fmt(pendientes.valor)}</b></div>
         </div>
+
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BLUE.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>Caja (lo que tengo)</span><b style={{ color: BLUE.text }}>{fmt(cajaMano)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b87b0" }}><span>(−) Por pagar: certificados sin pago + ventas sin certificado</span><b style={{ color: BLUE.text }}>{fmt(porPagar)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: BLUE.text, fontWeight: 700, paddingTop: 6, borderTop: `1px dashed ${BLUE.border}` }}>
+            <span>{cuadre === 0 ? "✓ Cuadra" : "Diferencia"}</span>
+            <span style={{ color: cuadre === 0 ? COLOR_OK : COLOR_WARN }}>{fmt(cuadre)}</span>
+          </div>
+          {cuadre !== 0 && <div style={{ fontSize: 12, color: "#9aa8c7" }}>{cuadre < 0 ? "Se certificó más de lo vendido (por ejemplo, un estudiante cobrado dos veces por la aseguradora). Revisa 'Para revisar'." : "Se vendió más de lo certificado y pendiente. Revisa que no falte algún certificado o estudiante."}</div>}
+        </div>
+
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: 12, color: "#6b87b0" }}>
           <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Duplicados: {fmt(t.valorDuplicados)} (no cuentan en caja)</span>
-          <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Ya pagado a la aseguradora: {fmt(t.pagado)}</span>
-          {t.debe + pendientes.valor > 0 && <span style={{ background: "#fef2f2", color: COLOR_WARN, borderRadius: 6, padding: "4px 9px" }}>Falta pagar {fmt(t.debe + pendientes.valor)} ({fmt(t.debe)} de certificados DEBE + {fmt(pendientes.valor)} vendidos sin certificado)</span>}
         </div>
       </div>
 
@@ -336,16 +354,16 @@ export default function CertificadosCajaPage({ onBack }) {
       {(certificadosDeben.length > 0 || pendientes.cantidad > 0) && (
         <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 4 }}>Detalle de lo que se debe{colegioActivo !== "todos" && ` · ${colegioActivo}`}</div>
-          <div style={{ fontSize: 12.5, color: "#6b87b0", marginBottom: 14 }}>Total por pagar {fmt(t.debe + pendientes.valor)}: certificados que ya llegaron y no se han pagado, más estudiantes vendidos que todavía no tienen certificado.</div>
+          <div style={{ fontSize: 12.5, color: "#6b87b0", marginBottom: 14 }}>Total por pagar {fmt(porPagar)}: certificados que ya llegaron y no están pagados, más estudiantes vendidos que todavía no tienen certificado.</div>
 
           {certificadosDeben.length > 0 && (
             <>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: BLUE.text, marginBottom: 8 }}>Certificados por pagar (DEBE) · {certificadosDeben.length} · {fmt(t.debe)}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: BLUE.text, marginBottom: 8 }}>Certificados sin pago · {certificadosDeben.length} · {fmt(certsSinPago)}</div>
               <Tabla
                 minWidth={640}
-                cols={[{ h: "Colegio" }, { h: "Certificado" }, { h: "Estudiantes", right: true }, { h: "Monto", right: true }, { h: "Observaciones" }]}
-                filas={certificadosDeben.map((c, i) => ({ key: i, cells: [c.colegio, <b>{c.certificado}</b>, fmtNum.format(c.estudiantes), fmt(c.montoCertificado), <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</span>] }))}
-                total={["Total", "", fmtNum.format(certificadosDeben.reduce((x, c) => x + c.estudiantes, 0)), fmt(t.debe), ""]}
+                cols={[{ h: "Colegio" }, { h: "Certificado" }, { h: "Estado" }, { h: "Estudiantes", right: true }, { h: "Monto", right: true }, { h: "Observaciones" }]}
+                filas={certificadosDeben.map((c, i) => ({ key: i, cells: [c.colegio, <b>{c.certificado}</b>, <span style={S.badge(ESTADO_COLOR(c.estadoPago))}>{c.estadoPago}</span>, fmtNum.format(c.estudiantes), fmt(c.montoCertificado), <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</span>] }))}
+                total={["Total", "", "", fmtNum.format(certificadosDeben.reduce((x, c) => x + c.estudiantes, 0)), fmt(certsSinPago), ""]}
               />
             </>
           )}
