@@ -281,7 +281,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                     return (
                       <div key={m.id} style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start" }}>
                         <div style={{
-                          maxWidth: "70%", borderRadius: 8, padding: "7px 12px",
+                          maxWidth: "70%", borderRadius: 8, padding: "7px 12px", position: "relative", marginBottom: m.reaccion ? 14 : 0,
                           background: saliente ? WA.bubbleOut : WA.bubbleIn,
                           border: `1px solid ${saliente ? WA.bubbleOutBorder : WA.bubbleInBorder}`,
                           boxShadow: "0 1px 1px rgba(0,0,0,0.08)",
@@ -293,6 +293,9 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                             <span style={{ fontSize: 10.5, color: WA.textMuted }}>{fmtHora(m.created_at)}</span>
                             {saliente && <TickMensaje estado={m.estado} error={m.error} />}
                           </div>
+                          {m.reaccion && (
+                            <div style={{ position: "absolute", right: 8, bottom: -12, background: "#fff", border: "1px solid #e9e9e9", borderRadius: 12, padding: "1px 6px", fontSize: 14, boxShadow: "0 1px 2px rgba(0,0,0,0.12)" }}>{m.reaccion}</div>
+                          )}
                           {saliente && m.estado === "fallido" && m.error && (
                             <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 4, textAlign: "right" }}>{m.error}</div>
                           )}

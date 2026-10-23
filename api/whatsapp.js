@@ -148,6 +148,22 @@ async function descargarMedia_({ mediaId, mime, nombre, conversacionId, waMessag
   return { media_path: path, media_mime: mimeBase, media_nombre: nombre || null };
 }
 
+
+// Texto legible de los mensajes entrantes que no son texto ni archivo.
+function textoDeMensaje_(msg) {
+  switch (msg.type) {
+    case "text": return msg.text?.body || "";
+    case "location": {
+      const l = msg.location || {};
+      return `📍 Ubicación${l.name ? `: ${l.name}` : ""} https://www.google.com/maps?q=${l.latitude},${l.longitude}`;
+    }
+    case "contacts": return `👤 Contacto: ${(msg.contacts || []).map(c => c.name?.formatted_name).filter(Boolean).join(", ") || "sin nombre"}`;
+    case "button": return msg.button?.text || "[botón]";
+    case "interactive": return msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "[respuesta]";
+    default: return `[${msg.type}]`;
+  }
+}
+
 // ── Webhook de Meta (sin auth de agente -- lo llama Meta directo) ──────────
 //
 // GET: handshake de verificacion (Meta lo llama una vez al configurar el
@@ -198,9 +214,19 @@ async function manejarWebhookPost_(req, res) {
       for (const msg of valor.messages || []) {
         const desde = String(msg.from || "").replace(/[^\d]/g, "");
         if (!desde) continue;
+        // Reacción (👍, ❤️…) a un mensaje: no es un mensaje nuevo, se pega en la
+        // burbuja a la que reaccionó. Emoji vacío = el cliente quitó su reacción.
+        // Requiere supabase_whatsapp_reaccion.sql.
+        if (msg.type === "reaction") {
+          const { error: reError } = await supabase.from("whatsapp_mensajes")
+            .update({ reaccion: msg.reaction?.emoji || null }).eq("wa_message_id", msg.reaction?.message_id || "");
+          if (reError) console.error("WhatsApp: no se pudo guardar la reacción", reError.message);
+          continue;
+        }
+
         const esMedia = TIPOS_MEDIA.includes(msg.type);
         const datosMedia = esMedia ? msg[msg.type] || {} : null;
-        const texto = esMedia ? (datosMedia.caption || "") : (msg.text?.body || `[${msg.type}]`);
+        const texto = esMedia ? (datosMedia.caption || "") : textoDeMensaje_(msg);
         const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
           .select("id").eq("telefono", desde).order("updated_at", { ascending: false }).limit(1).maybeSingle();
         if (conversacion) {
