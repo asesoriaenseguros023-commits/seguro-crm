@@ -233,7 +233,7 @@ export default function CertificadosCajaPage({ onBack }) {
         <StatCard label="Pólizas vendidas" value={fmtNum.format(t.unicas)} secondary={fmt(t.valorVendido)} sub="Una por persona, sin anulados ni duplicados" color={COLOR_ACCENT} />
         <StatCard label="Duplicados" value={fmtNum.format(t.duplicados)} secondary={fmt(t.valorDuplicados)} sub="Informativo: este valor no entra en caja" color={t.duplicados ? COLOR_AVISO : undefined} />
         <StatCard label="Certificados" value={fmt(t.totalCert)} secondary={`${fmtNum.format(certificadosDelColegio.length)} certificados`} sub="Todo lo certificado, esté o no pagado" color={COLOR_ACCENT} />
-        <StatCard label="Pendientes sin certificado" value={fmtNum.format(pendientes.cantidad)} secondary={fmt(pendientes.valor)} sub="Estudiantes de la base sin certificado asignado. No entra en caja" color={pendientes.cantidad ? COLOR_AVISO : undefined} />
+        <StatCard label="Pendientes sin certificado" value={fmtNum.format(pendientes.cantidad)} secondary={fmt(pendientes.valor)} sub="Vendidos que aún no tienen certificado. Entran en Por pagar y en el cuadre de caja" color={pendientes.cantidad ? COLOR_AVISO : undefined} />
         <StatCard label="Por pagar" value={fmt(porPagar)} sub={`Certificados sin pago ${fmt(certsSinPago)} + ventas sin certificado ${fmt(pendientes.valor)}`} color={porPagar ? COLOR_WARN : undefined} />
       </div>
 
