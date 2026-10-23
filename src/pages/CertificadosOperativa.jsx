@@ -19,7 +19,7 @@ const COLOR_MUTED = "#6b87b0";
 const colorResultado = (r) =>
   r === RESULTADO.coincide || r === RESULTADO.coincidePorValor ? COLOR_OK
   : r === RESULTADO.sinValor ? COLOR_MUTED
-  : r === RESULTADO.distinto ? COLOR_AVISO
+  : r === RESULTADO.distinto || r === RESULTADO.repetido ? COLOR_AVISO
   : COLOR_WARN;
 
 const Tarjeta = ({ titulo, desc, children }) => (

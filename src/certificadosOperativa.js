@@ -33,6 +33,7 @@ export const RESULTADO = {
   coincidePorValor: "COINCIDE POR VALOR",
   distinto: "VALOR DISTINTO",
   noEsta: "NO ESTÁ EN BASE 2026",
+  repetido: "CERTIFICADO REPETIDO",
   sinValor: "SIN VALOR",
   soloBase: "SOLO EN BASE 2026",
 };
@@ -51,12 +52,20 @@ export function compararCertificados(certificados, base2026) {
   // para que un cruce por valor nunca le quite una póliza a uno exacto.
   const resultado = certificados.map((c) => ({ cert: c, clave: claveCertificado(c.certificado), filaBase: null, resultado: null }));
 
+  const vistos = new Set();
   resultado.filter((r) => r.clave.tipo === "numero").forEach((r) => {
     const rows = porNumero.get(r.clave.clave);
+    const llave = `${r.cert.colegio}|${r.clave.clave}`;
+    const yaVisto = vistos.has(llave);
+    vistos.add(llave);
     // Cada fila de Base 2026 se usa una sola vez: si el mismo número está dos
-    // veces en el colegio, la segunda busca otra fila y si no hay queda como "no está".
+    // veces en el colegio, la segunda busca otra fila; si no hay, es un repetido.
     const libre = rows ? rows.find((b) => !b.usada) : null;
-    if (!libre) { r.resultado = RESULTADO.noEsta; return; }
+    if (!libre) {
+      // Monto 0 = certificado sin valor (corrección/anulación): no se espera en Base 2026.
+      r.resultado = !Math.round(r.cert.montoCertificado) ? RESULTADO.sinValor : yaVisto ? RESULTADO.repetido : RESULTADO.noEsta;
+      return;
+    }
     libre.usada = true;
     r.filaBase = libre;
     r.resultado = libre.prima === Math.round(r.cert.montoCertificado) ? RESULTADO.coincide : RESULTADO.distinto;
