@@ -221,7 +221,7 @@ export default function CertificadosCajaPage({ onBack }) {
         <StatCard label="Duplicados" value={fmtNum.format(t.duplicados)} secondary={fmt(t.valorDuplicados)} sub="Informativo: este valor no entra en caja" color={t.duplicados ? COLOR_AVISO : undefined} />
         <StatCard label="Certificados" value={fmt(t.totalCert)} secondary={`${fmtNum.format(certificadosDelColegio.length)} certificados`} sub="Todo lo certificado, esté o no pagado" color={COLOR_ACCENT} />
         <StatCard label="Pendientes sin certificado" value={fmtNum.format(pendientes.cantidad)} secondary={fmt(pendientes.valor)} sub="Estudiantes de la base sin certificado asignado. No entra en caja" color={pendientes.cantidad ? COLOR_AVISO : undefined} />
-        <StatCard label="Por pagar (DEBE)" value={fmt(t.debe)} sub="Certificados que aún se deben a la aseguradora" color={t.debe ? COLOR_WARN : undefined} />
+        <StatCard label="Por pagar" value={fmt(t.debe + pendientes.valor)} sub={`Certificados DEBE ${fmt(t.debe)} + sin certificado ${fmt(pendientes.valor)}`} color={t.debe + pendientes.valor ? COLOR_WARN : undefined} />
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "20px 22px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 20 }}>
@@ -235,7 +235,7 @@ export default function CertificadosCajaPage({ onBack }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: 12, color: "#6b87b0" }}>
           <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Duplicados: {fmt(t.valorDuplicados)} (no cuentan en caja)</span>
           <span style={{ background: BLUE.light, borderRadius: 6, padding: "4px 9px" }}>Ya pagado a la aseguradora: {fmt(t.pagado)}</span>
-          {t.debe > 0 && <span style={{ background: "#fef2f2", color: COLOR_WARN, borderRadius: 6, padding: "4px 9px" }}>Falta pagar {fmt(t.debe)}</span>}
+          {t.debe + pendientes.valor > 0 && <span style={{ background: "#fef2f2", color: COLOR_WARN, borderRadius: 6, padding: "4px 9px" }}>Falta pagar {fmt(t.debe + pendientes.valor)} ({fmt(t.debe)} de certificados DEBE + {fmt(pendientes.valor)} vendidos sin certificado)</span>}
         </div>
       </div>
 
