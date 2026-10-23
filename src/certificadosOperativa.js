@@ -6,7 +6,10 @@
 //  - Certificados Mundial (número de 8+ dígitos): el número del certificado es
 //    la póliza en Base 2026; se compara el valor (monto vs prima).
 //  - Certificados de Estado (ANEXO 0, 1…): en Base 2026 la póliza es otra
-//    (21-68-…), así que se cruzan por valor, usando cada prima una sola vez.
+//    (21-68-…), así que se cruzan por valor, usando cada prima una sola vez
+//    (preferiendo pólizas del mismo colegio).
+//  - En ambos sentidos: las pólizas de Base 2026 del colegio que ningún
+//    certificado cubre salen como "SOLO EN BASE 2026".
 
 const quitarTildes = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
 
@@ -16,6 +19,13 @@ export function claveCertificado(raw) {
   const m = s.match(/ANEXO\s*(\d+)/i);
   if (m) return { tipo: "anexo", clave: `ANEXO ${parseInt(m[1], 10)}` };
   return { tipo: "otro", clave: quitarTildes(s) };
+}
+
+// Pólizas de Estado en Base 2026: "21-68-1000005890" es el ANEXO 0 y
+// "21-68-1000005890-12" es el ANEXO 12 de la misma póliza madre.
+function raizYSufijo(poliza) {
+  const m = String(poliza ?? "").trim().match(/^(\d{2}-\d{2}-\d+)(?:-(\d+))?$/);
+  return m ? { raiz: m[1], n: m[2] ? parseInt(m[2], 10) : 0 } : null;
 }
 
 // ¿El tomador de una póliza parece ser este colegio? "SAN JUAN BOSCO" figura en
@@ -71,30 +81,69 @@ export function compararCertificados(certificados, base2026) {
     r.resultado = libre.prima === Math.round(r.cert.montoCertificado) ? RESULTADO.coincide : RESULTADO.distinto;
   });
 
+  // Anexos de Estado: la póliza madre del colegio es la que más anexos cruza por
+  // número + valor; ahí ANEXO N = póliza "-N". Lo que no cruza por ahí se busca
+  // por valor entre las pólizas que sobran.
+  const raizPorColegio = {};
+  const anexosPorColegio = {};
+  resultado.filter((r) => r.clave.tipo === "anexo").forEach((r) => { (anexosPorColegio[r.cert.colegio] ||= []).push(r); });
+  Object.entries(anexosPorColegio).forEach(([colegio, rs]) => {
+    const votos = {};
+    rs.forEach((r) => {
+      const n = parseInt(r.clave.clave.replace(/\D/g, ""), 10);
+      const monto = Math.round(r.cert.montoCertificado);
+      filasBase.forEach((b) => {
+        const rs2 = raizYSufijo(b.poliza);
+        if (rs2 && rs2.n === n && b.prima === monto && monto) votos[rs2.raiz] = (votos[rs2.raiz] || 0) + 1;
+      });
+    });
+    const mejor = Object.entries(votos).sort((a, b) => b[1] - a[1])[0];
+    if (mejor) raizPorColegio[colegio] = mejor[0];
+  });
+
   resultado.filter((r) => r.clave.tipo !== "numero").forEach((r) => {
     const monto = Math.round(r.cert.montoCertificado);
+    const raiz = raizPorColegio[r.cert.colegio];
+    if (r.clave.tipo === "anexo" && raiz) {
+      const n = parseInt(r.clave.clave.replace(/\D/g, ""), 10);
+      const fila = filasBase.find((b) => !b.usada && (() => { const x = raizYSufijo(b.poliza); return x && x.raiz === raiz && x.n === n; })());
+      if (fila) {
+        fila.usada = true;
+        r.filaBase = fila;
+        r.resultado = !monto && !fila.prima ? RESULTADO.sinValor : fila.prima === monto ? RESULTADO.coincide : RESULTADO.distinto;
+        return;
+      }
+      r.resultado = !monto ? RESULTADO.sinValor : RESULTADO.noEsta;
+      return;
+    }
     if (!monto) { r.resultado = RESULTADO.sinValor; return; }
-    const libre = filasBase.find((b) => !b.usada && b.clave.tipo !== "numero" && b.prima === monto);
+    // Sin póliza madre identificada: cruce por valor (cada prima una sola vez),
+    // prefiriendo una póliza cuyo tomador sea este colegio.
+    const candidatas = filasBase.filter((b) => !b.usada && b.clave.tipo !== "numero" && b.prima === monto);
+    const libre = candidatas.find((b) => tomadorEsDelColegio(b.tomador, r.cert.colegio)) || candidatas[0];
     if (!libre) { r.resultado = RESULTADO.noEsta; return; }
     libre.usada = true;
     r.filaBase = libre;
     r.resultado = RESULTADO.coincidePorValor;
   });
 
-  return { resultado, filasBase };
+  return { resultado, filasBase, raizPorColegio };
 }
 
 // Resultado por colegio: filas comparadas + pólizas que solo están en Base 2026.
 export function compararPorColegio(colegios, certificados, base2026) {
-  const { resultado, filasBase } = compararCertificados(certificados, base2026);
+  const { resultado, filasBase, raizPorColegio } = compararCertificados(certificados, base2026);
   const porColegio = {};
   colegios.forEach((c) => { porColegio[c] = { filas: [], soloBase: [] }; });
   resultado.forEach((r) => { (porColegio[r.cert.colegio] ||= { filas: [], soloBase: [] }).filas.push(r); });
 
+  // "Viceversa": toda póliza de Base 2026 del colegio que ningún certificado cubrió.
   const sinColegio = [];
-  filasBase.filter((b) => !b.usada && b.clave.tipo === "numero").forEach((b) => {
-    const dueno = colegios.find((c) => tomadorEsDelColegio(b.tomador, c));
-    if (dueno) porColegio[dueno].soloBase.push(b); else sinColegio.push(b);
+  filasBase.filter((b) => !b.usada).forEach((b) => {
+    const x = raizYSufijo(b.poliza);
+    const duenoPorRaiz = x ? Object.keys(raizPorColegio).find((c) => raizPorColegio[c] === x.raiz) : null;
+    const dueno = duenoPorRaiz || colegios.find((c) => tomadorEsDelColegio(b.tomador, c));
+    if (dueno && porColegio[dueno]) porColegio[dueno].soloBase.push(b); else sinColegio.push(b);
   });
 
   Object.values(porColegio).forEach((x) => {
