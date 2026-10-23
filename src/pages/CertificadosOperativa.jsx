@@ -54,7 +54,7 @@ export default function CertificadosOperativaPage({ onBack }) {
       aseguradora: d.aseguradora,
       nCert: certs.length,
       archivados: certs.filter((c) => c.archivo === "SI").length,
-      sinArchivar: certs.filter((c) => c.archivo === "NO").length,
+      sinArchivar: certs.filter((c) => c.archivo !== "SI").length, // NO o vacío
       estudiantes: estudiantesPorColegio[d.colegio] || 0,
       sinCertificado: sinCertificado.filter((e) => e.colegio === d.colegio).length,
       diferencias: comparacion.porColegio[d.colegio]?.diferencias || 0,
@@ -152,7 +152,7 @@ export default function CertificadosOperativaPage({ onBack }) {
                   <div style={{ textAlign: "right" }}>{fmt(c.montoCertificado)}</div>
                   <div style={{ fontSize: 12.5 }}>{c.estadoPago}</div>
                   <div style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</div>
-                  <div>{c.archivo === "SI" ? <span style={S.badge(COLOR_OK)}>SÍ</span> : c.archivo === "NO" ? <span style={S.badge(COLOR_WARN)}>NO</span> : <span style={{ color: "#9aa8c7" }}>—</span>}</div>
+                  <div>{!hayColumnaArchivo ? <span style={{ color: "#9aa8c7" }}>—</span> : c.archivo === "SI" ? <span style={S.badge(COLOR_OK)}>SÍ</span> : <span style={S.badge(COLOR_WARN)}>NO</span>}</div>
                 </div>
               ))}
             </div>
