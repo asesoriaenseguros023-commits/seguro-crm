@@ -215,22 +215,6 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
     setEnviando(false);
   };
 
-  const reenviarPlantilla = async () => {
-    if (!seleccionada || enviando) return;
-    setEnviando(true); setErrorEnvio("");
-    try {
-      const nombre = seleccionada.soat_clientes?.nombre || seleccionada.nombre;
-      const res = await fetch("/api/whatsapp?action=enviar-seguimiento-soat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        body: JSON.stringify({ telefono: seleccionada.telefono, nombre, clienteId: seleccionada.cliente_id }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Error al enviar");
-    } catch (err) {
-      setErrorEnvio(err.message);
-    }
-    setEnviando(false);
-  };
 
   return (
     <div>
@@ -384,14 +368,8 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                       </button>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ fontSize: 12.5, color: WA.textMuted }}>La ventana de 24 horas está cerrada — hay que reenviar la plantilla.</div>
-                      <button onClick={reenviarPlantilla} disabled={enviando}
-                        style={{ ...S.btn("primary"), background: WA.accent, opacity: enviando ? 0.6 : 1 }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = WA.accentDark; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = WA.accent; }}>
-                        Reenviar plantilla de seguimiento
-                      </button>
+                    <div style={{ fontSize: 12.5, color: WA.textMuted }}>
+                      La ventana de 24 horas está cerrada: la plantilla ya se envió y solo se manda una vez. Podrás escribirle cuando el cliente responda.
                     </div>
                   )}
                 </div>

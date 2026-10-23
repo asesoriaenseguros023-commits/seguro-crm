@@ -120,6 +120,15 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   // Última conversación de WhatsApp por cliente (tabla whatsapp_conversaciones,
   // ver WhatsApp.jsx) -- alimenta el color/estado del ícono de WhatsApp.
   const [conversacionesWA, setConversacionesWA] = useState({});
+  // "ahora" en state (render puro) para saber si la ventana de 24 h de una
+  // conversación sigue abierta; se refresca cada minuto.
+  const [ahoraWA, setAhoraWA] = useState(null);
+  useEffect(() => {
+    function tick() { setAhoraWA(Date.now()); }
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+  }, []);
 
   // ─── Carga inicial + realtime ────────────────────────────────────────────
   useEffect(() => {
@@ -223,8 +232,17 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   // envío -- conversacionesWA (suscripción realtime más abajo) es la misma
   // tabla que lee WhatsApp.jsx, por eso no hace falta sincronizar nada más.
   const [enviandoWA, setEnviandoWA] = useState({});
+  const conversacionActivaWA_ = (conv) =>
+    !!conv?.ultima_entrante_at && !!ahoraWA && ahoraWA - new Date(conv.ultima_entrante_at).getTime() < 24 * 60 * 60 * 1000;
   const enviarWhatsapp = async (c) => {
-    if (conversacionesWA[c.id]) { onAbrirWhatsapp?.(c.id); return; }
+    const conv = conversacionesWA[c.id];
+    if (conv) {
+      // La plantilla se manda UNA sola vez por cliente. Después solo se entra
+      // al chat si la conversación está activa (el cliente respondió y la
+      // ventana de 24 h sigue abierta); si no, el ícono queda gris y bloqueado.
+      if (conversacionActivaWA_(conv)) onAbrirWhatsapp?.(c.id);
+      return;
+    }
     setEnviandoWA(p => ({ ...p, [c.id]: "enviando" }));
     try {
       const res = await fetch("/api/whatsapp?action=enviar-seguimiento-soat", {
@@ -247,8 +265,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   const estadoIconoWA_ = (clienteId) => {
     if (enviandoWA[clienteId] === "enviando") return { color: "#999", title: "Enviando…" };
     if (enviandoWA[clienteId] === "error") return { color: "#dc2626", title: "No se pudo enviar" };
-    if (conversacionesWA[clienteId]) return { color: "#25D366", title: "Ver conversación de WhatsApp" };
-    return { color: "#25D366", title: "Enviar WhatsApp" };
+    const conv = conversacionesWA[clienteId];
+    if (conv) {
+      return conversacionActivaWA_(conv)
+        ? { color: BLUE.primary, title: "Conversación activa — abrir el chat" }
+        : { color: "#b0b7c3", title: "Ya se le envió la plantilla — esperando su respuesta", bloqueado: true };
+    }
+    return { color: "#25D366", title: "Enviar plantilla de WhatsApp (solo se envía una vez)" };
   };
 
   const ESTADOS_LLAMADA = {
@@ -831,8 +854,8 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                       const wa = estadoIconoWA_(c.id);
                       return (
                         <button onClick={(e) => { e.stopPropagation(); enviarWhatsapp(c); }}
-                          disabled={enviandoWA[c.id] === "enviando"}
-                          style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 4, color: wa.color }}
+                          disabled={enviandoWA[c.id] === "enviando" || wa.bloqueado}
+                          style={{ ...S.btn("ghost"), padding: "2px 6px", marginLeft: 4, color: wa.color, cursor: wa.bloqueado ? "not-allowed" : "pointer" }}
                           title={wa.title}>
                           <Icon name="whatsapp" size={12} />
                         </button>
@@ -962,8 +985,8 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                         const wa = estadoIconoWA_(modal.id);
                         return (
                           <button onClick={() => enviarWhatsapp(modal)}
-                            disabled={enviandoWA[modal.id] === "enviando"}
-                            style={{ ...S.btn("ghost"), padding: "2px 6px", color: wa.color }}
+                            disabled={enviandoWA[modal.id] === "enviando" || wa.bloqueado}
+                            style={{ ...S.btn("ghost"), padding: "2px 6px", color: wa.color, cursor: wa.bloqueado ? "not-allowed" : "pointer" }}
                             title={wa.title}>
                             <Icon name="whatsapp" size={13} />
                           </button>

@@ -288,6 +288,18 @@ export default async function handler(req, res) {
     if (!to) return res.status(400).json({ error: "Falta el teléfono del lead o no es válido." });
     if (!clienteId) return res.status(400).json({ error: "Falta el ID del cliente." });
 
+    // La plantilla se manda UNA sola vez por cliente (Meta penaliza la insistencia:
+    // "healthy ecosystem"). Solo se permite otro intento si todos los anteriores fallaron.
+    const { data: convPrevia } = await supabase.from("whatsapp_conversaciones")
+      .select("id").eq("cliente_id", clienteId).maybeSingle();
+    if (convPrevia) {
+      const { data: previas } = await supabase.from("whatsapp_mensajes")
+        .select("estado").eq("conversacion_id", convPrevia.id).eq("direccion", "saliente").eq("tipo", "plantilla");
+      if ((previas || []).some(m => m.estado !== "fallido")) {
+        return res.status(409).json({ error: "A este cliente ya se le envió la plantilla. Solo se manda una vez." });
+      }
+    }
+
     try {
       const resultado = await enviarPlantilla_({ to, nombre, plantilla: "soat_seguimiento_lead" });
       const waMessageId = resultado?.messages?.[0]?.id || null;
