@@ -142,6 +142,17 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
     return map;
   }, [mensajes]);
 
+  // Arriba van las conversaciones SIN RESPONDER (el último mensaje es del
+  // cliente y nadie le ha contestado), las más recientes primero; después el
+  // resto, también por el mensaje más reciente.
+  const listaOrdenada = useMemo(() => {
+    const t = (c) => new Date(ultimoPorConversacion[c.id]?.created_at || c.updated_at || 0).getTime();
+    return conversaciones
+      .map(c => ({ c, sinResponder: ultimoPorConversacion[c.id]?.direccion === "entrante" }))
+      .sort((a, b) => (a.sinResponder === b.sinResponder ? t(b.c) - t(a.c) : a.sinResponder ? -1 : 1));
+  }, [conversaciones, ultimoPorConversacion]);
+  const totalSinResponder = listaOrdenada.filter(x => x.sinResponder).length;
+
   const seleccionada = conversaciones.find(c => c.id === seleccionadaId) || null;
   const mensajesSeleccionados = useMemo(
     () => mensajes.filter(m => m.conversacion_id === seleccionadaId),
@@ -208,20 +219,28 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
         <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 190px)", minHeight: 420 }}>
           {/* ─── Lista de conversaciones ─── */}
           <div style={{ width: 300, flexShrink: 0, borderRight: "1px solid #e9e9e9", overflowY: "auto" }}>
-            {conversaciones.map((c) => {
+            {totalSinResponder > 0 && (
+              <div style={{ padding: "8px 16px", background: "#e7fce3", color: WA.header, fontSize: 12, fontWeight: 700, borderBottom: "1px solid #d4efcd" }}>
+                {totalSinResponder} sin responder
+              </div>
+            )}
+            {listaOrdenada.map(({ c, sinResponder }) => {
               const ultimo = ultimoPorConversacion[c.id];
               const activa = c.id === seleccionadaId;
               return (
                 <div key={c.id} onClick={() => setSeleccionadaId(c.id)}
-                  style={{ padding: "12px 16px", borderBottom: "1px solid #f0f0f0", cursor: "pointer", background: activa ? WA.listSelected : "#fff" }}>
+                  style={{ padding: "12px 16px", borderBottom: "1px solid #f0f0f0", borderLeft: `4px solid ${sinResponder ? WA.accent : "transparent"}`, cursor: "pointer", background: activa ? WA.listSelected : sinResponder ? "#f6fff4" : "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontWeight: sinResponder ? 800 : 600, fontSize: 14, color: "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {c.soat_clientes?.nombre || c.nombre || "—"}
                     </div>
-                    <div style={{ fontSize: 11, color: WA.textMuted, flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
+                    <div style={{ fontSize: 11, color: sinResponder ? WA.header : WA.textMuted, fontWeight: sinResponder ? 700 : 400, flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
                   </div>
-                  <div style={{ fontSize: 12.5, color: WA.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ETIQUETA_MEDIA[ultimo.tipo] || ""}` : "—"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                    <div style={{ flex: 1, fontSize: 12.5, color: sinResponder ? "#111b21" : WA.textMuted, fontWeight: sinResponder ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ETIQUETA_MEDIA[ultimo.tipo] || ""}` : "—"}
+                    </div>
+                    {sinResponder && <span style={{ flexShrink: 0, background: WA.accent, color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 10.5, fontWeight: 700 }}>Sin responder</span>}
                   </div>
                 </div>
               );
