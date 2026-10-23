@@ -134,14 +134,21 @@ export default function CertificadosCajaPage({ onBack }) {
     });
   }, [certificadosFiltrados, orden, tarifaPorColegio]);
 
-  // Los cálculos viven en certificadosCaja.js (puros y probados). Solo la tabla
-  // por colegio usa TODOS los colegios (es el selector); lo demás sigue el filtro.
-  const analisisTodos = useMemo(() => analizarCaja(resumen, certificados), [resumen, certificados]);
+  // Los cálculos viven en certificadosCaja.js (puros y probados) y siguen el filtro.
   const { totales: t, porColegio: porColegioFiltrado } = useMemo(() => analizarCaja(resumenFiltrado, certificadosDelColegio), [resumenFiltrado, certificadosDelColegio]);
   // Los mensajes siguen el filtro: con un colegio elegido solo salen los de ese colegio.
   const alertas = useMemo(() => calcularAlertas(porColegioFiltrado, certificadosDelColegio, fmt), [porColegioFiltrado, certificadosDelColegio]);
   const alertasVisibles = verTodasAlertas ? alertas : alertas.slice(0, 5);
   const rankEstado = useMemo(() => calcularRankEstado(certificadosDelColegio), [certificadosDelColegio]);
+
+  // Estudiantes de la base (pestaña Estudiantes) que todavía no tienen certificado,
+  // valorados a la tarifa de su colegio. Es informativo: NO entra en caja ni en
+  // los totales de certificados.
+  const pendientes = useMemo(() => {
+    const lista = (data?.estudiantesSinCertificado || []).filter((e) => colegioActivo === "todos" || e.colegio === colegioActivo);
+    const valor = lista.reduce((s, e) => s + (tarifaPorColegio[e.colegio] || 0), 0);
+    return { cantidad: lista.length, valor: Math.round(valor) };
+  }, [data, colegioActivo, tarifaPorColegio]);
 
   const cambiarOrden = (campo) => {
     setOrden((prev) => (prev.campo === campo ? { campo, asc: !prev.asc } : { campo, asc: false }));
@@ -213,6 +220,7 @@ export default function CertificadosCajaPage({ onBack }) {
         <StatCard label="Pólizas vendidas" value={fmtNum.format(t.unicas)} secondary={fmt(t.valorVendido)} sub="Una por persona, sin anulados ni duplicados" color={COLOR_ACCENT} />
         <StatCard label="Duplicados" value={fmtNum.format(t.duplicados)} secondary={fmt(t.valorDuplicados)} sub="Informativo: este valor no entra en caja" color={t.duplicados ? COLOR_AVISO : undefined} />
         <StatCard label="Certificados" value={fmt(t.totalCert)} secondary={`${fmtNum.format(certificadosDelColegio.length)} certificados`} sub="Todo lo certificado, esté o no pagado" color={COLOR_ACCENT} />
+        <StatCard label="Pendientes sin certificado" value={fmtNum.format(pendientes.cantidad)} secondary={fmt(pendientes.valor)} sub="Estudiantes de la base sin certificado asignado. No entra en caja" color={pendientes.cantidad ? COLOR_AVISO : undefined} />
         <StatCard label="Por pagar (DEBE)" value={fmt(t.debe)} sub="Certificados que aún se deben a la aseguradora" color={t.debe ? COLOR_WARN : undefined} />
       </div>
 
@@ -270,6 +278,16 @@ export default function CertificadosCajaPage({ onBack }) {
                 <span style={{ fontSize: 11, color: "#9aa8c7", textAlign: "right" }}>{r.pct.toFixed(0)}%</span>
               </div>
             ))}
+            {pendientes.cantidad > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "150px 1fr 110px 46px", gap: 10, alignItems: "center", borderTop: `1px dashed ${BLUE.border}`, paddingTop: 10 }}>
+                <span style={S.badge(COLOR_AVISO)}>SIN CERTIFICADO</span>
+                <div style={{ background: "#eef1f8", borderRadius: 5, height: 10, overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: 5, width: `${Math.min(100, Math.max(3, (pendientes.valor / (rankEstado[0]?.monto || pendientes.valor || 1)) * 100))}%`, background: COLOR_AVISO }} />
+                </div>
+                <span style={{ fontSize: 12.5, fontWeight: 700, textAlign: "right" }}>{fmt(pendientes.valor)}</span>
+                <span style={{ fontSize: 11, color: "#9aa8c7", textAlign: "right" }}>{fmtNum.format(pendientes.cantidad)}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -302,31 +320,6 @@ export default function CertificadosCajaPage({ onBack }) {
               <div style={{ textAlign: "right", fontWeight: 600 }}>{fmt(c.montoCertificado)}</div>
               <div><span style={S.badge(ESTADO_COLOR(c.estadoPago))}>{c.estadoPago}</span></div>
               <div style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 14px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 4 }}>Caja por colegio</div>
-        <div style={{ height: 10 }} />
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ ...S.tableHead, gridTemplateColumns: "1.5fr 0.7fr 0.8fr 1fr 1fr 1fr 0.9fr", minWidth: 840 }}>
-            <span>Colegio</span><span style={{ textAlign: "right" }}>Pólizas</span><span style={{ textAlign: "right" }}>Duplicados</span><span style={{ textAlign: "right" }}>Vendido</span><span style={{ textAlign: "right" }}>Certificados</span><span style={{ textAlign: "right" }}>Caja</span><span style={{ textAlign: "right" }}>Por pagar</span>
-          </div>
-          {analisisTodos.porColegio.filter((d) => colegioActivo === "todos" || d.colegio === colegioActivo).map((d) => (
-            <div
-              key={d.colegio}
-              style={{ ...S.tableRow, gridTemplateColumns: "1.5fr 0.7fr 0.8fr 1fr 1fr 1fr 0.9fr", minWidth: 840, cursor: "pointer", background: colegioActivo === d.colegio ? BLUE.light : undefined }}
-              onClick={() => setColegioActivo(colegioActivo === d.colegio ? "todos" : d.colegio)}
-            >
-              <div><div style={{ fontWeight: 600, color: BLUE.text }}>{d.colegio}</div><div style={{ fontSize: 11.5, color: "#9aa8c7" }}>{d.aseguradora} · tarifa {fmt(Math.round(d.tarifa))}</div></div>
-              <div style={{ textAlign: "right" }}>{fmtNum.format(d.estudiantesAsegurados)}</div>
-              <div style={{ textAlign: "right" }}>{d.duplicados ? <>{fmtNum.format(d.duplicados)}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{fmt(d.valorDuplicados)}</div></> : "—"}</div>
-              <div style={{ textAlign: "right" }}>{fmt(d.vendido)}</div>
-              <div style={{ textAlign: "right" }}>{fmt(d.totalCert)}</div>
-              <div style={{ textAlign: "right", fontWeight: 700, color: d.caja < 0 ? COLOR_WARN : d.caja > 0 ? COLOR_OK : BLUE.text }}>{fmt(d.caja)}</div>
-              <div style={{ textAlign: "right", color: d.debe ? COLOR_WARN : "#9aa8c7" }}>{d.debe ? fmt(d.debe) : "—"}</div>
             </div>
           ))}
         </div>
