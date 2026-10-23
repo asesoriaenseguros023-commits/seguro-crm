@@ -165,7 +165,13 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   const listaOrdenada = useMemo(() => {
     const t = (c) => new Date(ultimoPorConversacion[c.id]?.created_at || c.updated_at || 0).getTime();
     return conversaciones
-      .map(c => ({ c, sinResponder: ultimoPorConversacion[c.id]?.direccion === "entrante" }))
+      .map(c => {
+        const ult = ultimoPorConversacion[c.id];
+        // Sin responder = el último mensaje es del cliente y nadie lo ha desmarcado
+        // después de ese mensaje (un mensaje nuevo suyo lo vuelve a marcar).
+        const desmarcada = !!c.desmarcada_at && !!ult && new Date(c.desmarcada_at) >= new Date(ult.created_at);
+        return { c, sinResponder: ult?.direccion === "entrante" && !desmarcada };
+      })
       .sort((a, b) => (a.sinResponder === b.sinResponder ? t(b.c) - t(a.c) : a.sinResponder ? -1 : 1));
   }, [conversaciones, ultimoPorConversacion]);
   const totalSinResponder = listaOrdenada.filter(x => x.sinResponder).length;
@@ -200,6 +206,20 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
     if (error) {
       setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, soat_clientes: { ...x.soat_clientes, [campo]: previo } } : x));
       setErrorEnvio(`No se pudo guardar: ${error.message}`);
+    }
+  };
+
+  // Quita la marca de "sin responder" sin contestar (queda guardado en la
+  // conversación; si el cliente vuelve a escribir, se marca otra vez).
+  // Requiere supabase_whatsapp_desmarcar.sql.
+  const desmarcarConversacion = async (conv) => {
+    const ahoraIso = new Date().toISOString();
+    const previo = conv.desmarcada_at || null;
+    setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, desmarcada_at: ahoraIso } : x));
+    const { error } = await supabase.from("whatsapp_conversaciones").update({ desmarcada_at: ahoraIso }).eq("id", conv.id);
+    if (error) {
+      setConversaciones(p => p.map(x => x.id === conv.id ? { ...x, desmarcada_at: previo } : x));
+      setErrorEnvio(`No se pudo desmarcar: ${error.message}`);
     }
   };
 
@@ -292,7 +312,13 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                     <div style={{ flex: 1, fontSize: 12.5, color: sinResponder ? "#111b21" : WA.textMuted, fontWeight: sinResponder ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ETIQUETA_MEDIA[ultimo.tipo] || ""}` : "—"}
                     </div>
-                    {sinResponder && <span style={{ flexShrink: 0, background: WA.accent, color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 10.5, fontWeight: 700 }}>Sin responder</span>}
+                    {sinResponder && (
+                      <>
+                        <span style={{ flexShrink: 0, background: WA.accent, color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 10.5, fontWeight: 700 }}>Sin responder</span>
+                        <button onClick={(e) => { e.stopPropagation(); desmarcarConversacion(c); }} title="Quitar la marca sin responder (no envía nada)"
+                          style={{ flexShrink: 0, border: `1px solid ${WA.accent}`, background: "#fff", color: WA.header, borderRadius: 10, padding: "0 7px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>✓ Desmarcar</button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
