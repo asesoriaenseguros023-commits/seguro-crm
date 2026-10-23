@@ -9,6 +9,7 @@ import { useSoftphone } from "./hooks/useSoftphone.js";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import { useAppVersion } from "./hooks/useAppVersion.js";
 import Icon from "./components/Icon.jsx";
+import Cotizador from "./components/Cotizador.jsx";
 import LoginPage from "./pages/Login.jsx";
 import SoatPage from "./pages/SOAT.jsx";
 import WhatsAppPage from "./pages/WhatsApp.jsx";
@@ -84,6 +85,7 @@ const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
   const [ahora, setAhora] = useState(new Date());
+  const [cotizando, setCotizando] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => setAhora(new Date()), 1000);
     return () => clearInterval(timer);
@@ -106,6 +108,8 @@ const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
         <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{title}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, fontSize: 12, color: "#6b87b0" }}>
+        <button onClick={() => setCotizando(true)} style={{ ...S.btn("primary"), padding: "6px 14px", fontSize: 12.5 }}>Cotizar SOAT</button>
+        {cotizando && <Cotizador onClose={() => setCotizando(false)} />}
         {!isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderRight: `1px solid ${BLUE.border}`, paddingRight: 20 }}>
             <div style={{ textAlign: "right" }}>
