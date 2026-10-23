@@ -309,6 +309,39 @@ export default async function handler(req, res) {
     }
   }
 
+  // Reaccionar (👍 ❤️ …) a un mensaje del cliente. emoji vacío = quitar la reacción.
+  // Requiere supabase_whatsapp_reaccion.sql (columna reaccion_agente).
+  if (action === "enviar-reaccion") {
+    const { mensajeId, emoji } = req.body || {};
+    if (!mensajeId) return res.status(400).json({ error: "Falta el ID del mensaje." });
+    const { data: mensaje } = await supabase.from("whatsapp_mensajes")
+      .select("id, direccion, wa_message_id, conversacion_id").eq("id", mensajeId).maybeSingle();
+    if (!mensaje) return res.status(404).json({ error: "Mensaje no encontrado." });
+    if (mensaje.direccion !== "entrante" || !mensaje.wa_message_id) {
+      return res.status(409).json({ error: "Solo se puede reaccionar a mensajes recientes del cliente." });
+    }
+    const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
+      .select("telefono").eq("id", mensaje.conversacion_id).maybeSingle();
+    if (!conversacion) return res.status(404).json({ error: "Conversación no encontrada." });
+
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    if (!token || !phoneNumberId) return res.status(500).json({ error: "Faltan WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID." });
+    try {
+      await enviarAMeta_(phoneNumberId, token, {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: conversacion.telefono,
+        type: "reaction",
+        reaction: { message_id: mensaje.wa_message_id, emoji: emoji || "" },
+      });
+      await supabase.from("whatsapp_mensajes").update({ reaccion_agente: emoji || null }).eq("id", mensaje.id);
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      return res.status(502).json({ error: `No se pudo enviar la reacción: ${err.message}` });
+    }
+  }
+
   if (action === "enviar-mensaje") {
     const { conversacionId, texto } = req.body || {};
     if (!conversacionId) return res.status(400).json({ error: "Falta el ID de la conversación." });

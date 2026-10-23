@@ -1,9 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../supabase.js";
 import { S, FM_MENSAJE_WA, FM_SOAT } from "../constants.js";
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Cotizador from "../components/Cotizador.jsx";
+
+const REACCIONES = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const EMOJIS = [
+  "😀","😃","😄","😁","😊","🙂","😉","😍","🥰","😘","😎","🤗","🤝","👍","👌","🙏","👏","💪","🙌","👋",
+  "😂","🤣","😅","😇","🤔","😮","😢","😭","😡","🤦","🙄","😴","❤️","💙","💚","🔥","✨","🎉","✅","❌",
+  "🚗","🏍️","🚙","🛵","📄","📋","📅","⏰","📞","💰","💳","🏦","📍","⚠️","ℹ️","⭐"
+];
 
 const VENTANA_24H_MS = 24 * 60 * 60 * 1000;
 
@@ -85,6 +92,10 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState("");
   const [cotizando, setCotizando] = useState(false);
+  const [hoverMsg, setHoverMsg] = useState(null);       // burbuja bajo el cursor
+  const [pickerMsg, setPickerMsg] = useState(null);     // burbuja con el selector de reacción abierto
+  const [mostrarEmojis, setMostrarEmojis] = useState(false);
+  const textareaRef = useRef(null);
   // "ahora" en state (no Date.now() directo en el render, que es impuro) --
   // se refresca cada minuto para que la ventana de 24h se cierre sola en
   // pantalla sin que el agente tenga que recargar.
@@ -162,6 +173,30 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   );
   const ventanaAbierta = !!seleccionada?.ultima_entrante_at && !!ahora
     && ahora - new Date(seleccionada.ultima_entrante_at).getTime() < VENTANA_24H_MS;
+
+  const reaccionar = async (m, emoji) => {
+    setPickerMsg(null); setErrorEnvio("");
+    const nuevo = m.reaccion_agente === emoji ? "" : emoji;   // mismo emoji otra vez = quitarla
+    setMensajes(p => p.map(x => x.id === m.id ? { ...x, reaccion_agente: nuevo || null } : x));
+    try {
+      const res = await fetch("/api/whatsapp?action=enviar-reaccion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ mensajeId: m.id, emoji: nuevo }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Error al reaccionar");
+    } catch (err) {
+      setMensajes(p => p.map(x => x.id === m.id ? { ...x, reaccion_agente: m.reaccion_agente || null } : x));
+      setErrorEnvio(err.message);
+    }
+  };
+
+  const insertarEmoji = (emoji) => {
+    const el = textareaRef.current;
+    const ini = el?.selectionStart ?? texto.length, fin = el?.selectionEnd ?? texto.length;
+    setTexto(texto.slice(0, ini) + emoji + texto.slice(fin));
+    setTimeout(() => { if (el) { el.focus(); const pos = ini + emoji.length; el.setSelectionRange(pos, pos); } }, 0);
+  };
 
   const enviarMensaje = async () => {
     if (!texto.trim() || !seleccionada || enviando) return;
@@ -279,9 +314,10 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                   {mensajesSeleccionados.map((m) => {
                     const saliente = m.direccion === "saliente";
                     return (
-                      <div key={m.id} style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start" }}>
+                      <div key={m.id} style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start", alignItems: "center", gap: 6 }}
+                        onMouseEnter={() => setHoverMsg(m.id)} onMouseLeave={() => setHoverMsg(null)}>
                         <div style={{
-                          maxWidth: "70%", borderRadius: 8, padding: "7px 12px", position: "relative", marginBottom: m.reaccion ? 14 : 0,
+                          maxWidth: "70%", borderRadius: 8, padding: "7px 12px", position: "relative", marginBottom: m.reaccion || m.reaccion_agente ? 14 : 0,
                           background: saliente ? WA.bubbleOut : WA.bubbleIn,
                           border: `1px solid ${saliente ? WA.bubbleOutBorder : WA.bubbleInBorder}`,
                           boxShadow: "0 1px 1px rgba(0,0,0,0.08)",
@@ -293,6 +329,9 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                             <span style={{ fontSize: 10.5, color: WA.textMuted }}>{fmtHora(m.created_at)}</span>
                             {saliente && <TickMensaje estado={m.estado} error={m.error} />}
                           </div>
+                          {m.reaccion_agente && (
+                            <div style={{ position: "absolute", left: 8, bottom: -12, background: "#fff", border: "1px solid #e9e9e9", borderRadius: 12, padding: "1px 6px", fontSize: 14, boxShadow: "0 1px 2px rgba(0,0,0,0.12)" }}>{m.reaccion_agente}</div>
+                          )}
                           {m.reaccion && (
                             <div style={{ position: "absolute", right: 8, bottom: -12, background: "#fff", border: "1px solid #e9e9e9", borderRadius: 12, padding: "1px 6px", fontSize: 14, boxShadow: "0 1px 2px rgba(0,0,0,0.12)" }}>{m.reaccion}</div>
                           )}
@@ -300,6 +339,20 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                             <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 4, textAlign: "right" }}>{m.error}</div>
                           )}
                         </div>
+                        {!saliente && m.wa_message_id && (hoverMsg === m.id || pickerMsg === m.id) && (
+                          <div style={{ position: "relative", order: 2 }}>
+                            <button onClick={() => setPickerMsg(pickerMsg === m.id ? null : m.id)} title="Reaccionar"
+                              style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #e9e9e9", background: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>☺</button>
+                            {pickerMsg === m.id && (
+                              <div style={{ position: "absolute", left: 30, top: -6, zIndex: 5, display: "flex", gap: 2, background: "#fff", border: "1px solid #e9e9e9", borderRadius: 22, padding: "4px 8px", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
+                                {REACCIONES.map(e => (
+                                  <button key={e} onClick={() => reaccionar(m, e)}
+                                    style={{ border: "none", background: m.reaccion_agente === e ? "#e7fce3" : "transparent", borderRadius: "50%", width: 30, height: 30, fontSize: 18, cursor: "pointer", padding: 0 }}>{e}</button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -309,7 +362,19 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                   {errorEnvio && <div style={{ color: "#dc2626", fontSize: 12, marginBottom: 8 }}>{errorEnvio}</div>}
                   {ventanaAbierta ? (
                     <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                      <textarea value={texto} onChange={(e) => setTexto(e.target.value)}
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <button onClick={() => setMostrarEmojis(v => !v)} title="Emojis"
+                          style={{ width: 38, height: 38, borderRadius: "50%", border: "none", background: "transparent", fontSize: 22, cursor: "pointer", padding: 0 }}>😊</button>
+                        {mostrarEmojis && (
+                          <div style={{ position: "absolute", bottom: 46, left: 0, zIndex: 5, width: 300, display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 2, background: "#fff", border: "1px solid #e9e9e9", borderRadius: 12, padding: 8, boxShadow: "0 2px 12px rgba(0,0,0,0.2)" }}>
+                            {EMOJIS.map(e => (
+                              <button key={e} onClick={() => insertarEmoji(e)}
+                                style={{ border: "none", background: "transparent", fontSize: 18, cursor: "pointer", padding: 2, borderRadius: 6 }}>{e}</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <textarea ref={textareaRef} value={texto} onChange={(e) => setTexto(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarMensaje(); } }}
                         placeholder="Escribe un mensaje…" rows={1}
                         style={{ ...S.input, resize: "none", fontFamily: "inherit", borderRadius: 20, background: "#fff" }} />
