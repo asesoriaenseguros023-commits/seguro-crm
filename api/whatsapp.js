@@ -375,16 +375,16 @@ export default async function handler(req, res) {
     try {
       const resultado = await enviarTexto_({ to: conversacion.telefono, texto: texto.trim() });
       const waMessageId = resultado?.messages?.[0]?.id || null;
-      await supabase.from("whatsapp_mensajes").insert({
+      const { data: mensaje } = await supabase.from("whatsapp_mensajes").insert({
         conversacion_id: conversacion.id,
         direccion: "saliente",
         tipo: "texto",
         contenido: texto.trim(),
         wa_message_id: waMessageId,
         estado: "enviado",
-      });
+      }).select().single();
       await supabase.from("whatsapp_conversaciones").update({ updated_at: new Date().toISOString() }).eq("id", conversacion.id);
-      return res.status(200).json({ ok: true, resultado });
+      return res.status(200).json({ ok: true, resultado, mensaje });
     } catch (err) {
       return res.status(502).json({ error: `No se pudo enviar el mensaje: ${err.message}` });
     }

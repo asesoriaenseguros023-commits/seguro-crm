@@ -102,14 +102,25 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   const [ahora, setAhora] = useState(null);
 
   useEffect(() => {
-    Promise.all([
-      supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
-      supabase.from("whatsapp_mensajes").select("*").order("created_at", { ascending: true }),
-    ]).then(([convRes, msgRes]) => {
+    // Carga completa. Se repite cada 15 s, al volver a la pestaña y cuando el
+    // canal en vivo falla: el realtime a veces se queda dormido (pestaña
+    // inactiva, red) y sin esto los mensajes nuevos no aparecían hasta recargar.
+    let cancelado = false;
+    async function cargar() {
+      const [convRes, msgRes] = await Promise.all([
+        supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
+        supabase.from("whatsapp_mensajes").select("*").order("created_at", { ascending: true }),
+      ]);
+      if (cancelado) return;
       if (convRes.data) setConversaciones(convRes.data);
       if (msgRes.data) setMensajes(msgRes.data);
       setLoading(false);
-    });
+    }
+    cargar();
+    const intervalo = setInterval(cargar, 15000);
+    const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
 
     const channel = supabase.channel("whatsapp-chat")
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_conversaciones" }, (payload) => {
@@ -126,9 +137,17 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
         if (payload.eventType === "UPDATE") setMensajes(p => p.map(x => x.id === payload.new.id ? { ...x, ...payload.new } : x));
         if (payload.eventType === "DELETE") setMensajes(p => p.filter(x => x.id !== payload.old.id));
       })
-      .subscribe();
+      .subscribe((estado) => {
+        if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") cargar();
+      });
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      cancelado = true;
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Al entrar desde el ícono de WhatsApp en Seguimiento SOAT (App.jsx pasa
@@ -256,8 +275,11 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
         headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ conversacionId: seleccionada.id, texto: texto.trim() }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Error al enviar");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Error al enviar");
       setTexto("");
+      // Mostrar el mensaje de una vez, sin esperar al canal en vivo.
+      if (json.mensaje) setMensajes(p => p.some(x => x.id === json.mensaje.id) ? p : [...p, json.mensaje]);
     } catch (err) {
       setErrorEnvio(err.message);
     }
