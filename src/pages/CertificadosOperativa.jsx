@@ -4,24 +4,18 @@ import { fmt } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Tabla from "../components/Tabla.jsx";
 import { useCertificadosData } from "../useCertificadosData.js";
-import { compararPorColegio, RESULTADO } from "../certificadosOperativa.js";
+import { compararPorColegio } from "../certificadosOperativa.js";
 
-// Gestión Operativa de Certificados Escolares: una tabla por colegio; al hacer
-// clic en un colegio aparece cada certificado de su archivo (con su estado de
-// archivo), la comparación contra Seguros 2026 y los estudiantes que no tienen
-// certificado.
+// Gestión Operativa de Certificados Escolares: una tabla por colegio (con los
+// totales de archivados, sin archivar, estudiantes sin certificado y diferencias
+// con Seguros 2026); al hacer clic en un colegio aparece SOLO el detalle de los
+// certificados que todavía no están archivados.
 
 const fmtNum = new Intl.NumberFormat("es-CO");
 const COLOR_OK = "#16a34a";
 const COLOR_WARN = "#dc2626";
 const COLOR_AVISO = "#d97706";
 const COLOR_MUTED = "#6b87b0";
-
-const colorResultado = (r) =>
-  r === RESULTADO.coincide || r === RESULTADO.coincidePorValor ? COLOR_OK
-  : r === RESULTADO.sinValor ? COLOR_MUTED
-  : r === RESULTADO.distinto || r === RESULTADO.repetido ? COLOR_AVISO
-  : COLOR_WARN;
 
 const Tarjeta = ({ titulo, desc, children }) => (
   <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 16 }}>
@@ -86,8 +80,7 @@ export default function CertificadosOperativaPage({ onBack }) {
 
   const activo = colegioActivo ? filas.find((f) => f.colegio === colegioActivo) : null;
   const certsActivo = activo ? certificados.filter((c) => c.colegio === activo.colegio) : [];
-  const compActivo = activo ? comparacion.porColegio[activo.colegio] : null;
-  const sinCertActivo = activo ? sinCertificado.filter((e) => e.colegio === activo.colegio) : [];
+  const sinArchivarActivo = certsActivo.filter((c) => c.archivo !== "SI"); // NO o vacío
 
   return (
     <div>
@@ -151,64 +144,29 @@ export default function CertificadosOperativaPage({ onBack }) {
       </Tarjeta>
 
       {activo && (
-        <>
-          <Tarjeta titulo={`Certificados · ${activo.colegio}`} desc="Cada certificado del archivo del colegio y si ya está archivado.">
+        <Tarjeta
+          titulo={`Certificados sin archivar · ${activo.colegio}`}
+          desc={!hayColumnaArchivo ? "Todavía no llega la columna Archivo de la hoja maestra."
+            : sinArchivarActivo.length ? `${sinArchivarActivo.length} de ${certsActivo.length} certificados todavía no están archivados.`
+            : "✓ Todos los certificados de este colegio están archivados."}
+        >
+          {hayColumnaArchivo && sinArchivarActivo.length > 0 && (
             <Tabla
               minWidth={640} maxHeight={420}
               cols={[{ h: "Certificado" }, { h: "Monto", right: true }, { h: "Pago" }, { h: "Observaciones" }, { h: "Archivado" }]}
-              filas={certsActivo.map((c, i) => ({
+              filas={sinArchivarActivo.map((c, i) => ({
                 key: i,
                 cells: [
                   <b>{c.certificado}</b>,
                   fmt(c.montoCertificado),
                   <span style={{ fontSize: 12.5 }}>{c.estadoPago}</span>,
                   <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</span>,
-                  !hayColumnaArchivo ? <span style={{ color: "#9aa8c7" }}>—</span> : c.archivo === "SI" ? <span style={S.badge(COLOR_OK)}>SÍ</span> : <span style={S.badge(COLOR_WARN)}>NO</span>,
+                  <span style={S.badge(COLOR_WARN)}>NO</span>,
                 ],
               }))}
             />
-          </Tarjeta>
-
-          <Tarjeta titulo={`Archivo del colegio vs Seguros 2026 · ${activo.colegio}`} desc="A la izquierda lo que dice el archivo del colegio, a la derecha lo registrado en Base 2026. Mundial se cruza por número de certificado; Estado, por valor.">
-            <Tabla
-              minWidth={760} maxHeight={460}
-              cols={[{ h: "Certificado" }, { h: "Valor colegio", right: true }, { h: "Póliza en Base 2026" }, { h: "Valor Base 2026", right: true }, { h: "Resultado" }]}
-              filas={[
-                ...compActivo.filas.map((r, i) => ({
-                  key: i,
-                  cells: [
-                    <b>{r.cert.certificado}</b>,
-                    fmt(r.cert.montoCertificado),
-                    r.filaBase ? <span style={{ fontSize: 12.5 }}>{r.filaBase.poliza}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{r.filaBase.tomador}</div></span> : "—",
-                    r.filaBase ? fmt(r.filaBase.prima) : "—",
-                    <span style={S.badge(colorResultado(r.resultado))}>{r.resultado}</span>,
-                  ],
-                })),
-                ...compActivo.soloBase.map((b, i) => ({
-                  key: `b${i}`,
-                  bg: "#fffbeb",
-                  cells: [
-                    <span style={{ color: "#9aa8c7" }}>—</span>,
-                    <span style={{ color: "#9aa8c7" }}>—</span>,
-                    <span style={{ fontSize: 12.5 }}>{b.poliza}<div style={{ fontSize: 11, color: "#9aa8c7" }}>{b.tomador}</div></span>,
-                    fmt(b.prima),
-                    <span style={S.badge(COLOR_WARN)}>{RESULTADO.soloBase}</span>,
-                  ],
-                })),
-              ]}
-            />
-          </Tarjeta>
-
-          <Tarjeta titulo={`Estudiantes sin certificado · ${activo.colegio}`} desc={sinCertActivo.length ? `${sinCertActivo.length} de ${fmtNum.format(activo.estudiantes)} estudiantes de la base todavía no tienen certificado asignado.` : "Todos los estudiantes de la base tienen certificado."}>
-            {sinCertActivo.length > 0 && (
-              <Tabla
-                maxHeight={360} minWidth={420}
-                cols={[{ h: "Documento" }, { h: "Nombre" }]}
-                filas={sinCertActivo.map((e, i) => ({ key: i, cells: [e.documento, e.nombre || "—"] }))}
-              />
-            )}
-          </Tarjeta>
-        </>
+          )}
+        </Tarjeta>
       )}
 
       <div style={{ textAlign: "center", color: "#9aa8c7", fontSize: 11.5, lineHeight: 1.6, marginTop: 8 }}>
