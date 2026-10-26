@@ -152,15 +152,13 @@ export default function CertificadosOperativaPage({ onBack }) {
         >
           {hayColumnaArchivo && sinArchivarActivo.length > 0 && (
             <Tabla
-              minWidth={640} maxHeight={420}
-              cols={[{ h: "Certificado" }, { h: "Monto", right: true }, { h: "Pago" }, { h: "Observaciones" }, { h: "Archivado" }]}
+              minWidth={480} maxHeight={420}
+              cols={[{ h: "Certificado" }, { h: "Observaciones" }, { h: "Archivado" }]}
               filas={sinArchivarActivo.map((c, i) => ({
                 key: i,
                 cells: [
                   <b>{c.certificado}</b>,
-                  fmt(c.montoCertificado),
-                  <span style={{ fontSize: 12.5 }}>{c.estadoPago}</span>,
-                  <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones}</span>,
+                  <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones || "—"}</span>,
                   <span style={S.badge(COLOR_WARN)}>NO</span>,
                 ],
               }))}
