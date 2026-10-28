@@ -97,7 +97,8 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   const [importDups, setImportDups] = useState(null);
   const [activeTab, setActiveTab] = useState("linea");
   const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
-  const [filtroAlerta, setFiltroAlerta] = useState(false);
+  // Al entrar al módulo se ven primero los clientes con seguimiento pendiente para hoy o antes.
+  const [filtroAlerta, setFiltroAlerta] = useState(true);
   const [showNoInteresDetail, setShowNoInteresDetail] = useState(false);
   const [callLogError, setCallLogError] = useState("");
   const [modalCloseError, setModalCloseError] = useState("");
@@ -615,7 +616,18 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
     [clientes]
   );
 
-  const filtrados = useMemo(() => clientes.filter(c => {
+  const esAlerta = (c) => {
+    if (["compro", "no_interes", "ilocalizable", "numero_equivocado"].includes(c.fase)) return false;
+    const ref = fechaRefAlerta(c);
+    if (!ref) return false;
+    const d = parseDateSoat(ref);
+    return !!d && d <= new Date();
+  };
+  const alertaHoy = clientes.filter(esAlerta);
+  // Con una búsqueda por nombre/teléfono/placa se ignora el filtro, para poder encontrar a cualquiera.
+  const alertaActiva = filtroAlerta && alertaHoy.length > 0 && !busqueda.trim();
+
+  const filtrados = useMemo(() => { const lista = clientes.filter(c => {
     const mF = filtroFase === "Todos" || c.fase === filtroFase;
     const mA = filtroAgente === "Todos" || c.agente === filtroAgente;
     const mFecha = !filtroFecha || c.fechaVencimiento === filtroFecha || c.fechaProxima === filtroFecha;
@@ -625,15 +637,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       if (busquedaModo === "placa") return (c.placa || "").toLowerCase().startsWith(q);
       return c.nombre.toLowerCase().includes(q);
     })();
-    const mAlerta = !filtroAlerta || (() => {
-      if (["compro", "no_interes", "ilocalizable", "numero_equivocado"].includes(c.fase)) return false;
-      const ref = fechaRefAlerta(c);
-      if (!ref) return false;
-      const d = parseDateSoat(ref);
-      return d && d <= new Date();
-    })();
+    const mAlerta = !alertaActiva || esAlerta(c);
     return mF && mA && mFecha && mB && mAlerta;
-  }), [clientes, filtroFase, filtroAgente, filtroFecha, busqueda, busquedaModo, filtroAlerta]);
+  });
+    // Con el filtro de pendientes, primero los más atrasados.
+    return alertaActiva ? [...lista].sort((x, y) => (parseDateSoat(fechaRefAlerta(x)) || 0) - (parseDateSoat(fechaRefAlerta(y)) || 0)) : lista;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientes, filtroFase, filtroAgente, filtroFecha, busqueda, busquedaModo, alertaActiva]);
 
   const stats = {
     total:       clientes.length,
@@ -667,14 +677,6 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
     { label: "Vencen ≤30d",   key: "proximos30",   color: "#dc2626",    filter: null         },
   ];
 
-  const FASES_TERMINALES = ["compro", "no_interes", "ilocalizable", "numero_equivocado"];
-  const alertaHoy = clientes.filter(c => {
-    if (FASES_TERMINALES.includes(c.fase)) return false;
-    const ref = fechaRefAlerta(c);
-    if (!ref) return false;
-    const d = parseDateSoat(ref);
-    return d && d <= new Date();
-  });
 
   // ─── Funnel data ──────────────────────────────────────────────────────────
   const funnelClientes = funnelBases.length === 0
@@ -768,12 +770,21 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       )}
 
       {alertaHoy.length > 0 && (
-        <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#c2410c", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Icon name="bell" size={15} />
-          <span><strong>{alertaHoy.length} cliente{alertaHoy.length > 1 ? "s" : ""}</strong> con seguimiento pendiente para hoy o antes</span>
+        <div style={{ background: "#fff7ed", border: "2px solid #fb923c", borderRadius: 14, padding: "18px 24px", marginBottom: 16, display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 52, fontWeight: 800, color: "#c2410c", lineHeight: 1, letterSpacing: -1 }}>{alertaHoy.length}</div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#9a3412" }}>
+              cliente{alertaHoy.length > 1 ? "s" : ""} con seguimiento pendiente para hoy o antes
+            </div>
+            <div style={{ fontSize: 13, color: "#c2410c", marginTop: 3 }}>
+              {alertaActiva
+                ? "Estás viendo solo estos, los más atrasados primero. Atiéndelos y se van quitando de la lista."
+                : "Ahora ves a todos los clientes."}
+            </div>
+          </div>
           <button onClick={() => setFiltroAlerta(v => !v)}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c2410c", fontWeight: 700, textDecoration: "underline", fontSize: 13, padding: 0, marginLeft: 4 }}>
-            {filtroAlerta ? "(Mostrar todos)" : "(Ver)"}
+            style={{ background: filtroAlerta ? "#fff" : "#ea580c", color: filtroAlerta ? "#c2410c" : "#fff", border: "2px solid #ea580c", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+            {filtroAlerta ? "Ver todos los clientes" : `Ver los ${alertaHoy.length} pendientes`}
           </button>
         </div>
       )}
