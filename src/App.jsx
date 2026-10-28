@@ -23,22 +23,22 @@ import ComercialPage from "./pages/Comerciales.jsx";
 import ArriendosPage from "./pages/Arriendos.jsx";
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
-const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, isMobile, onClose }) => {
+const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, onClose }) => {
   const initials = userName
     ? userName.split(" ").slice(0, 2).map((w) => w[0]).join("")
     : "U";
 
-  const sidebarStyle = isMobile
-    ? { ...S.sidebar, position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 300, width: 240, transform: isOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.25s ease", boxShadow: isOpen ? "4px 0 24px rgba(0,0,0,0.45)" : "none" }
-    : S.sidebar;
+  // La barra lateral es un cajón en todos los tamaños: oculta por defecto y se abre
+  // con la hamburguesa o el logo de la barra superior, para usar todo el ancho.
+  const sidebarStyle = { ...S.sidebar, position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 300, width: 240, transform: isOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.25s ease", boxShadow: isOpen ? "4px 0 24px rgba(0,0,0,0.45)" : "none", visibility: isOpen ? "visible" : "hidden" };
 
-  const handleNav = (id) => { onNav(id); if (isMobile) onClose(); };
-  const handleLogo = () => { onLogo(); if (isMobile) onClose(); };
+  const handleNav = (id) => { onNav(id); onClose(); };
+  const handleLogo = () => { onLogo(); onClose(); };
   const visibles = SECCIONES.filter((s) => s.activo !== false && (!s.adminOnly || esAdmin(userRol)));
 
   return (
     <>
-      {isMobile && isOpen && (
+      {isOpen && (
         <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 299 }} />
       )}
       <div style={sidebarStyle}>
@@ -95,15 +95,14 @@ const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
     d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   return (
     <div style={{ ...S.topbar, padding: isMobile ? "0 14px" : "0 28px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 0 }}>
-        {isMobile && (
-          <button onClick={onToggleSidebar}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: 6, display: "flex", alignItems: "center", color: BLUE.primary }}>
-            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="3" y1="6" x2="19" y2="6" /><line x1="3" y1="12" x2="19" y2="12" /><line x1="3" y1="18" x2="19" y2="18" />
-            </svg>
-          </button>
-        )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={onToggleSidebar} title="Menú"
+          style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: 6, display: "flex", alignItems: "center", color: BLUE.primary }}>
+          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="19" y2="6" /><line x1="3" y1="12" x2="19" y2="12" /><line x1="3" y1="18" x2="19" y2="18" />
+          </svg>
+        </button>
+        <img src="/logo.png" alt="Menú" onClick={onToggleSidebar} style={{ width: 30, height: 30, borderRadius: 7, objectFit: "cover", cursor: "pointer" }} />
         <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{title}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, fontSize: 12, color: "#6b87b0" }}>
@@ -411,7 +410,7 @@ export default function App() {
         <Sidebar
           current={seccion} onNav={handleNav} onLogo={() => setSeccion("inicio")} onLogout={handleLogout}
           userName={userName} userRol={userRol}
-          isOpen={sidebarOpen} isMobile={isMobile}
+          isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
         <div style={{ ...S.main, marginLeft: isMobile ? 0 : undefined }}>

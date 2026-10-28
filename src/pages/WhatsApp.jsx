@@ -20,6 +20,8 @@ const VENTANA_24H_MS = 24 * 60 * 60 * 1000;
 // con sus verdes característicos.
 const WA = {
   header: "#008069",
+  panel: "#f0f2f5",
+  tick: "#53bdeb",
   bubbleOut: "#d9fdd3",
   bubbleOutBorder: "#bbf0ae",
   bubbleIn: "#ffffff",
@@ -47,7 +49,7 @@ const TickMensaje = ({ estado, error }) => {
   const fm = FM_MENSAJE_WA[estado];
   if (estado === "fallido") return <span title={error || "Falló"} style={{ color: fm?.color, fontSize: 11 }}>⚠ Falló</span>;
   const marca = estado === "enviado" ? "✓" : "✓✓";
-  return <span title={fm?.label || estado} style={{ color: estado === "leido" ? fm?.color : WA.textMuted, fontSize: 12, fontWeight: estado === "leido" ? 700 : 400 }}>{marca}</span>;
+  return <span title={fm?.label || estado} style={{ color: estado === "leido" ? WA.tick : WA.textMuted, fontSize: 12, fontWeight: estado === "leido" ? 700 : 400 }}>{marca}</span>;
 };
 
 // Archivo adjunto de un mensaje (foto, audio, video, documento). El bucket
@@ -83,6 +85,21 @@ const MediaMensaje = ({ m }) => {
 // hilo de whatsapp_mensajes + caja de texto a la derecha (ver
 // supabase_whatsapp_chat.sql y api/whatsapp.js). whatsapp_conversaciones es
 // una fila por cliente; el hilo completo vive en whatsapp_mensajes.
+
+const fmtDia = (iso) => {
+  const d = new Date(iso); const hoy = new Date();
+  const ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
+  if (d.toDateString() === hoy.toDateString()) return "Hoy";
+  if (d.toDateString() === ayer.toDateString()) return "Ayer";
+  return d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" });
+};
+const COLORES_AVATAR = ["#6b7cff", "#e5733b", "#2aa876", "#c2559e", "#3b8fd9", "#b68a1f", "#7d5fd0", "#d1495b"];
+const iniciales = (nombre) => (String(nombre || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("") || "?").toUpperCase();
+const colorAvatar = (nombre) => { let h = 0; for (const ch of String(nombre || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COLORES_AVATAR[h % COLORES_AVATAR.length]; };
+const Avatar = ({ nombre, size = 46 }) => (
+  <div style={{ width: size, height: size, borderRadius: "50%", background: colorAvatar(nombre), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: size * 0.36, flexShrink: 0 }}>{iniciales(nombre)}</div>
+);
+
 const WhatsAppPage = ({ clienteIdInicial }) => {
   const [conversaciones, setConversaciones] = useState([]);
   const [mensajes, setMensajes] = useState([]);
@@ -100,7 +117,8 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   // se refresca cada minuto para que la ventana de 24h se cierre sola en
   // pantalla sin que el agente tenga que recargar.
   const [ahora, setAhora] = useState(null);
-  const [filtroResp, setFiltroResp] = useState("todos");   // todos | respondieron | nunca
+  const [filtroResp, setFiltroResp] = useState("todos");
+  const [busqueda, setBusqueda] = useState("");   // todos | respondieron | nunca
 
   useEffect(() => {
     // Carga completa. Se repite cada 15 s, al volver a la pestaña y cuando el
@@ -204,8 +222,10 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   }, [mensajes]);
   const totalRespondieron = conversaciones.filter(c => conRespuesta.has(c.id)).length;
   const totalNunca = conversaciones.length - totalRespondieron;
+  const q = busqueda.trim().toLowerCase();
   const listaVisible = listaOrdenada.filter(({ c }) =>
-    filtroResp === "todos" ? true : filtroResp === "respondieron" ? conRespuesta.has(c.id) : !conRespuesta.has(c.id));
+    (filtroResp === "todos" ? true : filtroResp === "respondieron" ? conRespuesta.has(c.id) : !conRespuesta.has(c.id))
+    && (!q || (c.soat_clientes?.nombre || c.nombre || "").toLowerCase().includes(q) || (c.telefono || "").includes(q) || (c.soat_clientes?.placa || "").toLowerCase().includes(q)));
 
   const seleccionada = conversaciones.find(c => c.id === seleccionadaId) || null;
   const mensajesSeleccionados = useMemo(
@@ -328,7 +348,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
 
 
   return (
-    <div>
+    <div style={{ textAlign: "left" }}>
       <div style={S.pageHeader}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 40, height: 40, borderRadius: "50%", background: WA.accent, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
@@ -350,10 +370,14 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
           Todavía no se ha enviado ningún WhatsApp. Usa el ícono verde en Seguimiento SOAT para empezar.
         </div>
       ) : (
-        <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 190px)", minHeight: 420 }}>
+        <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 170px)", minHeight: 440, overflow: "hidden", borderRadius: 10 }}>
           {/* ─── Lista de conversaciones ─── */}
-          <div style={{ width: 300, flexShrink: 0, borderRight: "1px solid #e9e9e9", overflowY: "auto" }}>
-            <div style={{ display: "flex", gap: 6, padding: "10px 12px", borderBottom: "1px solid #e9e9e9", flexWrap: "wrap" }}>
+          <div style={{ width: 360, flexShrink: 0, borderRight: "1px solid #e9e9e9", overflowY: "auto", background: "#fff" }}>
+            <div style={{ padding: "8px 12px", background: "#fff", position: "sticky", top: 0, zIndex: 2 }}>
+              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por nombre, teléfono o placa"
+                style={{ width: "100%", boxSizing: "border-box", border: "none", background: WA.panel, borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", fontFamily: "inherit" }} />
+            </div>
+            <div style={{ display: "flex", gap: 6, padding: "4px 12px 10px", borderBottom: "1px solid #e9e9e9", flexWrap: "wrap" }}>
               {[["todos", "Todos", conversaciones.length], ["respondieron", "Respondieron", totalRespondieron], ["nunca", "Nunca respondieron", totalNunca]].map(([id, etiqueta, n]) => (
                 <button key={id} onClick={() => setFiltroResp(id)}
                   style={{ border: `1px solid ${WA.accent}`, background: filtroResp === id ? WA.accent : "#fff", color: filtroResp === id ? "#fff" : WA.header, borderRadius: 14, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
@@ -374,24 +398,27 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
               const activa = c.id === seleccionadaId;
               return (
                 <div key={c.id} onClick={() => setSeleccionadaId(c.id)}
-                  style={{ padding: "12px 16px", borderBottom: "1px solid #f0f0f0", borderLeft: `4px solid ${sinResponder ? WA.accent : "transparent"}`, cursor: "pointer", background: activa ? WA.listSelected : sinResponder ? "#f6fff4" : "#fff" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <div style={{ fontWeight: sinResponder ? 800 : 600, fontSize: 14, color: "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {c.soat_clientes?.nombre || c.nombre || "—"}
+                  style={{ display: "flex", gap: 12, padding: "10px 14px", alignItems: "center", cursor: "pointer", background: activa ? WA.listSelected : "#fff", borderBottom: "1px solid #f3f3f3" }}>
+                  <Avatar nombre={c.soat_clientes?.nombre || c.nombre} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                      <div style={{ fontWeight: sinResponder ? 700 : 500, fontSize: 15, color: "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.soat_clientes?.nombre || c.nombre || "—"}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: sinResponder ? WA.accentDark : WA.textMuted, fontWeight: sinResponder ? 700 : 400, flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
                     </div>
-                    <div style={{ fontSize: 11, color: sinResponder ? WA.header : WA.textMuted, fontWeight: sinResponder ? 700 : 400, flexShrink: 0 }}>{fmtHora(ultimo?.created_at || c.updated_at)}</div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-                    <div style={{ flex: 1, fontSize: 12.5, color: sinResponder ? "#111b21" : WA.textMuted, fontWeight: sinResponder ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ETIQUETA_MEDIA[ultimo.tipo] || ""}` : "—"}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: sinResponder ? "#111b21" : WA.textMuted, fontWeight: sinResponder ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {ultimo ? `${ultimo.direccion === "saliente" ? "Tú: " : ""}${ultimo.contenido || ETIQUETA_MEDIA[ultimo.tipo] || ""}` : "—"}
+                      </div>
+                      {sinResponder && (
+                        <>
+                          <span title="Sin responder" style={{ flexShrink: 0, background: WA.accent, width: 12, height: 12, borderRadius: "50%" }} />
+                          <button onClick={(e) => { e.stopPropagation(); desmarcarConversacion(c); }} title="Quitar la marca sin responder (no envía nada)"
+                            style={{ flexShrink: 0, border: `1px solid ${WA.accent}`, background: "#fff", color: WA.header, borderRadius: 10, padding: "0 7px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>Desmarcar</button>
+                        </>
+                      )}
                     </div>
-                    {sinResponder && (
-                      <>
-                        <span style={{ flexShrink: 0, background: WA.accent, color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 10.5, fontWeight: 700 }}>Sin responder</span>
-                        <button onClick={(e) => { e.stopPropagation(); desmarcarConversacion(c); }} title="Quitar la marca sin responder (no envía nada)"
-                          style={{ flexShrink: 0, border: `1px solid ${WA.accent}`, background: "#fff", color: WA.header, borderRadius: 10, padding: "0 7px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>✓ Desmarcar</button>
-                      </>
-                    )}
                   </div>
                 </div>
               );
@@ -406,63 +433,82 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
               </div>
             ) : (
               <>
-                <div style={{ padding: "12px 20px", background: WA.header, color: "#fff" }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{seleccionada.soat_clientes?.nombre || seleccionada.nombre || "—"}</div>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 2, fontSize: 12, color: "rgba(255,255,255,0.8)" }}>
-                    <span>{seleccionada.telefono}</span>
-                    {seleccionada.soat_clientes?.placa && <span>Placa: {seleccionada.soat_clientes.placa}</span>}
-                    {seleccionada.soat_clientes?.tipo_vehiculo && <span>{seleccionada.soat_clientes.tipo_vehiculo}</span>}
-                    {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence SOAT: {seleccionada.soat_clientes.fecha_vencimiento}</span>}
-                    {seleccionada.soat_clientes && (() => {
-                      const f = FM_SOAT[seleccionada.soat_clientes.fase] || FM_SOAT.pendiente;
-                      return (
-                        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
-                          <span style={{ opacity: 0.85 }}>Estado:</span>
-                          <select value={seleccionada.soat_clientes.fase || "pendiente"} onChange={(e) => cambiarEstado(seleccionada, e.target.value)}
-                            style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 12, border: `1.5px solid ${f.color}`, background: f.bg, color: f.text, fontWeight: 700, cursor: "pointer", outline: "none" }}>
-                            {FASES_SOAT.map(x => <option key={x.id} value={x.id} disabled={x.id === "ilocalizable"} title={x.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta" : undefined}>{x.label}</option>)}
-                          </select>
-                        </label>
-                      );
-                    })()}
-                    {seleccionada.soat_clientes && !["compro", "no_interes"].includes(seleccionada.soat_clientes.fase) && (
-                      <>
-                        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
-                          <span style={{ opacity: 0.85 }}>Próxima acción:</span>
-                          <select value={seleccionada.soat_clientes.proxima_accion || ""} onChange={(e) => cambiarProximaAccion(seleccionada, "proxima_accion", e.target.value)}
-                            style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.6)", background: "#fff", color: "#111b21", fontWeight: 600, cursor: "pointer", outline: "none" }}>
-                            <option value="">Sin definir</option>
-                            {ACCIONES_SOAT.map(a => <option key={a} value={a}>{a}</option>)}
-                          </select>
-                        </label>
-                        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
-                          <span style={{ opacity: 0.85 }}>Fecha:</span>
-                          <input type="date" value={seleccionada.soat_clientes.fecha_proxima || ""} onChange={(e) => cambiarProximaAccion(seleccionada, "fecha_proxima", e.target.value)}
-                            style={{ fontSize: 11.5, padding: "1px 6px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.6)", background: "#fff", color: "#111b21", fontWeight: 600, outline: "none" }} />
-                        </label>
-                      </>
-                    )}
+                <div style={{ background: WA.panel, borderBottom: "1px solid #e1e4e8" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px" }}>
+                    <Avatar nombre={seleccionada.soat_clientes?.nombre || seleccionada.nombre} size={40} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 16, color: "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{seleccionada.soat_clientes?.nombre || seleccionada.nombre || "—"}</div>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12.5, color: WA.textMuted }}>
+                        <span>{seleccionada.telefono}</span>
+                        {seleccionada.soat_clientes?.placa && <span>Placa {seleccionada.soat_clientes.placa}</span>}
+                        {seleccionada.soat_clientes?.tipo_vehiculo && <span>{seleccionada.soat_clientes.tipo_vehiculo}</span>}
+                        {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence {seleccionada.soat_clientes.fecha_vencimiento}</span>}
+                      </div>
+                    </div>
                   </div>
+                  {seleccionada.soat_clientes && (
+                    <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", padding: "6px 16px 10px", fontSize: 12, color: WA.textMuted }}>
+                      {(() => {
+                        const f = FM_SOAT[seleccionada.soat_clientes.fase] || FM_SOAT.pendiente;
+                        return (
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span>Estado</span>
+                            <select value={seleccionada.soat_clientes.fase || "pendiente"} onChange={(e) => cambiarEstado(seleccionada, e.target.value)}
+                              style={{ fontSize: 12, padding: "2px 8px", borderRadius: 12, border: `1.5px solid ${f.color}`, background: f.bg, color: f.text, fontWeight: 700, cursor: "pointer", outline: "none" }}>
+                              {FASES_SOAT.map(x => <option key={x.id} value={x.id} disabled={x.id === "ilocalizable"} title={x.id === "ilocalizable" ? "Se marca automático tras 6 llamadas sin respuesta" : undefined}>{x.label}</option>)}
+                            </select>
+                          </label>
+                        );
+                      })()}
+                      {!["compro", "no_interes"].includes(seleccionada.soat_clientes.fase) && (
+                        <>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span>Próxima acción</span>
+                            <select value={seleccionada.soat_clientes.proxima_accion || ""} onChange={(e) => cambiarProximaAccion(seleccionada, "proxima_accion", e.target.value)}
+                              style={{ fontSize: 12, padding: "2px 8px", borderRadius: 12, border: "1px solid #d1d7db", background: "#fff", color: "#111b21", fontWeight: 600, cursor: "pointer", outline: "none" }}>
+                              <option value="">Sin definir</option>
+                              {ACCIONES_SOAT.map(a => <option key={a} value={a}>{a}</option>)}
+                            </select>
+                          </label>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span>Fecha</span>
+                            <input type="date" value={seleccionada.soat_clientes.fecha_proxima || ""} onChange={(e) => cambiarProximaAccion(seleccionada, "fecha_proxima", e.target.value)}
+                              style={{ fontSize: 12, padding: "1px 6px", borderRadius: 12, border: "1px solid #d1d7db", background: "#fff", color: "#111b21", fontWeight: 600, outline: "none" }} />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8, background: WA.chatBg }}>
+                <div style={{ flex: 1, overflowY: "auto", padding: "14px 7%", display: "flex", flexDirection: "column", gap: 2, background: WA.chatBg }}>
                   {mensajesSeleccionados.length === 0 && (
                     <div style={{ textAlign: "center", color: WA.textMuted, fontSize: 13, marginTop: 20 }}>Sin mensajes todavía</div>
                   )}
-                  {mensajesSeleccionados.map((m) => {
+                  {mensajesSeleccionados.map((m, idx) => {
                     const saliente = m.direccion === "saliente";
+                    const previo = mensajesSeleccionados[idx - 1];
+                    const nuevoDia = !previo || new Date(previo.created_at).toDateString() !== new Date(m.created_at).toDateString();
+                    const primeroDelGrupo = nuevoDia || previo.direccion !== m.direccion;
                     return (
-                      <div key={m.id} style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start", alignItems: "center", gap: 6 }}
+                      <div key={m.id} style={{ display: "flex", flexDirection: "column", marginTop: primeroDelGrupo ? 8 : 0 }}>
+                        {nuevoDia && (
+                          <div style={{ alignSelf: "center", margin: "8px 0 10px", background: "#fff", color: WA.textMuted, fontSize: 12, padding: "4px 12px", borderRadius: 8, boxShadow: "0 1px 1px rgba(0,0,0,0.1)", textTransform: "capitalize" }}>{fmtDia(m.created_at)}</div>
+                        )}
+                      <div style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start", alignItems: "center", gap: 6 }}
                         onMouseEnter={() => setHoverMsg(m.id)} onMouseLeave={() => setHoverMsg(null)}>
                         <div style={{
-                          maxWidth: "70%", borderRadius: 8, padding: "7px 12px", position: "relative", marginBottom: m.reaccion || m.reaccion_agente ? 14 : 0,
+                          maxWidth: "65%", borderRadius: 8, padding: "6px 9px 5px 10px", position: "relative", marginBottom: m.reaccion || m.reaccion_agente ? 14 : 0,
+                          ...(primeroDelGrupo ? (saliente ? { borderTopRightRadius: 0 } : { borderTopLeftRadius: 0 }) : {}),
                           background: saliente ? WA.bubbleOut : WA.bubbleIn,
-                          border: `1px solid ${saliente ? WA.bubbleOutBorder : WA.bubbleInBorder}`,
-                          boxShadow: "0 1px 1px rgba(0,0,0,0.08)",
+                          boxShadow: "0 1px 0.5px rgba(11,20,26,0.13)",
                         }}>
+                          {primeroDelGrupo && (
+                            <span style={{ position: "absolute", top: 0, [saliente ? "right" : "left"]: -8, width: 0, height: 0, borderTop: `8px solid ${saliente ? WA.bubbleOut : WA.bubbleIn}`, [saliente ? "borderRight" : "borderLeft"]: "8px solid transparent" }} />
+                          )}
                           {m.media_path && <MediaMensaje m={m} />}
-                          {(m.contenido || !m.media_path) && <div style={{ fontSize: 13.5, color: "#111b21", whiteSpace: "pre-wrap" }}>{m.contenido}</div>}
-                          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", marginTop: 4 }}>
+                          {(m.contenido || !m.media_path) && <div style={{ fontSize: 14.2, lineHeight: 1.35, color: "#111b21", whiteSpace: "pre-wrap" }}>{m.contenido}</div>}
+                          <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center", marginTop: 1 }}>
                             {m.tipo === "plantilla" && <span style={{ fontSize: 10.5, color: WA.textMuted }}>Plantilla</span>}
                             <span style={{ fontSize: 10.5, color: WA.textMuted }}>{fmtHora(m.created_at)}</span>
                             {saliente && <TickMensaje estado={m.estado} error={m.error} />}
@@ -491,6 +537,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                             )}
                           </div>
                         )}
+                      </div>
                       </div>
                     );
                   })}
