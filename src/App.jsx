@@ -12,6 +12,7 @@ import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
 import SoatPage from "./pages/SOAT.jsx";
 import WhatsAppPage from "./pages/WhatsApp.jsx";
+import AvisoWhatsapp from "./components/AvisoWhatsapp.jsx";
 import PulsoPrimasPage from "./pages/PulsoPrimas.jsx";
 import CertificadosEscolaresPage from "./pages/CertificadosEscolares.jsx";
 import OficinaSoatPage from "./pages/OficinaSoat.jsx";
@@ -82,7 +83,7 @@ const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, 
 };
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
-const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
+const Topbar = ({ title, userRol, isMobile, onToggleSidebar, onAbrirWhatsapp }) => {
   const [ahora, setAhora] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setAhora(new Date()), 1000);
@@ -105,6 +106,7 @@ const Topbar = ({ title, userRol, isMobile, onToggleSidebar }) => {
         <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{title}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, fontSize: 12, color: "#6b87b0" }}>
+        <AvisoWhatsapp onAbrir={onAbrirWhatsapp} compacto={isMobile} />
         {!isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderRight: `1px solid ${BLUE.border}`, paddingRight: 20 }}>
             <div style={{ textAlign: "right" }}>
@@ -411,7 +413,7 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
         />
         <div style={{ ...S.main, marginLeft: isMobile ? 0 : undefined }}>
-          <Topbar title={topbarTitle} userRol={userRol} isMobile={isMobile} onToggleSidebar={() => setSidebarOpen(o => !o)} />
+          <Topbar title={topbarTitle} userRol={userRol} isMobile={isMobile} onToggleSidebar={() => setSidebarOpen(o => !o)} onAbrirWhatsapp={abrirWhatsapp} />
           <div style={{ ...S.content, padding: isMobile ? "14px 12px" : "20px 16px" }}>{renderContent()}</div>
         </div>
       </div>
