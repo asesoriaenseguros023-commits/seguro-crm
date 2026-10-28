@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../supabase.js";
-import { S, FM_MENSAJE_WA, FM_SOAT, FASES_SOAT, ACCIONES_SOAT } from "../constants.js";
+import { S, FM_MENSAJE_WA, FM_SOAT, FASES_SOAT, ACCIONES_SOAT, PLANTILLAS_WA } from "../constants.js";
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Cotizador from "../components/Cotizador.jsx";
@@ -214,6 +214,34 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   );
   const ventanaAbierta = !!seleccionada?.ultima_entrante_at && !!ahora
     && ahora - new Date(seleccionada.ultima_entrante_at).getTime() < VENTANA_24H_MS;
+
+  // Segundo contacto: plantillas aprobadas que a este cliente aún no se le han
+  // enviado (cada una se manda una sola vez; las fallidas no cuentan).
+  const [plantillaElegida, setPlantillaElegida] = useState("");
+  const plantillasDisponibles = useMemo(() => {
+    const usadas = new Set(mensajesSeleccionados
+      .filter(m => m.direccion === "saliente" && m.tipo === "plantilla" && m.estado !== "fallido")
+      .map(m => m.plantilla || "soat_seguimiento_lead"));
+    return PLANTILLAS_WA.filter(p => p.aprobada && !usadas.has(p.id));
+  }, [mensajesSeleccionados]);
+  const plantillaActual = plantillasDisponibles.some(p => p.id === plantillaElegida) ? plantillaElegida : (plantillasDisponibles[0]?.id || "");
+
+  const enviarPlantillaElegida = async () => {
+    if (!seleccionada || !plantillaActual || enviando) return;
+    setEnviando(true); setErrorEnvio("");
+    try {
+      const res = await fetch("/api/whatsapp?action=enviar-seguimiento-soat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ telefono: seleccionada.telefono, nombre: seleccionada.nombre || seleccionada.soat_clientes?.nombre, clienteId: seleccionada.cliente_id, plantilla: plantillaActual }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Error al enviar");
+    } catch (err) {
+      setErrorEnvio(err.message);
+    }
+    setEnviando(false);
+  };
 
   // Mismo campo (soat_clientes.fase) y mismas reglas que Seguimiento SOAT:
   // "Compró" y "No interesado" limpian la próxima acción. Seguimiento SOAT se
@@ -494,7 +522,21 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                     </div>
                   ) : (
                     <div style={{ fontSize: 12.5, color: WA.textMuted }}>
-                      La ventana de 24 horas está cerrada: la plantilla ya se envió y solo se manda una vez. Podrás escribirle cuando el cliente responda.
+                      La ventana de 24 horas está cerrada. Podrás escribirle libremente cuando el cliente responda.
+                      {plantillasDisponibles.length > 0 ? (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                          <span style={{ color: "#111b21", fontWeight: 600 }}>Segundo contacto:</span>
+                          <select value={plantillaActual} onChange={(e) => setPlantillaElegida(e.target.value)} style={{ ...S.input, width: "auto", flex: "1 1 220px" }}>
+                            {plantillasDisponibles.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                          </select>
+                          <button onClick={enviarPlantillaElegida} disabled={enviando}
+                            style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: WA.accent, color: "#fff", fontWeight: 700, cursor: "pointer", opacity: enviando ? 0.6 : 1 }}>
+                            Enviar plantilla
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 6 }}>No quedan plantillas disponibles para este cliente (cada una se manda una sola vez).</div>
+                      )}
                     </div>
                   )}
                 </div>

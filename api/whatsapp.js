@@ -25,6 +25,18 @@ function textoPlantillaSoat_(nombre) {
   return `Hola ${nombre || ""}, somos Asesoría en Seguros Tocancipá. Vimos que tienes pendiente la renovación de tu SOAT. ¿Quieres que te ayudemos a cotizarlo?`;
 }
 
+// Catálogo de plantillas de Meta (es_CO). conNombre = el cuerpo lleva la
+// variable posicional {{1}} con el nombre del cliente. El texto se guarda en
+// whatsapp_mensajes, así que debe coincidir con el aprobado en Meta.
+const PLANTILLA_PRIMERA = "soat_seguimiento_lead";
+const PLANTILLAS_WA = {
+  soat_seguimiento_lead: { conNombre: true, texto: textoPlantillaSoat_ },
+  soat_claro_pendientes: { conNombre: true, texto: (n) => `Claro que sí, ${n || ""}. Quedamos pendientes de tu mensaje para ayudarte con tu SOAT.` },
+  soat_recordatorio_asesoria: { conNombre: true, texto: (n) => `Este es un recordatorio de Asesoría en Seguros Tocancipá, ${n || ""}: estamos para asesorarte con la compra de tu SOAT. Cuando quieras, escríbenos.` },
+  soat_datos_vehiculo: { conNombre: true, texto: (n) => `Por favor indícanos, ${n || ""}, el tipo de vehículo, el cilindraje y el modelo para cotizar tu SOAT.` },
+  soat_retomar_conversacion_2: { conNombre: false, texto: () => "¿Desea retomar la conversación?" },
+};
+
 async function requireAgente(req) {
   const auth = req.headers.authorization || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -81,9 +93,9 @@ async function enviarPlantilla_({ to, nombre, plantilla }) {
       // La plantilla "soat_seguimiento_lead" de la cuenta REAL (aprobada, es_CO)
       // usa la variable posicional {{1}}: se manda sin parameter_name. Solo la
       // cuenta de prueba la tenía con variable nombrada {{nombre}}.
-      components: [
-        { type: "body", parameters: [{ type: "text", text: nombre || "" }] },
-      ],
+      ...(PLANTILLAS_WA[plantilla]?.conNombre !== false
+        ? { components: [{ type: "body", parameters: [{ type: "text", text: nombre || "" }] }] }
+        : {}),
     },
   });
 }
@@ -298,6 +310,8 @@ export default async function handler(req, res) {
 
   if (action === "enviar-seguimiento-soat") {
     const { telefono, nombre, clienteId } = req.body || {};
+    const plantilla = req.body?.plantilla || PLANTILLA_PRIMERA;
+    if (!PLANTILLAS_WA[plantilla]) return res.status(400).json({ error: "Plantilla desconocida." });
     const to = normalizarTelefonoCO_(telefono);
     if (!to) return res.status(400).json({ error: "Falta el teléfono del lead o no es válido." });
     if (!clienteId) return res.status(400).json({ error: "Falta el ID del cliente." });
@@ -308,14 +322,15 @@ export default async function handler(req, res) {
       .select("id").eq("cliente_id", clienteId).maybeSingle();
     if (convPrevia) {
       const { data: previas } = await supabase.from("whatsapp_mensajes")
-        .select("estado").eq("conversacion_id", convPrevia.id).eq("direccion", "saliente").eq("tipo", "plantilla");
-      if ((previas || []).some(m => m.estado !== "fallido")) {
-        return res.status(409).json({ error: "A este cliente ya se le envió la plantilla. Solo se manda una vez." });
+        .select("estado, plantilla").eq("conversacion_id", convPrevia.id).eq("direccion", "saliente").eq("tipo", "plantilla");
+      // Cada plantilla se manda una sola vez; las antiguas sin nombre cuentan como la primera.
+      if ((previas || []).some(m => m.estado !== "fallido" && (m.plantilla || PLANTILLA_PRIMERA) === plantilla)) {
+        return res.status(409).json({ error: "A este cliente ya se le envió esa plantilla. Cada una se manda una sola vez." });
       }
     }
 
     try {
-      const resultado = await enviarPlantilla_({ to, nombre, plantilla: "soat_seguimiento_lead" });
+      const resultado = await enviarPlantilla_({ to, nombre, plantilla });
       const waMessageId = resultado?.messages?.[0]?.id || null;
       const { data: conversacion, error: convError } = await supabase.from("whatsapp_conversaciones")
         .upsert({ cliente_id: clienteId, telefono: to, nombre }, { onConflict: "cliente_id" })
@@ -325,7 +340,8 @@ export default async function handler(req, res) {
         conversacion_id: conversacion.id,
         direccion: "saliente",
         tipo: "plantilla",
-        contenido: textoPlantillaSoat_(nombre),
+        contenido: PLANTILLAS_WA[plantilla].texto(nombre),
+        plantilla,
         wa_message_id: waMessageId,
         estado: "enviado",
       });

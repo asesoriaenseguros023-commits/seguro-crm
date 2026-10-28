@@ -54,7 +54,7 @@ const HoyPage = ({ onAbrirWhatsapp, onIrSoat }) => {
       const todos = [];
       for (let desde = 0; ; desde += 1000) {
         const { data, error } = await supabase.from("soat_clientes")
-          .select("id,nombre,telefono,placa,fase,agente,fecha_vencimiento,proxima_accion,fecha_proxima")
+          .select("id,nombre,telefono,placa,fase,agente,intentos,fecha_vencimiento,proxima_accion,fecha_proxima")
           .order("id", { ascending: true }).range(desde, desde + 999);
         if (error || !data) break;
         todos.push(...data);
@@ -76,8 +76,8 @@ const HoyPage = ({ onAbrirWhatsapp, onIrSoat }) => {
     return () => { cancelado = true; clearInterval(id); };
   }, []);
 
-  const { sinResponder, seguimientos, porVencer } = useMemo(() => {
-    if (!ahora) return { sinResponder: [], seguimientos: [], porVencer: [] };
+  const { sinResponder, seguimientos, porVencer, pasarAWhatsapp } = useMemo(() => {
+    if (!ahora) return { sinResponder: [], seguimientos: [], porVencer: [], pasarAWhatsapp: [] };
     const porId = new Map(clientes.map(c => [c.id, c]));
     const ultimo = new Map();
     msgs.forEach(m => ultimo.set(m.conversacion_id, m));
@@ -110,7 +110,14 @@ const HoyPage = ({ onAbrirWhatsapp, onIrSoat }) => {
       return d >= -5 && d <= 30 ? { c, dias: d } : null;
     }).filter(Boolean).sort((a, b) => a.dias - b.dias);
 
-    return { sinResponder, seguimientos, porVencer };
+    // Regla de contacto: 2 o más llamadas sin éxito y nunca se le ha escrito -> pasar a WhatsApp.
+    const conConv = new Set(convs.map(cv => cv.cliente_id));
+    const yaListados = new Set([...idsSeg, ...porVencer.map(x => x.c.id)]);
+    const pasarAWhatsapp = clientes
+      .filter(c => FASES_ACTIVAS.includes(c.fase) && (c.intentos || 0) >= 2 && !conConv.has(c.id) && !idsSin.has(c.id) && !yaListados.has(c.id) && c.telefono)
+      .sort((a, b) => (b.intentos || 0) - (a.intentos || 0));
+
+    return { sinResponder, seguimientos, porVencer, pasarAWhatsapp };
   }, [clientes, convs, msgs, ahora]);
 
   if (cargando) return <div style={{ padding: 40, textAlign: "center", color: "#888" }}>Cargando...</div>;
@@ -128,7 +135,7 @@ const HoyPage = ({ onAbrirWhatsapp, onIrSoat }) => {
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>Hoy</div>
         <div style={{ fontSize: 13, color: "#666" }}>
-          {sinResponder.length} por responder · {seguimientos.length} seguimientos · {porVencer.length} por vencer. Se actualiza solo cada minuto.
+          {sinResponder.length} por responder · {seguimientos.length} seguimientos · {porVencer.length} por vencer · {pasarAWhatsapp.length} para pasar a WhatsApp. Se actualiza solo cada minuto.
         </div>
       </div>
 
@@ -163,6 +170,15 @@ const HoyPage = ({ onAbrirWhatsapp, onIrSoat }) => {
               <Boton onClick={() => onAbrirWhatsapp(c.id)}>WhatsApp</Boton>
               <Boton onClick={onIrSoat}>Ver en SOAT</Boton>
             </>} />
+        )} />
+
+      <Seccion titulo="4. Llamadas sin éxito: pasar a WhatsApp" subtitulo="2 o más intentos y nunca se les ha escrito"
+        items={pasarAWhatsapp} vacio="No hay clientes en esta situación."
+        render={(c) => (
+          <Fila key={c.id} izq={nombre(c)}
+            medio={<>{c.intentos} llamadas sin éxito · {faseTxt(c)}</>}
+            der={<span>Escribir por WhatsApp</span>}
+            acciones={<Boton primario onClick={onIrSoat}>Ir a SOAT</Boton>} />
         )} />
     </div>
   );
