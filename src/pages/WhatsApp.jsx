@@ -100,6 +100,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   // se refresca cada minuto para que la ventana de 24h se cierre sola en
   // pantalla sin que el agente tenga que recargar.
   const [ahora, setAhora] = useState(null);
+  const [filtroResp, setFiltroResp] = useState("todos");   // todos | respondieron | nunca
 
   useEffect(() => {
     // Carga completa. Se repite cada 15 s, al volver a la pestaña y cuando el
@@ -194,6 +195,17 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
       .sort((a, b) => (a.sinResponder === b.sinResponder ? t(b.c) - t(a.c) : a.sinResponder ? -1 : 1));
   }, [conversaciones, ultimoPorConversacion]);
   const totalSinResponder = listaOrdenada.filter(x => x.sinResponder).length;
+
+  // Conversaciones donde el cliente escribió alguna vez (cualquier mensaje entrante) vs. las que nunca respondió.
+  const conRespuesta = useMemo(() => {
+    const ids = new Set();
+    mensajes.forEach(m => { if (m.direccion === "entrante") ids.add(m.conversacion_id); });
+    return ids;
+  }, [mensajes]);
+  const totalRespondieron = conversaciones.filter(c => conRespuesta.has(c.id)).length;
+  const totalNunca = conversaciones.length - totalRespondieron;
+  const listaVisible = listaOrdenada.filter(({ c }) =>
+    filtroResp === "todos" ? true : filtroResp === "respondieron" ? conRespuesta.has(c.id) : !conRespuesta.has(c.id));
 
   const seleccionada = conversaciones.find(c => c.id === seleccionadaId) || null;
   const mensajesSeleccionados = useMemo(
@@ -313,12 +325,23 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
         <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 190px)", minHeight: 420 }}>
           {/* ─── Lista de conversaciones ─── */}
           <div style={{ width: 300, flexShrink: 0, borderRight: "1px solid #e9e9e9", overflowY: "auto" }}>
+            <div style={{ display: "flex", gap: 6, padding: "10px 12px", borderBottom: "1px solid #e9e9e9", flexWrap: "wrap" }}>
+              {[["todos", "Todos", conversaciones.length], ["respondieron", "Respondieron", totalRespondieron], ["nunca", "Nunca respondieron", totalNunca]].map(([id, etiqueta, n]) => (
+                <button key={id} onClick={() => setFiltroResp(id)}
+                  style={{ border: `1px solid ${WA.accent}`, background: filtroResp === id ? WA.accent : "#fff", color: filtroResp === id ? "#fff" : WA.header, borderRadius: 14, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                  {etiqueta} ({n})
+                </button>
+              ))}
+            </div>
             {totalSinResponder > 0 && (
               <div style={{ padding: "8px 16px", background: "#e7fce3", color: WA.header, fontSize: 12, fontWeight: 700, borderBottom: "1px solid #d4efcd" }}>
                 {totalSinResponder} sin responder
               </div>
             )}
-            {listaOrdenada.map(({ c, sinResponder }) => {
+            {listaVisible.length === 0 && (
+              <div style={{ padding: 24, textAlign: "center", color: "#aaa", fontSize: 13 }}>No hay conversaciones en este filtro.</div>
+            )}
+            {listaVisible.map(({ c, sinResponder }) => {
               const ultimo = ultimoPorConversacion[c.id];
               const activa = c.id === seleccionadaId;
               return (
