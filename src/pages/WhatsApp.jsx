@@ -109,7 +109,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
     let cancelado = false;
     async function cargar() {
       const [convRes, msgRes] = await Promise.all([
-        supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
+        supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, tipo_vehiculo, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
         supabase.from("whatsapp_mensajes").select("*").order("created_at", { ascending: true }),
       ]);
       if (cancelado) return;
@@ -131,7 +131,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soat_clientes" }, (payload) => {
         const n = payload.new;
-        setConversaciones(p => p.map(x => x.cliente_id === n.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: n.fase, nombre: n.nombre, fecha_vencimiento: n.fecha_vencimiento, proxima_accion: n.proxima_accion, fecha_proxima: n.fecha_proxima } } : x));
+        setConversaciones(p => p.map(x => x.cliente_id === n.id ? { ...x, soat_clientes: { ...x.soat_clientes, fase: n.fase, nombre: n.nombre, placa: n.placa, tipo_vehiculo: n.tipo_vehiculo, fecha_vencimiento: n.fecha_vencimiento, proxima_accion: n.proxima_accion, fecha_proxima: n.fecha_proxima } } : x));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_mensajes" }, (payload) => {
         if (payload.eventType === "INSERT") setMensajes(p => p.some(x => x.id === payload.new.id) ? p : [...p, payload.new]);
@@ -411,6 +411,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                   <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 2, fontSize: 12, color: "rgba(255,255,255,0.8)" }}>
                     <span>{seleccionada.telefono}</span>
                     {seleccionada.soat_clientes?.placa && <span>Placa: {seleccionada.soat_clientes.placa}</span>}
+                    {seleccionada.soat_clientes?.tipo_vehiculo && <span>{seleccionada.soat_clientes.tipo_vehiculo}</span>}
                     {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence SOAT: {seleccionada.soat_clientes.fecha_vencimiento}</span>}
                     {seleccionada.soat_clientes && (() => {
                       const f = FM_SOAT[seleccionada.soat_clientes.fase] || FM_SOAT.pendiente;

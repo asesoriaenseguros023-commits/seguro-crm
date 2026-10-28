@@ -160,3 +160,6 @@ export const PLANTILLAS_WA = [
   { id: "soat_datos_vehiculo",         label: "Pedir tipo de vehículo, cilindraje y modelo", aprobada: false },
   { id: "soat_retomar_conversacion_2", label: "¿Desea retomar la conversación?", aprobada: false },
 ];
+
+// Tipo de vehículo (homologado) del cliente de SOAT.
+export const TIPOS_VEHICULO = ["AUTOMOVIL", "MOTO", "CAMPERO/CAMIONETA", "CAMION", "TAXI", "BUS"];

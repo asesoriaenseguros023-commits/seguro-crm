@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabase.js";
-import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT } from "../constants.js";
+import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT, TIPOS_VEHICULO } from "../constants.js";
 import { parseDateSoat, mapSoat, toSoatRow, authHeaders, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import { generarInformeIA, informeIABase64 } from "../pdfReporteIA.js";
@@ -32,7 +32,7 @@ const fechaProximaValida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= FECHA_MI
 let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
 const soatEmpty = () => ({
-  id: soatNewId(), nombre: "", telefono: "", placa: "", anioMes: "",
+  id: soatNewId(), nombre: "", telefono: "", placa: "", tipoVehiculo: "", anioMes: "",
   fechaCompra: "", fechaVencimiento: "", fase: "pendiente", agente: "Sin asignar",
   intentos: 0, proximaAccion: "", fechaProxima: "",
   motivoNoCompra: "", historial: [], notas: "",
@@ -216,7 +216,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       fase: "fase", agente: "agente", proximaAccion: "proxima_accion",
       fechaProxima: "fecha_proxima", motivoNoCompra: "motivo_no_compra",
       notas: "notas", nombre: "nombre", telefono: "telefono",
-      placa: "placa", anioMes: "anio_mes", fechaCompra: "fecha_compra",
+      placa: "placa", tipoVehiculo: "tipo_vehiculo", anioMes: "anio_mes", fechaCompra: "fecha_compra",
       fechaVencimiento: "fecha_vencimiento",
     }[field] || field;
     const clearAccion = field === "fase" && FASES_SIN_ACCION.includes(value);
@@ -863,7 +863,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                 <div style={{ cursor: "pointer" }} onClick={() => openModal(c)}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: BLUE.primary }}>{c.nombre || "—"}</div>
                   <div style={{ fontSize: 11.5, color: "#888", marginTop: 2 }}>
-                    {c.telefono || "—"}{c.placa ? ` · ${c.placa}` : ""}
+                    {c.telefono || "—"}{c.placa ? ` · ${c.placa}` : ""}{c.tipoVehiculo ? ` · ${c.tipoVehiculo}` : ""}
                     {c.historial?.length > 0 && <span style={{ marginLeft: 6, color: "#aaa" }}>({c.historial.length} llam.)</span>}
                     {c.telefono && (
                       <button onClick={(e) => { e.stopPropagation(); iniciarLlamada(c); }}
@@ -934,6 +934,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                   <input value={editModal[f] || ""} onChange={e => setEditModal(p => ({ ...p, [f]: e.target.value }))} style={inpS} />
                 </div>
               ))}
+              <div>
+                <label style={lblS}>Tipo de vehículo</label>
+                <select value={editModal.tipoVehiculo || ""} onChange={e => setEditModal(p => ({ ...p, tipoVehiculo: e.target.value }))} style={inpS}>
+                  <option value="">Sin definir</option>
+                  {TIPOS_VEHICULO.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
               <div>
                 <label style={lblS}>F. Vencimiento</label>
                 <input type="date" value={editModal.fechaVencimiento || ""} onChange={e => setEditModal(p => ({ ...p, fechaVencimiento: e.target.value }))} style={inpS} />
@@ -1016,6 +1023,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                     </span>
                   )}
                   {modal.placa && <span>Placa: {modal.placa}</span>}
+                  {modal.tipoVehiculo && <span>{modal.tipoVehiculo}</span>}
                   <span>{modal.intentos || 0} intento{modal.intentos !== 1 ? "s" : ""}</span>
                   <span style={{ ...(() => { const f = FM_SOAT[modal.fase]; return { background: f?.bg, color: f?.text, padding: "1px 10px", borderRadius: 12, fontWeight: 700, fontSize: 12 }; })() }}>
                     {FM_SOAT[modal.fase]?.label || modal.fase}
@@ -1069,6 +1077,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                         <input value={modal[f] || ""} onChange={e => { updateC(modal.id, f, e.target.value); setModal(p => ({ ...p, [f]: e.target.value })); }} style={inpS} />
                       </div>
                     ))}
+                    <div>
+                      <label style={lblS}>Tipo de vehículo</label>
+                      <select value={modal.tipoVehiculo || ""} onChange={e => { updateC(modal.id, "tipoVehiculo", e.target.value); setModal(p => ({ ...p, tipoVehiculo: e.target.value })); }} style={inpS}>
+                        <option value="">Sin definir</option>
+                        {TIPOS_VEHICULO.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
                     <div>
                       <label style={lblS}>F. Vencimiento</label>
                       <input type="date" value={modal.fechaVencimiento || ""} onChange={e => { updateC(modal.id, "fechaVencimiento", e.target.value); setModal(p => ({ ...p, fechaVencimiento: e.target.value })); }} style={inpS} />
