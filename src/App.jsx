@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { S, BLUE, ROL_AGENTE, SECCIONES, SUBTABS_CONFIG } from "./constants.js";
-import { esAdmin } from "./helpers.js";
+import { esAdmin, authHeaders } from "./helpers.js";
 import { FontLoader, LoadingScreen } from "./components/Modal.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import SoftphoneWidget from "./components/SoftphoneWidget.jsx";
@@ -209,6 +209,19 @@ export default function App() {
       setLoading(false);
     };
     cargar();
+  }, [loggedIn]);
+
+  // Cada compra nueva en Histórico SOAT (Oficina SOAT) marca al cliente del CRM como
+  // "Compró". Corre al entrar y cada 2 minutos mientras la app esté abierta.
+  useEffect(() => {
+    if (!loggedIn) return;
+    const sincronizar = async () => {
+      try { await fetch("/api/sheets-dashboards?tipo=sincronizar-compras", { method: "POST", headers: await authHeaders() }); }
+      catch { /* sin red: se reintenta en el próximo ciclo */ }
+    };
+    sincronizar();
+    const id = setInterval(sincronizar, 120000);
+    return () => clearInterval(id);
   }, [loggedIn]);
 
   const handleLogin = async () => {

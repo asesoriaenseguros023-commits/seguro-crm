@@ -3,6 +3,7 @@ import { sheetsClient } from "./_lib/googleSheets.js";
 import { obtenerPrimas } from "./_lib/dashboardPrimas.js";
 import { obtenerCertificados } from "./_lib/dashboardCertificados.js";
 import { obtenerOficinaSoat } from "./_lib/dashboardOficinaSoat.js";
+import { sincronizarCompras } from "./_lib/sincronizarCompras.js";
 
 // Un solo endpoint para los 3 dashboards que leen Google Sheets (Pulso de
 // Primas, Certificados Escolares, Oficina SOAT), seleccionado por
@@ -35,6 +36,17 @@ const OBTENER_POR_TIPO = {
 };
 
 export default async function handler(req, res) {
+  // POST ?tipo=sincronizar-compras: marca como "Compró" a los clientes del CRM que
+  // aparecen con venta nueva en Histórico SOAT (mismo endpoint para no sumar otra
+  // función de Vercel: tope de 12 en Hobby).
+  if (req.method === "POST" && req.query.tipo === "sincronizar-compras") {
+    if (!(await requireAgente(req))) return res.status(401).json({ error: "No autorizado" });
+    try {
+      return res.status(200).json(await sincronizarCompras(sheetsClient(), supabase));
+    } catch (e) {
+      return res.status(500).json({ error: e.message || String(e) });
+    }
+  }
   if (req.method !== "GET") return res.status(405).json({ error: "Método no permitido" });
   if (!(await requireAgente(req))) return res.status(401).json({ error: "No autorizado" });
 
