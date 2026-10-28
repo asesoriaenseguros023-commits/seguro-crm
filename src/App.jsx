@@ -12,6 +12,7 @@ import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
 import SoatPage from "./pages/SOAT.jsx";
 import WhatsAppPage from "./pages/WhatsApp.jsx";
+import HoyPage from "./pages/Hoy.jsx";
 import PulsoPrimasPage from "./pages/PulsoPrimas.jsx";
 import CertificadosEscolaresPage from "./pages/CertificadosEscolares.jsx";
 import OficinaSoatPage from "./pages/OficinaSoat.jsx";
@@ -364,6 +365,8 @@ export default function App() {
         </div>
       );
     }
+
+    if (seccion === "hoy") return <HoyPage onAbrirWhatsapp={abrirWhatsapp} onIrSoat={() => setSeccion("soat")} />;
 
     if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} comerciales={agentes.filter((a) => a.rol === "Comercial")} onAbrirWhatsapp={abrirWhatsapp} />;
 

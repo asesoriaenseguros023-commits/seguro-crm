@@ -23,6 +23,12 @@ const parseHistFecha = (s) => {
   return new Date(y, m - 1, d);
 };
 
+// Próxima acción: solo fechas razonables (evita años mal digitados como 2029).
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const FECHA_MIN = isoLocal(new Date());
+const FECHA_MAX = isoLocal(new Date(new Date().getFullYear() + 1, new Date().getMonth(), new Date().getDate()));
+const fechaProximaValida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= FECHA_MIN && v <= FECHA_MAX;
+
 let soatNid = Date.now();
 const soatNewId = () => `s${++soatNid}`;
 const soatEmpty = () => ({
@@ -132,8 +138,20 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
 
   // ─── Carga inicial + realtime ────────────────────────────────────────────
   useEffect(() => {
-    supabase.from("soat_clientes").select("*").order("created_at", { ascending: false })
-      .then(({ data }) => { if (data) setClientes(data.map(mapSoat)); setLoadingSoat(false); });
+    // Supabase devuelve máximo 1.000 filas por consulta: se pagina hasta traer todo.
+    (async () => {
+      const todos = [];
+      for (let desde = 0; ; desde += 1000) {
+        const { data, error } = await supabase.from("soat_clientes").select("*")
+          .order("created_at", { ascending: false }).order("id", { ascending: true })
+          .range(desde, desde + 999);
+        if (error || !data) break;
+        todos.push(...data);
+        if (data.length < 1000) break;
+      }
+      setClientes(todos.map(mapSoat));
+      setLoadingSoat(false);
+    })();
 
     const channel = supabase.channel("soat-all")
       .on("postgres_changes", { event: "*", schema: "public", table: "soat_clientes" }, (payload) => {
@@ -193,6 +211,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
 
   // ─── Update campo ─────────────────────────────────────────────────────────
   const updateC = async (id, field, value) => {
+    if (field === "fechaProxima" && value && !fechaProximaValida(value)) return;
     const dbField = {
       fase: "fase", agente: "agente", proximaAccion: "proxima_accion",
       fechaProxima: "fecha_proxima", motivoNoCompra: "motivo_no_compra",
@@ -1076,7 +1095,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                       </div>
                       <div>
                         <label style={lblS}>Fecha próximo contacto</label>
-                        <input type="date" value={modal.fechaProxima || ""} onChange={e => { updateC(modal.id, "fechaProxima", e.target.value); setModal(p => ({ ...p, fechaProxima: e.target.value })); }} style={inpS} />
+                        <input type="date" min={FECHA_MIN} max={FECHA_MAX} value={modal.fechaProxima || ""} onChange={e => { updateC(modal.id, "fechaProxima", e.target.value); setModal(p => ({ ...p, fechaProxima: e.target.value })); }} style={inpS} />
                       </div>
                     </>}
                     {modal.fase === "no_interes" && (
@@ -1143,7 +1162,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                       </div>
                       <div>
                         <label style={lblS}>Fecha próximo contacto</label>
-                        <input type="date" value={callLog.fechaProxima} onChange={e => setCallLog(p => ({ ...p, fechaProxima: e.target.value }))} style={inpS} />
+                        <input type="date" min={FECHA_MIN} max={FECHA_MAX} value={callLog.fechaProxima} onChange={e => setCallLog(p => ({ ...p, fechaProxima: e.target.value }))} style={inpS} />
                       </div>
                     </>}
                     <div style={{ gridColumn: "1/-1" }}>

@@ -94,6 +94,7 @@ export const S = {
 // Las tablas de Supabase (clientes, interesados, cotizaciones, polizas) NO
 // se tocaron — solo se quitó el código del frontend. Ver [[project-seguro-crm]].
 export const SECCIONES = [
+  { id: "hoy",          label: "Hoy",                   icon: "bell",     adminOnly: false },
   { id: "soat",         label: "Seguimiento SOAT",      icon: "shield",   adminOnly: false },
   { id: "whatsapp",     label: "WhatsApp",              icon: "whatsapp", adminOnly: false },
   { id: "primas",       label: "Pulso de Primas",       icon: "chart",    adminOnly: false },
