@@ -92,7 +92,8 @@ const fmtDia = (iso) => {
   const ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
   if (d.toDateString() === hoy.toDateString()) return "Hoy";
   if (d.toDateString() === ayer.toDateString()) return "Ayer";
-  return d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" });
+  const t = d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" });
+  return t.charAt(0).toUpperCase() + t.slice(1);
 };
 const COLORES_AVATAR = ["#6b7cff", "#e5733b", "#2aa876", "#c2559e", "#3b8fd9", "#b68a1f", "#7d5fd0", "#d1495b"];
 const iniciales = (nombre) => (String(nombre || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("") || "?").toUpperCase();
@@ -504,7 +505,7 @@ const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
                     return (
                       <div key={m.id} style={{ display: "flex", flexDirection: "column", marginTop: primeroDelGrupo ? 8 : 0 }}>
                         {nuevoDia && (
-                          <div style={{ alignSelf: "center", margin: "8px 0 10px", background: "#fff", color: WA.textMuted, fontSize: 12, padding: "4px 12px", borderRadius: 8, boxShadow: "0 1px 1px rgba(0,0,0,0.1)", textTransform: "capitalize" }}>{fmtDia(m.created_at)}</div>
+                          <div style={{ alignSelf: "center", margin: "8px 0 10px", background: "#fff", color: WA.textMuted, fontSize: 12, padding: "4px 12px", borderRadius: 8, boxShadow: "0 1px 1px rgba(0,0,0,0.1)" }}>{fmtDia(m.created_at)}</div>
                         )}
                       <div style={{ display: "flex", justifyContent: saliente ? "flex-end" : "flex-start", alignItems: "center", gap: 6 }}
                         onMouseEnter={() => setHoverMsg(m.id)} onMouseLeave={() => setHoverMsg(null)}>

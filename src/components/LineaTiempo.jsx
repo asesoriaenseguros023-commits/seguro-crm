@@ -21,7 +21,8 @@ const fmtDia = (d) => {
   const hoy = new Date(); const ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
   if (d.toDateString() === hoy.toDateString()) return "Hoy";
   if (d.toDateString() === ayer.toDateString()) return "Ayer";
-  return d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() !== hoy.getFullYear() ? "numeric" : undefined });
+  const t = d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() !== hoy.getFullYear() ? "numeric" : undefined });
+  return t.charAt(0).toUpperCase() + t.slice(1);
 };
 const COLOR = { llamada: BLUE.primary, registro: "#d97706", whatsapp: "#0e7c63" };
 const ETIQUETA = { llamada: "Llamada", registro: "Registro del asesor", whatsapp: "WhatsApp" };
@@ -85,7 +86,7 @@ const LineaTiempo = ({ clienteId, historial = [], incluirWhatsapp = true, altoMa
       {eventos.map(ev => {
         return (
           <div key={ev.k}>
-            {ev.cabecera && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#7b8794", textTransform: "capitalize", margin: "12px 0 6px" }}>{fmtDia(ev.fecha)}</div>}
+            {ev.cabecera && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#7b8794", margin: "12px 0 6px" }}>{fmtDia(ev.fecha)}</div>}
             <div style={{ display: "flex", gap: 10, padding: "6px 0" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: COLOR[ev.tipo], marginTop: 5, flexShrink: 0 }} />
               <div style={{ minWidth: 0, flex: 1 }}>
