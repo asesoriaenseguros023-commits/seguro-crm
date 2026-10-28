@@ -366,7 +366,7 @@ export default function App() {
 
     if (seccion === "soat") return <SoatPage showConfirm={showConfirm} softphone={softphone} comerciales={agentes.filter((a) => a.rol === "Comercial")} onAbrirWhatsapp={abrirWhatsapp} />;
 
-    if (seccion === "whatsapp") return <WhatsAppPage clienteIdInicial={waClienteId} />;
+    if (seccion === "whatsapp") return <WhatsAppPage clienteIdInicial={waClienteId} softphone={softphone} />;
 
     if (seccion === "primas") return <PulsoPrimasPage />;
 

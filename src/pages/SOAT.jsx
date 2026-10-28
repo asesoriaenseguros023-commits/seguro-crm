@@ -4,6 +4,7 @@ import { supabase } from "../supabase.js";
 import { S, BLUE, FASES_SOAT, FM_SOAT, MOTIVOS_SOAT, MOTIVOS_ILOCALIZABLE, ACCIONES_SOAT, TIPOS_VEHICULO } from "../constants.js";
 import { parseDateSoat, mapSoat, toSoatRow, authHeaders, today } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
+import LineaTiempo from "../components/LineaTiempo.jsx";
 import { generarInformeIA, informeIABase64 } from "../pdfReporteIA.js";
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -94,7 +95,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   const agentes = ["Sin asignar", ...comerciales.map((c) => c.nombre)];
   const [importMsg, setImportMsg] = useState({ text: "", type: "success" });
   const [importDups, setImportDups] = useState(null);
-  const [activeTab, setActiveTab] = useState("info");
+  const [activeTab, setActiveTab] = useState("linea");
   const [callLog, setCallLog] = useState({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
   const [filtroAlerta, setFiltroAlerta] = useState(false);
   const [showNoInteresDetail, setShowNoInteresDetail] = useState(false);
@@ -228,7 +229,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   };
 
   const openModal = (c) => {
-    setModal(c); setActiveTab("info");
+    setModal(c); setActiveTab("linea");
     setCallLog({ resultado: "", motivo: "", proximaAccion: "", fechaProxima: "", nota: "" });
     setCallLogError(""); setModalCloseError("");
     cargarLlamadasTecnicas(c.id);
@@ -1060,7 +1061,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
               </div>
             )}
             <div style={{ display: "flex", padding: "16px 28px 0", borderBottom: `1px solid ${BLUE.border}`, gap: 4 }}>
-              {[["info","Información"],["llamada","Registrar llamada"],["historial",`Historial (${modal.historial?.length || 0})`]].map(([t, l]) => (
+              {[["linea","Línea de tiempo"],["info","Información"],["llamada","Registrar llamada"],["historial",`Historial (${modal.historial?.length || 0})`]].map(([t, l]) => (
                 <button key={t} onClick={() => setActiveTab(t)}
                   style={{ background: activeTab === t ? BLUE.light : "transparent", border: "none", borderBottom: activeTab === t ? `2px solid ${BLUE.primary}` : "2px solid transparent", color: activeTab === t ? BLUE.primary : "#999", padding: "9px 18px", fontSize: 13.5, cursor: "pointer", fontWeight: activeTab === t ? 700 : 400, borderRadius: "6px 6px 0 0", transition: "all 0.15s" }}>
                   {l}
@@ -1068,6 +1069,19 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
               ))}
             </div>
             <div style={{ padding: "22px 28px 28px" }}>
+              {activeTab === "linea" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={() => { setActiveTab("llamada"); softphone.startCall(modal.telefono, modal.nombre, modal.id); }}
+                      disabled={!modal.telefono || softphone.status !== "idle"} style={{ ...S.btn("primary"), padding: "7px 16px", fontSize: 13 }}>Llamar</button>
+                    <button onClick={() => enviarWhatsapp(modal)} disabled={!modal.telefono}
+                      style={{ ...S.btn("secondary"), padding: "7px 16px", fontSize: 13 }}>
+                      {conversacionesWA[modal.id] ? (conversacionActivaWA_(conversacionesWA[modal.id]) ? "Abrir chat" : "WhatsApp (plantilla enviada)") : "Enviar WhatsApp"}
+                    </button>
+                  </div>
+                  <LineaTiempo clienteId={modal.id} historial={modal.historial} altoMax={380} />
+                </div>
+              )}
               {activeTab === "info" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>

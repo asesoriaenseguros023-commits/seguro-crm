@@ -4,6 +4,7 @@ import { S, FM_MENSAJE_WA, FM_SOAT, FASES_SOAT, ACCIONES_SOAT, PLANTILLAS_WA } f
 import { authHeaders } from "../helpers.js";
 import Icon from "../components/Icon.jsx";
 import Cotizador from "../components/Cotizador.jsx";
+import LineaTiempo from "../components/LineaTiempo.jsx";
 
 const REACCIONES = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const EMOJIS = [
@@ -100,7 +101,7 @@ const Avatar = ({ nombre, size = 46 }) => (
   <div style={{ width: size, height: size, borderRadius: "50%", background: colorAvatar(nombre), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: size * 0.36, flexShrink: 0 }}>{iniciales(nombre)}</div>
 );
 
-const WhatsAppPage = ({ clienteIdInicial }) => {
+const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
   const [conversaciones, setConversaciones] = useState([]);
   const [mensajes, setMensajes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -118,7 +119,8 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
   // pantalla sin que el agente tenga que recargar.
   const [ahora, setAhora] = useState(null);
   const [filtroResp, setFiltroResp] = useState("todos");
-  const [busqueda, setBusqueda] = useState("");   // todos | respondieron | nunca
+  const [busqueda, setBusqueda] = useState("");
+  const [panelAbierto, setPanelAbierto] = useState(false);   // todos | respondieron | nunca
 
   useEffect(() => {
     // Carga completa. Se repite cada 15 s, al volver a la pestaña y cuando el
@@ -127,7 +129,7 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
     let cancelado = false;
     async function cargar() {
       const [convRes, msgRes] = await Promise.all([
-        supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, tipo_vehiculo, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
+        supabase.from("whatsapp_conversaciones").select("*, soat_clientes(nombre, placa, tipo_vehiculo, historial, fase, fecha_vencimiento, proxima_accion, fecha_proxima)").order("updated_at", { ascending: false }),
         supabase.from("whatsapp_mensajes").select("*").order("created_at", { ascending: true }),
       ]);
       if (cancelado) return;
@@ -445,6 +447,15 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
                         {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence {seleccionada.soat_clientes.fecha_vencimiento}</span>}
                       </div>
                     </div>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
+                      {softphone && (
+                        <button onClick={() => softphone.startCall(seleccionada.telefono, seleccionada.soat_clientes?.nombre || seleccionada.nombre, seleccionada.cliente_id)}
+                          disabled={softphone.status !== "idle"} title="Llamar a este cliente"
+                          style={{ border: "1px solid #d1d7db", background: "#fff", color: "#111b21", borderRadius: 18, padding: "5px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", opacity: softphone.status !== "idle" ? 0.5 : 1 }}>Llamar</button>
+                      )}
+                      <button onClick={() => setPanelAbierto(v => !v)} title="Llamadas, registros y mensajes en orden"
+                        style={{ border: `1px solid ${panelAbierto ? WA.accentDark : "#d1d7db"}`, background: panelAbierto ? WA.accent : "#fff", color: panelAbierto ? "#fff" : "#111b21", borderRadius: 18, padding: "5px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Línea de tiempo</button>
+                    </div>
                   </div>
                   {seleccionada.soat_clientes && (
                     <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", padding: "6px 16px 10px", fontSize: 12, color: WA.textMuted }}>
@@ -591,6 +602,19 @@ const WhatsAppPage = ({ clienteIdInicial }) => {
               </>
             )}
           </div>
+
+          {seleccionada && panelAbierto && (
+            <div style={{ width: 320, flexShrink: 0, borderLeft: "1px solid #e9e9e9", background: "#fff", display: "flex", flexDirection: "column", textAlign: "left" }}>
+              <div style={{ padding: "14px 16px", background: WA.panel, fontWeight: 700, fontSize: 14, color: "#111b21", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                Línea de tiempo
+                <button onClick={() => setPanelAbierto(false)} style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer", color: WA.textMuted, lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ padding: "4px 16px 12px", flex: 1, overflowY: "auto" }}>
+                <div style={{ fontSize: 11.5, color: WA.textMuted, margin: "8px 0 0" }}>Llamadas y registros del asesor. Los mensajes están en el chat.</div>
+                <LineaTiempo clienteId={seleccionada.cliente_id} historial={seleccionada.soat_clientes?.historial || []} incluirWhatsapp={false} altoMax={9999} />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
