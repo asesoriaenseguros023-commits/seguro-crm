@@ -442,7 +442,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       const faseMap = {
         "interesado volver a llamar":"interesado","volver a llamar no contesto":"en_gestion",
         "volver a llamar":"en_gestion","no interesado":"no_interes","cliente compro":"compro",
-        "ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion",
+        "ilocalizable":"ilocalizable","en gestión":"en_gestion","en gestion":"en_gestion","contactado por whatsapp":"contactado_whatsapp",
         "interesado":"interesado","compró":"compro",
         "numero equivocado":"numero_equivocado","número equivocado":"numero_equivocado",
       };
@@ -618,6 +618,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   const stats = {
     total:       clientes.length,
     pendiente:   clientes.filter(c => c.fase === "pendiente").length,
+    contactadoWa: clientes.filter(c => c.fase === "contactado_whatsapp").length,
     enGestion:   clientes.filter(c => c.fase === "en_gestion").length,
     interesados: clientes.filter(c => c.fase === "interesado").length,
     compro:      clientes.filter(c => c.fase === "compro").length,
@@ -636,6 +637,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
   const STAT_CARDS = [
     { label: "Total",         key: "total",        color: BLUE.primary, filter: "Todos"      },
     { label: "Pendiente",     key: "pendiente",    color: "#94a3b8",    filter: "pendiente"  },
+    { label: "Contactado por WhatsApp", key: "contactadoWa", color: "#10b981", filter: "contactado_whatsapp" },
     { label: "En gestión",    key: "enGestion",    color: "#f59e0b",    filter: "en_gestion" },
     { label: "Interesado",    key: "interesados",  color: "#16a34a",    filter: "interesado" },
     { label: "Compró",        key: "compro",       color: "#8b5cf6",    filter: "compro"     },
@@ -661,12 +663,12 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
 
   const funnelData = useMemo(() => {
     const base = funnelClientes.length;
-    const gestionados = funnelClientes.filter(c => ["interesado","compro","ilocalizable","numero_equivocado","no_interes","en_gestion"].includes(c.fase)).length;
+    const gestionados = funnelClientes.filter(c => ["interesado","compro","ilocalizable","numero_equivocado","no_interes","en_gestion","contactado_whatsapp"].includes(c.fase)).length;
     const noInteres = funnelClientes.filter(c => c.fase === "no_interes").length;
     const compro = funnelClientes.filter(c => c.fase === "compro").length;
     const ilocalizable = funnelClientes.filter(c => c.fase === "ilocalizable").length;
     const numeroEquivocado = funnelClientes.filter(c => c.fase === "numero_equivocado").length;
-    const activos = funnelClientes.filter(c => ["en_gestion","interesado"].includes(c.fase)).length;
+    const activos = funnelClientes.filter(c => ["en_gestion","interesado","contactado_whatsapp"].includes(c.fase)).length;
     return { base, gestionados, noInteres, compro, ilocalizable, numeroEquivocado, activos };
   }, [funnelClientes]);
 

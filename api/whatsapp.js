@@ -267,13 +267,21 @@ async function manejarWebhookPost_(req, res) {
           // (no se toca si ya está en otra fase: interesado, compró, etc.).
           if (conversacion.cliente_id) {
             await supabase.from("soat_clientes").update({ fase: "en_gestion" })
-              .eq("id", conversacion.cliente_id).eq("fase", "pendiente");
+              .eq("id", conversacion.cliente_id).in("fase", ["pendiente", "contactado_whatsapp"]);
           }
         }
       }
     }
   }
   return res.status(200).json({ ok: true });
+}
+
+// Al enviar un WhatsApp (plantilla o texto) el cliente deja de estar en "Pendiente" y pasa a
+// "Contactado por WhatsApp". Solo si sigue en "Pendiente": no pisa otras fases (interesado, compró...).
+async function marcarContactadoWhatsapp_(clienteId) {
+  if (!clienteId) return;
+  await supabase.from("soat_clientes").update({ fase: "contactado_whatsapp" })
+    .eq("id", clienteId).eq("fase", "pendiente");
 }
 
 export default async function handler(req, res) {
@@ -321,6 +329,7 @@ export default async function handler(req, res) {
         wa_message_id: waMessageId,
         estado: "enviado",
       });
+      await marcarContactadoWhatsapp_(clienteId);
       return res.status(200).json({ ok: true, resultado });
     } catch (err) {
       return res.status(502).json({ error: `No se pudo enviar el WhatsApp: ${err.message}` });
@@ -366,7 +375,7 @@ export default async function handler(req, res) {
     if (!texto || !texto.trim()) return res.status(400).json({ error: "El mensaje no puede estar vacío." });
 
     const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
-      .select("id, telefono, ultima_entrante_at").eq("id", conversacionId).maybeSingle();
+      .select("id, cliente_id, telefono, ultima_entrante_at").eq("id", conversacionId).maybeSingle();
     if (!conversacion) return res.status(404).json({ error: "Conversación no encontrada." });
     if (!ventanaAbierta_(conversacion)) {
       return res.status(409).json({ error: "La ventana de 24 horas está cerrada — hay que reenviar la plantilla de seguimiento." });
@@ -384,6 +393,7 @@ export default async function handler(req, res) {
         estado: "enviado",
       }).select().single();
       await supabase.from("whatsapp_conversaciones").update({ updated_at: new Date().toISOString() }).eq("id", conversacion.id);
+      await marcarContactadoWhatsapp_(conversacion.cliente_id);
       return res.status(200).json({ ok: true, resultado, mensaje });
     } catch (err) {
       return res.status(502).json({ error: `No se pudo enviar el mensaje: ${err.message}` });

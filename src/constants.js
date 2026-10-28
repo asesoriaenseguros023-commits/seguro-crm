@@ -113,6 +113,7 @@ export const SUBTABS_CONFIG = [
 // ─── SOAT ────────────────────────────────────────────────────────────────────
 export const FASES_SOAT = [
   { id: "pendiente",    label: "Pendiente",      color: "#3b82f6", bg: "#dbeafe", text: "#1d4ed8" },
+  { id: "contactado_whatsapp", label: "Contactado por WhatsApp", color: "#10b981", bg: "#d1fae5", text: "#065f46" },
   { id: "en_gestion",  label: "En gestión",     color: "#f59e0b", bg: "#fef3c7", text: "#92400e" },
   { id: "interesado",  label: "Interesado",     color: "#22c55e", bg: "#dcfce7", text: "#166534" },
   { id: "compro",      label: "Compró",         color: "#8b5cf6", bg: "#ede9fe", text: "#5b21b6" },
