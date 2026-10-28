@@ -196,6 +196,41 @@ async function manejarWebhookGet_(req, res) {
   return res.status(403).send("Verificación fallida");
 }
 
+
+// Conversación para un número que escribe sin tener conversación previa.
+// Busca al cliente por sus últimos 10 dígitos; si no está en soat_clientes lo
+// crea como cliente nuevo (en gestión, sin asignar) con el nombre del perfil de
+// WhatsApp. Devuelve { id, cliente_id } o null si algo falla.
+async function crearConversacionEntrante_(desde, nombrePerfil) {
+  try {
+    const ultimos10 = desde.slice(-10);
+    let { data: encontrados } = await supabase.from("soat_clientes")
+      .select("id, nombre").ilike("telefono", `%${ultimos10}%`).order("created_at", { ascending: false }).limit(1);
+    let cliente = encontrados?.[0];
+    if (!cliente) {
+      const hoy = new Date();
+      const { data: nuevo, error } = await supabase.from("soat_clientes").insert({
+        nombre: (nombrePerfil || "Contacto WhatsApp").toUpperCase(), telefono: ultimos10, placa: "",
+        anio_mes: `${String(hoy.getMonth() + 1).padStart(2, "0")}-${hoy.getFullYear()}`,
+        fecha_compra: "", fecha_vencimiento: "", fase: "en_gestion", agente: "Sin asignar", intentos: 0,
+        notas: "Escribió por WhatsApp sin estar en la base.", historial: [],
+      }).select("id, nombre").single();
+      if (error) throw new Error(error.message);
+      cliente = nuevo;
+    }
+    const { data: existente } = await supabase.from("whatsapp_conversaciones")
+      .select("id, cliente_id").eq("cliente_id", cliente.id).maybeSingle();
+    if (existente) return existente;
+    const { data: conv, error: convError } = await supabase.from("whatsapp_conversaciones")
+      .insert({ cliente_id: cliente.id, telefono: desde, nombre: cliente.nombre }).select("id, cliente_id").single();
+    if (convError) throw new Error(convError.message);
+    return conv;
+  } catch (err) {
+    console.error("WhatsApp: no se pudo crear la conversación entrante", err.message);
+    return null;
+  }
+}
+
 const ESTADO_POR_STATUS_META = { sent: "enviado", delivered: "entregado", read: "leido", failed: "fallido" };
 
 async function manejarWebhookPost_(req, res) {
@@ -239,8 +274,15 @@ async function manejarWebhookPost_(req, res) {
         const esMedia = TIPOS_MEDIA.includes(msg.type);
         const datosMedia = esMedia ? msg[msg.type] || {} : null;
         const texto = esMedia ? (datosMedia.caption || "") : textoDeMensaje_(msg);
-        const { data: conversacion } = await supabase.from("whatsapp_conversaciones")
+        let { data: conversacion } = await supabase.from("whatsapp_conversaciones")
           .select("id, cliente_id").eq("telefono", desde).order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        // Escribe alguien a quien nunca le habíamos escrito (esté o no en la base):
+        // antes el mensaje se perdía en silencio. Ahora se crea la conversación,
+        // y el cliente si no existe, para que aparezca en el módulo WhatsApp.
+        if (!conversacion) {
+          const perfil = (valor.contacts || []).find(c => String(c.wa_id || "").replace(/[^\d]/g, "") === desde)?.profile?.name || "";
+          conversacion = await crearConversacionEntrante_(desde, perfil);
+        }
         if (conversacion) {
           const ahora = new Date().toISOString();
           const fila = {
