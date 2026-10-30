@@ -154,10 +154,10 @@ export const ACCIONES_SOAT = ["Volver a llamar", "Escribir por WhatsApp"];
 // Cada una se manda UNA sola vez por cliente. El texto debe coincidir con el
 // de api/whatsapp.js (PLANTILLAS_WA).
 export const PLANTILLAS_WA = [
-  { id: "soat_claro_pendientes",       label: "Claro que sí, quedamos pendientes", aprobada: false },
-  { id: "soat_recordatorio_asesoria",  label: "Recordatorio para asesorarle con el SOAT", aprobada: false },
-  { id: "soat_datos_vehiculo",         label: "Pedir tipo de vehículo, cilindraje y modelo", aprobada: false },
-  { id: "soat_retomar_conversacion_2", label: "¿Desea retomar la conversación?", aprobada: false },
+  { id: "soat_claro_pendientes",       label: "Claro que sí, quedamos pendientes", aprobada: true },
+  { id: "soat_recordatorio_asesoria",  label: "Recordatorio para asesorarle con el SOAT", aprobada: true },
+  { id: "soat_datos_vehiculo",         label: "Pedir tipo de vehículo, cilindraje y modelo", aprobada: true },
+  { id: "soat_retomar_conversacion_2", label: "¿Desea retomar la conversación?", aprobada: true },
 ];
 
 // Tipo de vehículo (homologado) del cliente de SOAT.
