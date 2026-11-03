@@ -15,6 +15,29 @@ const EMOJIS = [
 
 const VENTANA_24H_MS = 24 * 60 * 60 * 1000;
 
+// Temporizador para responder: cuenta hacia atrás lo que le queda a la ventana
+// de 24 h desde el último mensaje del cliente. Verde con holgura, ámbar por
+// debajo de 12 h y rojo por debajo de 4 h; cerrada = ya no se puede escribir libre.
+const fmtDuracion = (ms) => {
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+};
+const temporizador = (entranteAt, ahora) => {
+  if (!entranteAt || !ahora) return null;
+  const desde = new Date(entranteAt).getTime();
+  const resta = desde + VENTANA_24H_MS - ahora;
+  const espera = `Esperando respuesta hace ${fmtDuracion(Math.max(0, ahora - desde))}`;
+  if (resta <= 0) return { texto: "Cerrada", titulo: `${espera} · la ventana de 24 h ya cerró`, color: "#7a1f1f", bg: "#fde2e2", borde: "#e8a0a0" };
+  const [color, bg, borde] = resta < 4 * 3600000 ? ["#9b1c1c", "#fde2e2", "#f1a3a3"]
+    : resta < 12 * 3600000 ? ["#8a5a00", "#fff1cf", "#f0c36a"] : ["#0b5c43", "#e7fce3", "#25d366"];
+  return { texto: fmtDuracion(resta), titulo: `${espera} · quedan ${fmtDuracion(resta)} para responder`, color, bg, borde };
+};
+const Temporizador = ({ t, grande }) => t && (
+  <span title={t.titulo} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, background: t.bg, color: t.color, border: `1px solid ${t.borde}`, borderRadius: 10, padding: grande ? "3px 10px" : "0 7px", fontSize: grande ? 12.5 : 10.5, fontWeight: 700 }}>
+    ⏱ {t.texto}
+  </span>
+);
+
 // Paleta propia de este módulo -- a diferencia de los otros dashboards
 // (unificados a BLUE.primary, ver [[project-seguro-crm]]), acá el usuario
 // pidió explícitamente que se vea y se sienta como la app real de WhatsApp,
@@ -235,6 +258,7 @@ const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
     () => mensajes.filter(m => m.conversacion_id === seleccionadaId),
     [mensajes, seleccionadaId]
   );
+  const sinResponderSeleccionada = !!listaOrdenada.find(x => x.c.id === seleccionadaId)?.sinResponder;
   const ventanaAbierta = !!seleccionada?.ultima_entrante_at && !!ahora
     && ahora - new Date(seleccionada.ultima_entrante_at).getTime() < VENTANA_24H_MS;
 
@@ -260,6 +284,9 @@ const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Error al enviar");
+      // Mostrar la plantilla de una vez (y quitarla de las disponibles) sin
+      // esperar al canal en vivo, que a veces tarda y dejaba el chat congelado.
+      if (json.mensaje) setMensajes(p => p.some(x => x.id === json.mensaje.id) ? p : [...p, json.mensaje]);
     } catch (err) {
       setErrorEnvio(err.message);
     }
@@ -416,6 +443,7 @@ const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
                       </div>
                       {sinResponder && (
                         <>
+                          <Temporizador t={temporizador(c.ultima_entrante_at, ahora)} />
                           <span title="Sin responder" style={{ flexShrink: 0, background: WA.accent, width: 12, height: 12, borderRadius: "50%" }} />
                           <button onClick={(e) => { e.stopPropagation(); desmarcarConversacion(c); }} title="Quitar la marca sin responder (no envía nada)"
                             style={{ flexShrink: 0, border: `1px solid ${WA.accent}`, background: "#fff", color: WA.header, borderRadius: 10, padding: "0 7px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>Desmarcar</button>
@@ -448,7 +476,8 @@ const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
                         {seleccionada.soat_clientes?.fecha_vencimiento && <span>Vence {seleccionada.soat_clientes.fecha_vencimiento}</span>}
                       </div>
                     </div>
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                      {sinResponderSeleccionada && <Temporizador grande t={temporizador(seleccionada.ultima_entrante_at, ahora)} />}
                       {softphone && (
                         <button onClick={() => softphone.startCall(seleccionada.telefono, seleccionada.soat_clientes?.nombre || seleccionada.nombre, seleccionada.cliente_id)}
                           disabled={softphone.status !== "idle"} title="Llamar a este cliente"

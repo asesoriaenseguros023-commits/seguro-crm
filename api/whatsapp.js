@@ -378,7 +378,7 @@ export default async function handler(req, res) {
         .upsert({ cliente_id: clienteId, telefono: to, nombre }, { onConflict: "cliente_id" })
         .select("id").single();
       if (convError) throw new Error(convError.message);
-      await supabase.from("whatsapp_mensajes").insert({
+      const { data: mensaje } = await supabase.from("whatsapp_mensajes").insert({
         conversacion_id: conversacion.id,
         direccion: "saliente",
         tipo: "plantilla",
@@ -386,9 +386,10 @@ export default async function handler(req, res) {
         plantilla,
         wa_message_id: waMessageId,
         estado: "enviado",
-      });
+      }).select().single();
+      await supabase.from("whatsapp_conversaciones").update({ updated_at: new Date().toISOString() }).eq("id", conversacion.id);
       await marcarContactadoWhatsapp_(clienteId);
-      return res.status(200).json({ ok: true, resultado });
+      return res.status(200).json({ ok: true, resultado, mensaje });
     } catch (err) {
       return res.status(502).json({ error: `No se pudo enviar el WhatsApp: ${err.message}` });
     }

@@ -7,11 +7,6 @@ import { supabase } from "../supabase.js";
 const VENTANA_MS = 24 * 60 * 60 * 1000;
 const RECIENTE_MS = 15 * 60 * 1000;
 
-const fmtRestante = (ms) => {
-  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
-  return h > 0 ? `${h} h ${m} min` : `${m} min`;
-};
-
 const AvisoWhatsapp = ({ onAbrir, compacto }) => {
   const [pendientes, setPendientes] = useState([]);
   const [ahora, setAhora] = useState(null);
@@ -55,9 +50,7 @@ const AvisoWhatsapp = ({ onAbrir, compacto }) => {
   const texto = vigentes.length === 1
     ? (reciente ? `Nuevo mensaje de ${urgente.nombre}` : `Mensaje sin responder de ${urgente.nombre}`)
     : `${vigentes.length} mensajes sin responder`;
-  const detalle = vigentes.length === 1
-    ? `quedan ${fmtRestante(urgente.cierra - ahora)} para responder`
-    : `más urgente: ${urgente.nombre} · quedan ${fmtRestante(urgente.cierra - ahora)}`;
+  const detalle = vigentes.length === 1 ? "toca para abrir el chat" : `más urgente: ${urgente.nombre}`;
 
   return (
     <button onClick={() => onAbrir(urgente.clienteId)} title={`${texto} (${detalle})`}
