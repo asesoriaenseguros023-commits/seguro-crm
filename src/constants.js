@@ -20,7 +20,7 @@ const FUENTE = 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Sego
 export const S = {
   app: { minHeight: "100vh", background: "#f1f5f9", fontFamily: FUENTE, color: "#1e293b" },
   sidebar: { width: 210, background: `linear-gradient(180deg, ${BLUE.sidebarDark} 0%, ${BLUE.sidebar} 100%)`, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" },
-  main: { maxWidth: 1280, width: "100%", margin: "0 auto", boxSizing: "border-box", flex: 1 },
+  main: { width: "100%", boxSizing: "border-box", flex: 1 },
   topbar: { background: "#fff", borderBottom: `1px solid ${BLUE.border}`, padding: "0 28px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 },
   content: { background: "#fff", borderRadius: 16, boxShadow: "0 1px 2px rgba(15,23,42,0.06)", border: "1px solid #f1f5f9", minHeight: "80vh", boxSizing: "border-box" },
   sbLogo: { padding: "20px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.1)" },

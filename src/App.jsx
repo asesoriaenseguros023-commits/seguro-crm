@@ -21,6 +21,25 @@ import ConfiguracionPage from "./pages/Configuracion.jsx";
 import ComercialPage from "./pages/Comerciales.jsx";
 import ArriendosPage from "./pages/Arriendos.jsx";
 
+// Reloj de la barra superior, en formato de 24 horas.
+const Reloj = () => {
+  const [ahora, setAhora] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div style={{ textAlign: "right", flexShrink: 0, paddingRight: 4 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
+        {ahora.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+      </div>
+      <div style={{ fontSize: 11, color: "#bfdbfe", textTransform: "capitalize", lineHeight: 1.2 }}>
+        {ahora.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+      </div>
+    </div>
+  );
+};
+
 // ─── BARRA SUPERIOR (mismo diseño que POS Tocancipá) ─────────────────────────
 const TopNav = ({ current, onNav, onLogo, onLogout, userName, userRol, isMobile, onAbrirWhatsapp, titulo }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -31,7 +50,7 @@ const TopNav = ({ current, onNav, onLogo, onLogout, userName, userRol, isMobile,
 
   return (
     <nav style={S.nav}>
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "0 12px" : "0 16px" }}>
+      <div style={{ padding: isMobile ? "0 12px" : "0 16px" }}>
         <div style={{ display: "flex", alignItems: "center", height: 56, gap: 12 }}>
           <button onClick={() => { onLogo(); setMenuOpen(false); }} style={S.navLogoBtn}>
             <img src="/logo.png" alt="Logo" style={S.navLogoImg} />
@@ -58,6 +77,8 @@ const TopNav = ({ current, onNav, onLogo, onLogout, userName, userRol, isMobile,
           {isMobile && <div style={{ flex: 1, minWidth: 0, textAlign: "right", color: "#dbeafe", fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{current === "inicio" ? "" : titulo}</div>}
 
           <AvisoWhatsapp onAbrir={onAbrirWhatsapp} compacto={isMobile} />
+
+          {!isMobile && <Reloj />}
 
           {!isMobile && <button onClick={onLogout} style={S.navSalir}>Salir</button>}
 
