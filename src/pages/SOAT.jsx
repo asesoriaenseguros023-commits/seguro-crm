@@ -73,7 +73,7 @@ const FunnelBar = ({ label, value, total, color, bold, onClick }) => {
           {value} <span style={{ fontSize: 11.5, color: "#888", fontWeight: 400 }}>({pct}%)</span>
         </span>
       </div>
-      <div style={{ background: "#e8f0fe", borderRadius: 6, height: 26, overflow: "hidden" }}>
+      <div style={{ background: "#f1f5f9", borderRadius: 6, height: 26, overflow: "hidden" }}>
         <div style={{ background: color, width: `${Math.max(pct, value > 0 ? 1 : 0)}%`, height: "100%", borderRadius: 6, transition: "width 0.6s ease" }} />
       </div>
     </div>
@@ -324,7 +324,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <label style={lblS}>Registro técnico (Twilio)</label>
         {llamadasTecnicas[clienteId].map(l => {
-          const est = ESTADOS_LLAMADA[l.estado] || { label: l.estado || "En curso…", color: "#6b87b0" };
+          const est = ESTADOS_LLAMADA[l.estado] || { label: l.estado || "En curso…", color: "#64748b" };
           const mins = l.duracion_seg != null ? `${Math.floor(l.duracion_seg / 60)}:${String(l.duracion_seg % 60).padStart(2, "0")}` : null;
           const ia = l.analisis_ia && !l.analisis_ia.error ? l.analisis_ia : null;
           const iaColor = ia?.persona_real === "si" ? "#16a34a" : ia?.persona_real === "no" ? "#dc2626" : "#9ca3af";
@@ -333,14 +333,14 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
             <div key={l.id} style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 8, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, padding: "6px 10px" }}>
                 <span style={{ ...S.chip(est.color) }}>{est.label}</span>
-                {mins && <span style={{ color: "#6b87b0" }}>{mins}</span>}
+                {mins && <span style={{ color: "#64748b" }}>{mins}</span>}
                 <span style={{ color: "#aaa", fontSize: 11 }}>{new Date(l.created_at).toLocaleString("es-CO", { timeZone: "America/Bogota" })}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
                   {l.grabacion_sid && (
                     reproduciendo?.sid === l.grabacion_sid ? (
                       reproduciendo.url
                         ? <audio controls autoPlay src={reproduciendo.url} style={{ height: 28 }} />
-                        : <span style={{ color: "#6b87b0" }}>Cargando…</span>
+                        : <span style={{ color: "#64748b" }}>Cargando…</span>
                     ) : (
                       <button onClick={() => reproducirGrabacion(l.grabacion_sid)} style={{ ...S.btn("ghost"), padding: "3px 10px", fontSize: 12 }}>
                         Escuchar grabación
@@ -348,13 +348,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                     )
                   )}
                   {ia && <span style={{ ...S.chip(iaColor) }}>{iaLabel}</span>}
-                  {l.grabacion_sid && !l.analizado_en && <span style={{ color: "#6b87b0", fontSize: 11 }}>Sin analizar (se analiza al generar el Reporte IA de este período)</span>}
+                  {l.grabacion_sid && !l.analizado_en && <span style={{ color: "#64748b", fontSize: 11 }}>Sin analizar (se analiza al generar el Reporte IA de este período)</span>}
                 </div>
               </div>
               {ia && (
                 <div style={{ padding: "8px 10px", borderTop: `1px solid ${BLUE.border}`, background: "#f8faff", fontSize: 12, color: "#444" }}>
                   <div style={{ marginBottom: 4 }}>{ia.resumen}</div>
-                  <div style={{ color: "#6b87b0", fontSize: 11.5 }}>
+                  <div style={{ color: "#64748b", fontSize: 11.5 }}>
                     Agente — cortesía: {ia.calidad_agente.cortesia} · info correcta: {ia.calidad_agente.informacion_correcta}
                     {ia.calidad_agente.observaciones ? ` · ${ia.calidad_agente.observaciones}` : ""}
                   </div>
@@ -707,7 +707,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
 
   // ─── Estilos ──────────────────────────────────────────────────────────────
   const inpS = { background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "9px 12px", color: BLUE.text, fontSize: 13, outline: "none", width: "100%", fontFamily: "inherit", boxSizing: "border-box" };
-  const lblS = { fontSize: 11, color: "#6b87b0", fontWeight: 700, textTransform: "uppercase", marginBottom: 5, letterSpacing: "0.06em", display: "block" };
+  const lblS = { fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: 5, letterSpacing: "0.06em", display: "block" };
   const selS = { ...inpS, cursor: "pointer" };
   const filterSel = { ...S.select, width: "auto", padding: "7px 12px", fontSize: 13 };
 
@@ -745,7 +745,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       </div>
 
       {/* ── Alertas ─────────────────────────────────────────────────────────── */}
-      {loadingSoat && <div style={{ textAlign: "center", padding: 40, color: "#6b87b0" }}>Cargando…</div>}
+      {loadingSoat && <div style={{ textAlign: "center", padding: 40, color: "#64748b" }}>Cargando…</div>}
 
       {importMsg.text && (
         <div style={{ background: importMsg.type === "error" ? "#fef2f2" : importMsg.type === "info" ? "#eff6ff" : "#f0fdf4", border: `1px solid ${importMsg.type === "error" ? "#fecaca" : importMsg.type === "info" ? BLUE.border : "#bbf7d0"}`, borderRadius: 8, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: importMsg.type === "error" ? "#dc2626" : importMsg.type === "info" ? BLUE.primary : "#16a34a" }}>
@@ -803,7 +803,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                 borderTop: `3px solid ${s.color}`,
                 borderRadius: 10,
                 padding: "14px 12px",
-                boxShadow: active ? `0 4px 12px ${s.color}40` : "0 1px 4px rgba(26,86,219,0.06)",
+                boxShadow: active ? `0 4px 12px ${s.color}40` : "0 1px 4px rgba(15,23,42,0.06)",
                 cursor: clickable ? "pointer" : "default",
                 transition: "all 0.18s",
                 userSelect: "none",
@@ -811,7 +811,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
               <div style={{ fontSize: 24, fontWeight: 800, color: active ? "#fff" : s.color, lineHeight: 1 }}>
                 {stats[s.key]}
               </div>
-              <div style={{ fontSize: 11, color: active ? "rgba(255,255,255,0.88)" : "#6b87b0", marginTop: 5, fontWeight: 600, lineHeight: 1.3 }}>
+              <div style={{ fontSize: 11, color: active ? "rgba(255,255,255,0.88)" : "#64748b", marginTop: 5, fontWeight: 600, lineHeight: 1.3 }}>
                 {s.label}
                 {clickable && <span style={{ marginLeft: 4, opacity: 0.7 }}>{active ? "✕" : "▼"}</span>}
               </div>
@@ -843,14 +843,14 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
             {agentes.map(a => <option key={a}>{a}</option>)}
           </select>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <label style={{ fontSize: 12, color: "#6b87b0", fontWeight: 600, whiteSpace: "nowrap" }}>Filtro fecha:</label>
+            <label style={{ fontSize: 12, color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>Filtro fecha:</label>
             <input type="date" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)}
               style={{ ...filterSel, width: 150, padding: "7px 10px" }} />
             {filtroFecha && (
               <button onClick={() => setFiltroFecha("")} style={{ ...S.btn("ghost"), padding: "4px 8px", fontSize: 12, color: "#dc2626" }}>✕</button>
             )}
           </div>
-          <span style={{ fontSize: 12, color: "#6b87b0", whiteSpace: "nowrap", fontWeight: 600 }}>{filtrados.length} registros</span>
+          <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap", fontWeight: 600 }}>{filtrados.length} registros</span>
         </div>
       </div>
 
@@ -1009,7 +1009,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       {/* ── Modal detalle ────────────────────────────────────────────────────── */}
       {modal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }} onClick={handleCloseModal}>
-          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 680, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 680, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.2)" }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: "22px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>{modal.nombre || "Cliente"}</div>
@@ -1251,11 +1251,11 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       {/* ── Funnel modal ─────────────────────────────────────────────────────── */}
       {showFunnel && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowFunnel(false)}>
-          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 620, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 620, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Funnel de Ventas</div>
-                <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 3 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>
                   {funnelBases.length === 0 ? "Toda la base" : funnelBases.map(fmtAnioMes).join(", ")} · {funnelClientes.length} clientes
                 </div>
               </div>
@@ -1334,11 +1334,11 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       {/* ── Gestión diaria modal ─────────────────────────────────────────────── */}
       {showGestion && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowGestion(false)}>
-          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 920, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 920, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Gestión</div>
-                <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 3 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>
                   {gestionEntries.length} gestión{gestionEntries.length !== 1 ? "es" : ""} registrada{gestionEntries.length !== 1 ? "s" : ""}
                 </div>
               </div>
@@ -1392,11 +1392,11 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       {/* ── Reporte IA ────────────────────────────────────────────────────────── */}
       {showReporteIA && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowReporteIA(false)}>
-          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 900, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 900, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.25)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 20, color: BLUE.text }}>Reporte IA</div>
-                <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 3 }}>Análisis con IA de las llamadas grabadas en el periodo</div>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>Análisis con IA de las llamadas grabadas en el periodo</div>
               </div>
               <button onClick={() => setShowReporteIA(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#aaa" }}>×</button>
             </div>
@@ -1444,13 +1444,13 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
             )}
 
             {reporteLoading && (
-              <div style={{ textAlign: "center", padding: 40, color: "#6b87b0" }}>Generando reporte — esto puede tardar unos segundos…</div>
+              <div style={{ textAlign: "center", padding: 40, color: "#64748b" }}>Generando reporte — esto puede tardar unos segundos…</div>
             )}
 
             {reporteData && !reporteLoading && (
               <>
                 {reporteData.analisisEnEsteReporte > 0 && (
-                  <div style={{ ...S.alertBox("#1a56db"), marginBottom: 14 }}>
+                  <div style={{ ...S.alertBox("#1e40af"), marginBottom: 14 }}>
                     Se analizaron {reporteData.analisisEnEsteReporte} llamada{reporteData.analisisEnEsteReporte === 1 ? "" : "s"} nueva{reporteData.analisisEnEsteReporte === 1 ? "" : "s"} de este período (antes no se analizaban solas al colgar).
                   </div>
                 )}
@@ -1468,7 +1468,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                   ].map(s => (
                     <div key={s.label} style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 10, padding: "12px 14px" }}>
                       <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: 11, color: "#6b87b0", marginTop: 3, fontWeight: 600 }}>{s.label}</div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 3, fontWeight: 600 }}>{s.label}</div>
                     </div>
                   ))}
                 </div>
@@ -1519,7 +1519,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
                               {l.oportunidades_perdidas.map((o, i) => <div key={i}>⚠ {o}</div>)}
                             </div>
                           )}
-                          {l.observaciones && <div style={{ fontSize: 12, color: "#6b87b0", fontStyle: "italic" }}>{l.observaciones}</div>}
+                          {l.observaciones && <div style={{ fontSize: 12, color: "#64748b", fontStyle: "italic" }}>{l.observaciones}</div>}
                         </div>
                       );
                     })}
@@ -1534,7 +1534,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
       {/* ── Export dialog ────────────────────────────────────────────────────── */}
       {showExportDialog && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 16 }} onClick={() => setShowExportDialog(false)}>
-          <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.2)", padding: "28px 32px" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
               <div style={{ fontWeight: 800, fontSize: 18, color: BLUE.text }}>Exportar a Excel</div>
               <button onClick={() => setShowExportDialog(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#aaa" }}>×</button>
@@ -1555,7 +1555,7 @@ const SoatPage = ({ showConfirm, softphone, comerciales, onAbrirWhatsapp }) => {
               />
             </div>
 
-            <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#6b87b0" }}>
+            <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#64748b" }}>
               Se exportarán <strong style={{ color: BLUE.text }}>
                 {(() => {
                   let lista = clientes;

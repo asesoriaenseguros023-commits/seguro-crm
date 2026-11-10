@@ -400,7 +400,7 @@ const WhatsAppPage = ({ clienteIdInicial, softphone }) => {
           Todavía no se ha enviado ningún WhatsApp. Usa el ícono verde en Seguimiento SOAT para empezar.
         </div>
       ) : (
-        <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 170px)", minHeight: 440, overflow: "hidden", borderRadius: 10 }}>
+        <div style={{ ...S.tableWrap, display: "flex", height: "calc(100vh - 200px)", minHeight: 440, overflow: "hidden", borderRadius: 10 }}>
           {/* ─── Lista de conversaciones ─── */}
           <div style={{ width: 360, flexShrink: 0, borderRight: "1px solid #e9e9e9", overflowY: "auto", background: "#fff" }}>
             <div style={{ padding: "8px 12px", background: "#fff", position: "sticky", top: 0, zIndex: 2 }}>

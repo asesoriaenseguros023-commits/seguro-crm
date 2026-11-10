@@ -36,7 +36,7 @@ const ConfirmDialog = ({ confirmState, onConfirm }) => {
           borderRadius: 14,
           width: "100%",
           maxWidth: 420,
-          boxShadow: "0 20px 60px rgba(26,86,219,0.2)",
+          boxShadow: "0 20px 60px rgba(15,23,42,0.2)",
           overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}

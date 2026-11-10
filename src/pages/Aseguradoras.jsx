@@ -39,7 +39,7 @@ const AseguradorasPage = ({ aseguradoras, onAdd, onEdit, onDelete }) => {
             key={a.id}
             style={{
               background: "#fff", borderRadius: 12, padding: 18,
-              boxShadow: "0 1px 6px rgba(26,86,219,0.08)",
+              boxShadow: "0 1px 6px rgba(15,23,42,0.08)",
               border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}`,
             }}
           >

@@ -15,12 +15,12 @@ const fmtNum = new Intl.NumberFormat("es-CO");
 const COLOR_OK = "#16a34a";
 const COLOR_WARN = "#dc2626";
 const COLOR_AVISO = "#d97706";
-const COLOR_MUTED = "#6b87b0";
+const COLOR_MUTED = "#64748b";
 
 const Tarjeta = ({ titulo, desc, children }) => (
-  <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", marginBottom: 16 }}>
+  <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(15,23,42,0.06)", marginBottom: 16 }}>
     <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: desc ? 4 : 12 }}>{titulo}</div>
-    {desc && <div style={{ fontSize: 12.5, color: "#6b87b0", marginBottom: 12 }}>{desc}</div>}
+    {desc && <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 12 }}>{desc}</div>}
     {children}
   </div>
 );
@@ -60,7 +60,7 @@ export default function CertificadosOperativaPage({ onBack }) {
 
   if (loading) {
     return (
-      <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
+      <div style={{ padding: "72px 24px", textAlign: "center", color: "#64748b" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>🎓</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>Cargando Gestión Operativa…</div>
         <div style={{ fontSize: 13 }}>Consultando los colegios y Seguros 2026 en Google Sheets.</div>
@@ -69,7 +69,7 @@ export default function CertificadosOperativaPage({ onBack }) {
   }
   if (error && !data) {
     return (
-      <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
+      <div style={{ padding: "72px 24px", textAlign: "center", color: "#64748b" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>No se pudo cargar</div>
         <div style={{ fontSize: 13, maxWidth: 420, margin: "0 auto 16px" }}>{error}</div>
@@ -158,7 +158,7 @@ export default function CertificadosOperativaPage({ onBack }) {
                 key: i,
                 cells: [
                   <b>{c.certificado}</b>,
-                  <span style={{ fontSize: 12, color: "#6b87b0" }}>{c.observaciones || "—"}</span>,
+                  <span style={{ fontSize: 12, color: "#64748b" }}>{c.observaciones || "—"}</span>,
                   <span style={S.badge(COLOR_WARN)}>NO</span>,
                 ],
               }))}

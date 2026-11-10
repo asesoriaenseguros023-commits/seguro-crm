@@ -50,7 +50,7 @@ const ComercialPage = ({ comerciales, onAdd, onDelete, showConfirm }) => {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(26,86,219,0.06)" }}>
+      <div style={{ background: "#fff", border: `1px solid ${BLUE.border}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(15,23,42,0.06)" }}>
         <div style={{ ...S.tableHead, display: "grid", gridTemplateColumns: "1fr 180px 100px" }}>
           <span>Nombre</span>
           <span>Fecha de registro</span>

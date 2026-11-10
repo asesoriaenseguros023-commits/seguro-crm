@@ -11,7 +11,7 @@ const UpdateBanner = ({ updateAvailable, reload }) => {
   return (
     <div style={{
       position: "fixed", bottom: 20, left: 20, zIndex: 260,
-      background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(26,86,219,0.25)",
+      background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,0.25)",
       border: `1px solid ${BLUE.border}`, padding: "14px 16px", minWidth: 260, maxWidth: 320,
       display: "flex", alignItems: "flex-start", gap: 10,
     }}>
@@ -24,7 +24,7 @@ const UpdateBanner = ({ updateAvailable, reload }) => {
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: BLUE.text }}>Hay una actualización disponible</div>
-        <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 2, marginBottom: 10 }}>
+        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2, marginBottom: 10 }}>
           Guarda lo que estés editando y actualiza cuando puedas.
         </div>
         <div style={{ display: "flex", gap: 8 }}>

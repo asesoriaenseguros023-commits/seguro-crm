@@ -32,13 +32,13 @@ export default function CertificadosEscolaresPage() {
         {OPCIONES.map((o) => (
           <button key={o.id} onClick={() => setVista(o.id)} style={{
             all: "unset", cursor: "pointer", boxSizing: "border-box", background: "#fff", borderRadius: 14, padding: "26px 26px 24px",
-            border: `1px solid ${BLUE.border}`, borderTop: `4px solid ${o.color}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)",
+            border: `1px solid ${BLUE.border}`, borderTop: `4px solid ${o.color}`, boxShadow: "0 1px 6px rgba(15,23,42,0.06)",
           }}>
             <div style={{ width: 44, height: 44, borderRadius: 10, background: BLUE.light, color: o.color, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
               <Icon name={o.icon} size={22} />
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>{o.titulo}</div>
-            <div style={{ fontSize: 13, color: "#6b87b0", lineHeight: 1.5 }}>{o.texto}</div>
+            <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>{o.texto}</div>
             {!o.disponible && <div style={{ marginTop: 12, fontSize: 11.5, fontWeight: 700, color: "#92400e", background: "#fef3c7", display: "inline-block", padding: "3px 9px", borderRadius: 10 }}>Próximamente</div>}
           </button>
         ))}

@@ -176,10 +176,10 @@ const DeltaTd = ({ curr, prev }) => {
 };
 
 const KpiTile = ({ color, label, value, hint, hintTone, onClick }) => (
-  <div onClick={onClick} title={onClick ? "Ver detalle" : undefined} style={{ background: "#fff", borderRadius: 10, padding: "13px 15px 14px", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${color}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", cursor: onClick ? "pointer" : "default" }}>
+  <div onClick={onClick} title={onClick ? "Ver detalle" : undefined} style={{ background: "#fff", borderRadius: 10, padding: "13px 15px 14px", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${color}`, boxShadow: "0 1px 6px rgba(15,23,42,0.06)", cursor: onClick ? "pointer" : "default" }}>
     <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: 6 }}>{label}</div>
     <div style={{ fontSize: 20, fontWeight: 800, color: BLUE.text, letterSpacing: -0.3 }}>{value}</div>
-    {hint && <div style={{ fontSize: 11.5, marginTop: 4, fontWeight: hintTone ? 700 : 400, color: hintTone === "good" ? COLOR_GOOD : hintTone === "bad" ? COLOR_BAD : "#6b87b0" }}>{hint}</div>}
+    {hint && <div style={{ fontSize: 11.5, marginTop: 4, fontWeight: hintTone ? 700 : 400, color: hintTone === "good" ? COLOR_GOOD : hintTone === "bad" ? COLOR_BAD : "#64748b" }}>{hint}</div>}
     {onClick && <div style={{ fontSize: 11, marginTop: 5, color: BLUE.primary, fontWeight: 600 }}>Ver detalle →</div>}
   </div>
 );
@@ -262,7 +262,7 @@ function DetalleModal({ detalle, canBack, onBack, onClose, onCliente }) {
         <div style={S.modalHeader}>
           <div>
             <div style={S.modalTitle}>{detalle.titulo}</div>
-            {detalle.sub && <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 3 }}>{detalle.sub}</div>}
+            {detalle.sub && <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 3 }}>{detalle.sub}</div>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {canBack && <button style={S.btn("secondary")} onClick={onBack}>← Volver</button>}
@@ -271,7 +271,7 @@ function DetalleModal({ detalle, canBack, onBack, onClose, onCliente }) {
         </div>
         <div style={{ padding: "14px 24px 6px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <input style={{ ...S.input, flex: 1, minWidth: 200 }} placeholder="Buscar por nombre, teléfono o placa…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <span style={{ fontSize: 12.5, color: "#6b87b0" }}>
+          <span style={{ fontSize: 12.5, color: "#64748b" }}>
             <b style={{ color: BLUE.text }}>{fmtInt.format(totalPolizas)}</b> {esVentas ? "pólizas" : "compras"}{!esVentas && <> · <b style={{ color: BLUE.text }}>{fmtInt.format(filas.length)}</b> clientes</>} · <b style={{ color: BLUE.text }}>{fmt(totalValor)}</b>
           </span>
         </div>
@@ -290,7 +290,7 @@ function DetalleModal({ detalle, canBack, onBack, onClose, onCliente }) {
                       <div key={i} style={{ ...S.tableRow, gridTemplateColumns: COLS_VENTAS, padding: "10px 18px", fontSize: 13 }}>
                         <div>{fmtFecha(r.fecha)}</div>
                         <div><button onClick={() => onCliente(r.nombre)} style={{ all: "unset", cursor: "pointer", color: BLUE.primary, fontWeight: 600 }}>{r.nombre}</button></div>
-                        <div style={{ color: "#6b87b0" }}>{r.telefono || "—"}</div>
+                        <div style={{ color: "#64748b" }}>{r.telefono || "—"}</div>
                         <div>{r.tipo}</div>
                         <div style={{ fontFamily: "monospace" }}>{r.placa || "—"}</div>
                         <div style={{ fontSize: 12 }}>{r.medio}</div>
@@ -306,7 +306,7 @@ function DetalleModal({ detalle, canBack, onBack, onClose, onCliente }) {
                     {filas.map((c) => (
                       <div key={c.nombre} onClick={() => onCliente(c.nombre)} style={{ ...S.tableRow, gridTemplateColumns: COLS_CLIENTES, padding: "10px 18px", fontSize: 13, cursor: "pointer" }}>
                         <div style={{ color: BLUE.primary, fontWeight: 600 }}>{c.nombre}</div>
-                        <div style={{ color: "#6b87b0" }}>{c.telefono || "—"}</div>
+                        <div style={{ color: "#64748b" }}>{c.telefono || "—"}</div>
                         <div style={{ textAlign: "right" }}>{fmtInt.format(c.count)}</div>
                         <div style={{ textAlign: "right", fontWeight: 700 }}>{fmt(c.valor)}</div>
                         <div style={{ textAlign: "right" }}>{fmtFecha(c.primera)}</div>
@@ -341,7 +341,7 @@ function AcumuladoChart({ cumA, cumP, dia, tope, labelA, labelP }) {
         <path d={linea(cumA, tope)} fill="none" stroke={COLOR_VENTAS} strokeWidth={2.5} />
         {[1, 5, 10, 15, 20, 25, n].filter((d, i, a) => d <= n && a.indexOf(d) === i).map((d) => <text key={d} x={x(d)} y={height - 6} fontSize={10} fill="#9aa8c7" textAnchor="middle">{d}</text>)}
       </svg>
-      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#6b87b0", justifyContent: "center" }}>
+      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#64748b", justifyContent: "center" }}>
         <span><span style={{ display: "inline-block", width: 12, height: 3, background: COLOR_VENTAS, marginRight: 6, verticalAlign: "middle" }} />{labelA}</span>
         <span><span style={{ display: "inline-block", width: 12, height: 3, background: COLOR_CLIENTES, marginRight: 6, verticalAlign: "middle" }} />{labelP}</span>
       </div>
@@ -350,7 +350,7 @@ function AcumuladoChart({ cumA, cumP, dia, tope, labelA, labelP }) {
 }
 
 const Card = ({ title, desc, children }) => (
-  <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.06)", border: `1px solid ${BLUE.border}`, padding: "18px 20px 16px", marginBottom: 16 }}>
+  <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(15,23,42,0.06)", border: `1px solid ${BLUE.border}`, padding: "18px 20px 16px", marginBottom: 16 }}>
     <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7", marginBottom: desc ? 4 : 12 }}>{title}</div>
     {desc && <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 12 }}>{desc}</div>}
     {children}
@@ -533,7 +533,7 @@ export default function OficinaSoatPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
+      <div style={{ padding: "72px 24px", textAlign: "center", color: "#64748b" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>🚦</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>Cargando Oficina SOAT…</div>
         <div style={{ fontSize: 13 }}>Consultando ventas, gastos y caja en Google Sheets.</div>
@@ -542,7 +542,7 @@ export default function OficinaSoatPage() {
   }
   if (error && !data) {
     return (
-      <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
+      <div style={{ padding: "72px 24px", textAlign: "center", color: "#64748b" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>No se pudo cargar</div>
         <div style={{ fontSize: 13, maxWidth: 420, margin: "0 auto 16px" }}>{error}</div>
@@ -584,7 +584,7 @@ export default function OficinaSoatPage() {
           {[["mes", "Mes"], ["anio", "Año"]].map(([id, label]) => (
             <button key={id} onClick={() => setMode(id)} style={{
               border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-              background: mode === id ? "#fff" : "transparent", color: mode === id ? BLUE.text : "#6b87b0", boxShadow: mode === id ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+              background: mode === id ? "#fff" : "transparent", color: mode === id ? BLUE.text : "#64748b", boxShadow: mode === id ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
             }}>{label}</button>
           ))}
         </div>
@@ -639,7 +639,7 @@ export default function OficinaSoatPage() {
               <input type="date" style={{ ...S.input, width: "auto" }} value={diaActivo} max={ultimaFecha} onChange={(e) => e.target.value && setDiaSel(e.target.value)} />
               <button style={S.btn("secondary")} disabled={diaActivo >= ultimaFecha} onClick={() => { const d = new Date(diaActivo + "T12:00:00"); d.setDate(d.getDate() + 1); setDiaSel(d.toISOString().slice(0, 10)); }}>→</button>
               {diaActivo !== ultimaFecha && <button style={S.btn("secondary")} onClick={() => setDiaSel(null)}>Último día con datos</button>}
-              <span style={{ fontSize: 13, color: "#6b87b0", marginLeft: "auto" }}>
+              <span style={{ fontSize: 13, color: "#64748b", marginLeft: "auto" }}>
                 {diaSemana(diaActivo)} {fmtFecha(diaActivo)} · <b style={{ color: BLUE.text }}>{ventasDia.length}</b> pólizas · <b style={{ color: BLUE.text }}>{fmt(ventasDia.reduce((sum, r) => sum + r.valor, 0))}</b>
               </span>
             </div>
@@ -654,7 +654,7 @@ export default function OficinaSoatPage() {
                   {ventasDia.map((r, i) => (
                     <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "1.8fr 1fr 1.1fr 0.9fr 1fr 0.9fr", padding: "10px 18px" }}>
                       <div><button onClick={() => abrirCliente(r.nombre)} style={{ all: "unset", cursor: "pointer", color: BLUE.primary, fontWeight: 600 }}>{r.nombre}</button></div>
-                      <div style={{ color: "#6b87b0" }}>{r.telefono || "—"}</div>
+                      <div style={{ color: "#64748b" }}>{r.telefono || "—"}</div>
                       <div>{r.tipo}</div>
                       <div style={{ fontFamily: "monospace" }}>{r.placa || "—"}</div>
                       <div style={{ fontSize: 12 }}>{r.medio}</div>
@@ -741,9 +741,9 @@ export default function OficinaSoatPage() {
               return (
                 <div style={{ background: destacada ? BLUE.light : "#fff", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${color}`, borderRadius: 10, padding: "13px 15px 14px" }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#9aa8c7" }}>{titulo}</div>
-                  <div style={{ fontSize: 11.5, color: "#6b87b0", marginBottom: 8 }}>{sub}</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: BLUE.text, letterSpacing: -0.5 }}>{fmtInt.format(d.count)} <span style={{ fontSize: 13, fontWeight: 600, color: "#6b87b0" }}>pólizas</span></div>
-                  <div style={{ fontSize: 13, color: "#6b87b0", marginTop: 2 }}>{fmt(d.valor)}</div>
+                  <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 8 }}>{sub}</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: BLUE.text, letterSpacing: -0.5 }}>{fmtInt.format(d.count)} <span style={{ fontSize: 13, fontWeight: 600, color: "#64748b" }}>pólizas</span></div>
+                  <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>{fmt(d.valor)}</div>
                   {dv && <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, color: dv.up ? COLOR_GOOD : COLOR_BAD }}>{dv.up ? "▲ +" : "▼ "}{dv.pct.toFixed(0)}% vs {mesPas}</div>}
                 </div>
               );
@@ -860,7 +860,7 @@ export default function OficinaSoatPage() {
                       </div>
                       {catsArr.map((c) => (
                         <div key={c} style={{ ...S.tableRow, gridTemplateColumns: `1.6fr repeat(${catCols.length}, 1fr)` }}>
-                          <div style={{ paddingLeft: 20, color: "#6b87b0", fontSize: 12.5 }}>{c}</div>
+                          <div style={{ paddingLeft: 20, color: "#64748b", fontSize: 12.5 }}>{c}</div>
                           {metricsCatCols.map((mm, i2) => <div key={i2} style={{ textAlign: "right", fontSize: 12.5 }}>{fmt((mm.porGrupo[g] && mm.porGrupo[g].categorias[c]) || 0)}</div>)}
                         </div>
                       ))}
@@ -894,7 +894,7 @@ export default function OficinaSoatPage() {
                   <div key={i} style={{ ...S.tableRow, gridTemplateColumns: "0.9fr 1fr 1.4fr 1fr 1fr" }}>
                     <div>{r.fecha}</div>
                     <div>{r.movimiento}</div>
-                    <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{r.detalle}</div>
+                    <div style={{ fontSize: 12.5, color: "#64748b" }}>{r.detalle}</div>
                     <div style={{ textAlign: "right", fontWeight: 700, color: r.monto < 0 ? COLOR_BAD : COLOR_GOOD }}>{fmt(r.monto)}</div>
                     <div style={{ textAlign: "right" }}>{fmt(r.saldo)}</div>
                   </div>

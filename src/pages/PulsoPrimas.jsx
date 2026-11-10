@@ -324,7 +324,7 @@ function uniqueValues(rowsArr, keyFn) {
 
 // ---------- piezas visuales ----------
 const StatCard = ({ label, value, color, sub }) => (
-  <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px", borderTop: `3px solid ${color || BLUE.primary}`, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
+  <div style={{ background: "#fff", borderRadius: 12, padding: "18px 20px", borderTop: `3px solid ${color || BLUE.primary}`, boxShadow: "0 1px 6px rgba(15,23,42,0.08)" }}>
     <div style={S.statNum}>{value}</div>
     <div style={S.statLabel}>{label}</div>
     {sub && <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 5 }}>{sub}</div>}
@@ -332,19 +332,19 @@ const StatCard = ({ label, value, color, sub }) => (
 );
 
 const SectionLabel = ({ children }) => (
-  <div style={{ fontSize: 12, fontWeight: 700, color: "#6b87b0", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>
+  <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>
 );
 
 const Card = ({ title, desc, children }) => (
-  <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", padding: "18px 20px 16px", marginBottom: 16 }}>
+  <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(15,23,42,0.08)", padding: "18px 20px 16px", marginBottom: 16 }}>
     <SectionLabel>{title}</SectionLabel>
-    {desc && <div style={{ fontSize: 12.5, color: "#6b87b0", margin: "-6px 0 14px" }}>{desc}</div>}
+    {desc && <div style={{ fontSize: 12.5, color: "#64748b", margin: "-6px 0 14px" }}>{desc}</div>}
     {children}
   </div>
 );
 
 const Legend = () => (
-  <div style={{ display: "flex", gap: 16, marginBottom: 10, fontSize: 12, color: "#6b87b0" }}>
+  <div style={{ display: "flex", gap: 16, marginBottom: 10, fontSize: 12, color: "#64748b" }}>
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><i style={{ width: 10, height: 10, borderRadius: 3, display: "inline-block", background: COLOR_2026 }} />2026</span>
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><i style={{ width: 10, height: 10, borderRadius: 3, display: "inline-block", background: COLOR_2025 }} />2025</span>
   </div>
@@ -679,7 +679,7 @@ export default function PulsoPrimasPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
+      <div style={{ padding: "72px 24px", textAlign: "center", color: "#64748b" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📈</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>Cargando Pulso de Primas…</div>
         <div style={{ fontSize: 13 }}>Consultando Base 2026 y Base 2025 en Google Sheets.</div>
@@ -689,7 +689,7 @@ export default function PulsoPrimasPage() {
 
   if (error && !data) {
     return (
-      <div style={{ padding: "72px 24px", textAlign: "center", color: "#6b87b0" }}>
+      <div style={{ padding: "72px 24px", textAlign: "center", color: "#64748b" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.text, marginBottom: 6 }}>No se pudo cargar</div>
         <div style={{ fontSize: 13, maxWidth: 420, margin: "0 auto 16px" }}>{error}</div>
@@ -795,7 +795,7 @@ export default function PulsoPrimasPage() {
           color={deltaPct == null ? "#7c3aed" : deltaPct >= 0 ? COLOR_GOOD : COLOR_BAD}
           sub={mismoPeriodo ? "vs. mismo período 2025" : `2026 (${label2026}) vs. 2025 (${label2025})`}
         />
-        <StatCard label="Total año 2025" value={fmt(totalPrima2025FullYear)} color="#6b87b0" sub={`${countPrima2025FullYear} pólizas · año completo`} />
+        <StatCard label="Total año 2025" value={fmt(totalPrima2025FullYear)} color="#64748b" sub={`${countPrima2025FullYear} pólizas · año completo`} />
       </div>
 
       {/* Retención / Vence pronto -- SOLO dentro de una pestaña de ramo (no
@@ -806,11 +806,11 @@ export default function PulsoPrimasPage() {
           <StatCard
             label={`Retención 2025 → 2026 — ${activeTab}`}
             value={pctRenovo == null ? "—" : `${pctRenovo.toFixed(0)}%`}
-            color={pctRenovo == null ? "#6b87b0" : pctRenovo >= 93 ? COLOR_GOOD : pctRenovo >= 88 ? "#f59e0b" : COLOR_BAD}
+            color={pctRenovo == null ? "#64748b" : pctRenovo >= 93 ? COLOR_GOOD : pctRenovo >= 88 ? "#f59e0b" : COLOR_BAD}
             sub={pctRenovo == null ? "Sin base de comparación" : `Meta sana 93%+ · ${renewalCohort2025.length - renewedCount} de ${renewalCohort2025.length} sin renovar`}
           />
           {esEventos ? (
-            <StatCard label="Vence pronto" value="No aplica" color="#6b87b0" sub="Eventos cubre una fecha puntual, no se renueva cada año" />
+            <StatCard label="Vence pronto" value="No aplica" color="#64748b" sub="Eventos cubre una fecha puntual, no se renueva cada año" />
           ) : (
             <StatCard
               label="Vencen en 90 días"
@@ -960,12 +960,12 @@ export default function PulsoPrimasPage() {
           <SectionLabel>En resumen{esGeneral ? "" : ` — ${activeTab}`}</SectionLabel>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {insights.map((ins, i) => (
-              <div key={i} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", borderTop: `3px solid ${ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD}`, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }}>
+              <div key={i} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", borderTop: `3px solid ${ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD}`, boxShadow: "0 1px 6px rgba(15,23,42,0.08)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 700, color: "#9aa8c7", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                   <span style={{ fontSize: 13 }}>{ins.icon}</span>{ins.kicker}
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: ins.tone === "bad" ? COLOR_BAD : COLOR_GOOD, letterSpacing: -0.5 }}>{ins.headline}</div>
-                <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 3 }}>{ins.sub}</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{ins.sub}</div>
               </div>
             ))}
           </div>

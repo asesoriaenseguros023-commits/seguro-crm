@@ -8,7 +8,6 @@ import SoftphoneWidget from "./components/SoftphoneWidget.jsx";
 import { useSoftphone } from "./hooks/useSoftphone.js";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import { useAppVersion } from "./hooks/useAppVersion.js";
-import Icon from "./components/Icon.jsx";
 import LoginPage from "./pages/Login.jsx";
 import SoatPage from "./pages/SOAT.jsx";
 import WhatsAppPage from "./pages/WhatsApp.jsx";
@@ -22,106 +21,63 @@ import ConfiguracionPage from "./pages/Configuracion.jsx";
 import ComercialPage from "./pages/Comerciales.jsx";
 import ArriendosPage from "./pages/Arriendos.jsx";
 
-// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
-const Sidebar = ({ current, onNav, onLogo, onLogout, userName, userRol, isOpen, onClose }) => {
-  const initials = userName
-    ? userName.split(" ").slice(0, 2).map((w) => w[0]).join("")
-    : "U";
-
-  // La barra lateral es un cajón en todos los tamaños: oculta por defecto y se abre
-  // con la hamburguesa o el logo de la barra superior, para usar todo el ancho.
-  const sidebarStyle = { ...S.sidebar, position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 300, width: 240, transform: isOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.25s ease", boxShadow: isOpen ? "4px 0 24px rgba(0,0,0,0.45)" : "none", visibility: isOpen ? "visible" : "hidden" };
-
-  const handleNav = (id) => { onNav(id); onClose(); };
-  const handleLogo = () => { onLogo(); onClose(); };
+// ─── BARRA SUPERIOR (mismo diseño que POS Tocancipá) ─────────────────────────
+const TopNav = ({ current, onNav, onLogo, onLogout, userName, userRol, isMobile, onAbrirWhatsapp, titulo }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
   const visibles = SECCIONES.filter((s) => s.activo !== false && (!s.adminOnly || esAdmin(userRol)));
+  const go = (id) => { onNav(id); setMenuOpen(false); };
+  const ancho = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const mostrarNombre = ancho >= 1024;
 
   return (
-    <>
-      {isOpen && (
-        <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 299 }} />
-      )}
-      <div style={sidebarStyle}>
-        <div style={{ ...S.sbLogo, cursor: "pointer" }} onClick={handleLogo}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover" }} />
-            <div>
-              <div style={S.sbLogoText}>Asesoría en Seguros</div>
-              <div style={S.sbLogoSub}>Tocancipá · NIT 46.662.968</div>
-            </div>
-          </div>
-        </div>
-        <div style={S.sbNav}>
-          <div style={S.sbSection}>Secciones</div>
-          {visibles.map((s) => (
-            <div key={s.id} style={S.sbItem(current === s.id)} onClick={() => handleNav(s.id)}>
-              <Icon name={s.icon} size={16} />{s.label}
-            </div>
-          ))}
-        </div>
-        <div style={S.sbBottom}>
-          <div style={{ padding: "4px 12px 8px" }}>
-            <span style={{ ...S.chip(esAdmin(userRol) ? "#7c3aed" : BLUE.primary), fontSize: 11 }}>
-              {userRol || "Agente"}
-            </span>
-          </div>
-          <div style={S.sbUser}>
-            <div style={S.sbAvatar}>{initials}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: "#e5e7eb", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {userName || "Usuario"}
+    <nav style={S.nav}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: isMobile ? "0 12px" : "0 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", height: 56, gap: 12 }}>
+          <button onClick={() => { onLogo(); setMenuOpen(false); }} style={S.navLogoBtn}>
+            <img src="/logo.png" alt="Logo" style={S.navLogoImg} />
+            {mostrarNombre && (
+              <div style={{ textAlign: "left" }}>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 14, lineHeight: 1.2, maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Asesoría en Seguros</div>
+                <div style={{ color: "#93c5fd", fontSize: 12 }}>{esAdmin(userRol) ? "Admin" : userName || "Usuario"}</div>
               </div>
-            </div>
-          </div>
-          <div style={{ ...S.sbItem(false), marginTop: 4 }} onClick={onLogout}>
-            <Icon name="logout" size={16} />Salir
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
+            )}
+          </button>
 
-// ─── TOPBAR ───────────────────────────────────────────────────────────────────
-const Topbar = ({ title, userRol, isMobile, onToggleSidebar, onAbrirWhatsapp }) => {
-  const [ahora, setAhora] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setAhora(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  const fmtFechaCorta = (d) =>
-    d.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-  const fmtHora = (d) =>
-    d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  return (
-    <div style={{ ...S.topbar, padding: isMobile ? "0 14px" : "0 28px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button onClick={onToggleSidebar} title="Menú"
-          style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: 6, display: "flex", alignItems: "center", color: BLUE.primary }}>
-          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="3" y1="6" x2="19" y2="6" /><line x1="3" y1="12" x2="19" y2="12" /><line x1="3" y1="18" x2="19" y2="18" />
-          </svg>
-        </button>
-        <img src="/logo.png" alt="Menú" onClick={onToggleSidebar} style={{ width: 30, height: 30, borderRadius: 7, objectFit: "cover", cursor: "pointer" }} />
-        <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: BLUE.text }}>{title}</div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, fontSize: 12, color: "#6b87b0" }}>
-        <AvisoWhatsapp onAbrir={onAbrirWhatsapp} compacto={isMobile} />
-        {!isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, borderRight: `1px solid ${BLUE.border}`, paddingRight: 20 }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: BLUE.primary, fontVariantNumeric: "tabular-nums" }}>{fmtHora(ahora)}</div>
-              <div style={{ fontSize: 11, color: "#6b87b0", textTransform: "capitalize" }}>{fmtFechaCorta(ahora)}</div>
+          {!isMobile && <div style={{ width: 1, height: 24, background: "#2563eb", flexShrink: 0 }} />}
+
+          {!isMobile && (
+            <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, overflowX: "auto", scrollbarWidth: "none" }}>
+              {visibles.map((s) => (
+                <button key={s.id} onClick={() => go(s.id)} style={S.navTab(current === s.id)}
+                  onMouseEnter={(e) => { if (current !== s.id) { e.currentTarget.style.background = "#1d4ed8"; e.currentTarget.style.color = "#fff"; } }}
+                  onMouseLeave={(e) => { if (current !== s.id) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#bfdbfe"; } }}>{s.label}</button>
+              ))}
+            </div>
+          )}
+
+          {isMobile && <div style={{ flex: 1, minWidth: 0, textAlign: "right", color: "#dbeafe", fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{current === "inicio" ? "" : titulo}</div>}
+
+          <AvisoWhatsapp onAbrir={onAbrirWhatsapp} compacto={isMobile} />
+
+          {!isMobile && <button onClick={onLogout} style={S.navSalir}>Salir</button>}
+
+          {isMobile && (
+            <button onClick={() => setMenuOpen((o) => !o)} style={S.navHamburger}>{menuOpen ? "✕" : "☰"}</button>
+          )}
+        </div>
+
+        {isMobile && menuOpen && (
+          <div style={{ paddingBottom: 12, paddingTop: 4 }}>
+            {visibles.map((s) => (
+              <button key={s.id} onClick={() => go(s.id)} style={S.navMobileItem(current === s.id)}>{s.label}</button>
+            ))}
+            <div style={{ borderTop: "1px solid #1d4ed8", marginTop: 4, paddingTop: 4 }}>
+              <button onClick={onLogout} style={{ ...S.navMobileItem(false), color: "#93c5fd", fontSize: 14 }}>Cerrar sesión</button>
             </div>
           </div>
         )}
-        <span style={S.chip(esAdmin(userRol) ? "#7c3aed" : BLUE.primary)}>{userRol}</span>
-        {!isMobile && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a" }} />
-          Sistema en línea
-        </div>}
       </div>
-    </div>
+    </nav>
   );
 };
 
@@ -138,7 +94,6 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState("");
   const [userRol, setUserRol] = useState(ROL_AGENTE);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const softphone = useSoftphone();
   const appVersion = useAppVersion();
@@ -360,19 +315,21 @@ export default function App() {
     if (seccion === "inicio") {
       const visibles = SECCIONES.filter((s) => s.activo !== false && (!s.adminOnly || esAdmin(userRol)));
       return (
-        <div style={S.homeWrap}>
-          <div style={S.homeTitle}>Hola, {userName || "Usuario"}</div>
-          <div style={S.homeSub}>Elige un módulo</div>
+        <div>
+          <div style={{ textAlign: "center", marginBottom: 32, paddingTop: 16 }}>
+            <img src="/logo.png" alt="Logo" style={S.homeLogo} />
+            <h1 style={S.homeTitle}>Asesoría en Seguros Tocancipá</h1>
+            <p style={S.homeSub}>Hola, {userName || "Usuario"} — elige un módulo</p>
+          </div>
           <div style={S.homeGrid}>
             {visibles.map((s) => (
-              <div
+              <button
                 key={s.id} style={S.homeCard} onClick={() => setSeccion(s.id)}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = BLUE.primary; e.currentTarget.style.background = BLUE.light; }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2563eb"; e.currentTarget.style.background = "#eff6ff"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = BLUE.border; e.currentTarget.style.background = "#fff"; }}
               >
-                <div style={S.homeCardIcon}><Icon name={s.icon} size={22} /></div>
-                <div style={S.homeCardLabel}>{s.label}</div>
-              </div>
+                <span style={S.homeCardLabel}>{s.label}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -419,16 +376,14 @@ export default function App() {
       <SoftphoneWidget {...softphone} />
       <UpdateBanner {...appVersion} />
       <div style={S.app}>
-        <Sidebar
+        <TopNav
           current={seccion} onNav={handleNav} onLogo={() => setSeccion("inicio")} onLogout={handleLogout}
-          userName={userName} userRol={userRol}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          userName={userName} userRol={userRol} isMobile={isMobile}
+          onAbrirWhatsapp={abrirWhatsapp} titulo={topbarTitle}
         />
-        <div style={{ ...S.main, marginLeft: isMobile ? 0 : undefined }}>
-          <Topbar title={topbarTitle} userRol={userRol} isMobile={isMobile} onToggleSidebar={() => setSidebarOpen(o => !o)} onAbrirWhatsapp={abrirWhatsapp} />
-          <div style={{ ...S.content, padding: isMobile ? "14px 12px" : "20px 16px" }}>{renderContent()}</div>
-        </div>
+        <main style={{ ...S.main, padding: isMobile ? "12px 8px" : "24px 16px" }}>
+          <div style={{ ...S.content, padding: isMobile ? 12 : 24 }}>{renderContent()}</div>
+        </main>
       </div>
     </>
   );

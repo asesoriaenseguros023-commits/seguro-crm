@@ -34,7 +34,7 @@ function useIsMobile() {
   return isMobile;
 }
 
-const cardS = { background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)" };
+const cardS = { background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(15,23,42,0.06)" };
 const cardRowS = { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 };
 const cardLabelS = { fontSize: 11, color: "#9aa8c7" };
 
@@ -132,11 +132,11 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
         {inmuebles.map((i, idx) => (
-          <div key={i.id} style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}` }}>
+          <div key={i.id} style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 6px rgba(15,23,42,0.08)", border: `1px solid ${BLUE.border}`, borderTop: `3px solid ${BLUE.primary}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{i.nombre}</div>
-                {i.direccion && <div style={{ fontSize: 12, color: "#6b87b0", marginTop: 2 }}>{i.direccion}</div>}
+                {i.direccion && <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{i.direccion}</div>}
               </div>
               <div style={{ display: "flex", gap: 4 }}>
                 <button style={S.btn("ghost")} onClick={() => abrirEditar(i)}><Icon name="edit" size={14} /></button>
@@ -146,7 +146,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
             <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: BLUE.primary }}>{fmt(i.valorCanonBase)}</div>
-                <div style={{ fontSize: 11, color: "#6b87b0" }}>Paga el día {i.diaVencimientoPago}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>Paga el día {i.diaVencimientoPago}</div>
                 {i.tieneAdministracion && <div style={{ fontSize: 11, color: "#7c3aed" }}>+ administración {fmt(i.valorAdministracion)}</div>}
               </div>
               <span style={S.chip(i.activo ? "#16a34a" : "#6b7280")}>{i.activo ? "Activo" : "Inactivo"}</span>
@@ -400,7 +400,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
                 </button>
               </div>
               {(a.telefono || a.documento) && (
-                <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 4 }}>
+                <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 4 }}>
                   {[a.telefono, a.documento].filter(Boolean).join(" · ")}
                 </div>
               )}
@@ -542,7 +542,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
             <label style={S.label}>Fecha de finalización *</label>
             <input style={S.input} type="date" value={fechaFinalizar} onChange={(e) => setFechaFinalizar(e.target.value)} autoFocus />
           </div>
-          <p style={{ fontSize: 12.5, color: "#6b87b0", lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.5 }}>
             Se calculará el saldo pendiente hasta esta fecha y se generará el documento de cierre: <strong>Paz y Salvo</strong> si no debe nada, o <strong>Cuenta de cobro final</strong> si todavía debe algo.
             El inmueble <strong>{inmuebleDe(finalizarItem.id)?.nombre}</strong> quedará vacante y este arrendatario pasará a <strong>Inactivo</strong>. Este período quedará guardado en Histórico.
           </p>
@@ -698,7 +698,7 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#6b87b0" }}>Arrendatario:</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#64748b" }}>Arrendatario:</span>
         <select style={{ ...S.select, width: 220 }} value={filtroArrendatario} onChange={(e) => setFiltroArrendatario(e.target.value)}>
           <option value="">Todos</option>
           {arrendatariosOrdenados.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
@@ -715,7 +715,7 @@ const PagosTab = ({ pagos, inmuebles, arrendatarios, arrendadores, onAdd, onEdit
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{nombreInmueble(p.inmuebleId)}</div>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(p.arrendatarioId)}</div>
+                  <div style={{ fontSize: 12.5, color: "#64748b" }}>{nombreArr(p.arrendatarioId)}</div>
                 </div>
                 <div style={{ fontWeight: 700, color: BLUE.primary, fontSize: 15 }}>{fmt(p.valor)}</div>
               </div>
@@ -922,7 +922,7 @@ const ArrendadoresTab = ({ arrendadores, inmuebles, onAdd, onEdit, onDelete }) =
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{a.nombre}</div>
-                  {(a.telefono || a.documento) && <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{[a.telefono, a.documento].filter(Boolean).join(" · ")}</div>}
+                  {(a.telefono || a.documento) && <div style={{ fontSize: 12.5, color: "#64748b" }}>{[a.telefono, a.documento].filter(Boolean).join(" · ")}</div>}
                 </div>
                 <span style={S.chip(BLUE.primary)}>{cantidadInmuebles(a.id)} inmueble{cantidadInmuebles(a.id) === 1 ? "" : "s"}</span>
               </div>
@@ -1047,7 +1047,7 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{inmueble.nombre}</div>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
+                  <div style={{ fontSize: 12.5, color: "#64748b" }}>{nombreArr(inmueble.arrendatarioId)}</div>
                 </div>
                 <span style={S.chip("#dc2626")}>{estado.dias} día{estado.dias === 1 ? "" : "s"}</span>
               </div>
@@ -1105,7 +1105,7 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}><span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{inmueble.nombre}</div>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
+                  <div style={{ fontSize: 12.5, color: "#64748b" }}>{nombreArr(inmueble.arrendatarioId)}</div>
                 </div>
                 <span style={S.chip("#f59e0b")}>{estado.dias === 0 ? "Hoy" : `${estado.dias} día${estado.dias === 1 ? "" : "s"}`}</span>
               </div>
@@ -1152,7 +1152,7 @@ const AlertasTab = ({ inmuebles, arrendatarios, pagos }) => {
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
 const StatCard = ({ label, value, color, sub }) => (
-  <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(26,86,219,0.06)" }}>
+  <div style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: `1px solid ${BLUE.border}`, boxShadow: "0 1px 6px rgba(15,23,42,0.06)" }}>
     <div style={{ fontSize: 11, color: "#9aa8c7", marginBottom: 4 }}>{label}</div>
     <div style={{ fontSize: 18, fontWeight: 700, color: color || BLUE.text }}>{value}</div>
     {sub && <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 3 }}>{sub}</div>}
@@ -1289,7 +1289,7 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>{inmueble.nombre}</div>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{nombreArr(inmueble.arrendatarioId)}</div>
+                  <div style={{ fontSize: 12.5, color: "#64748b" }}>{nombreArr(inmueble.arrendatarioId)}</div>
                 </div>
                 <span style={S.chip(ESTADO_CICLO_INFO[estado.tipo].color)}>{ESTADO_CICLO_INFO[estado.tipo].label(estado)}</span>
               </div>
@@ -1343,7 +1343,7 @@ const DashboardTab = ({ inmuebles, arrendatarios, pagos }) => {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 15 }}>{inmuebleDelArrendatario.nombre}</div>
-                  {inmuebleDelArrendatario.direccion && <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{inmuebleDelArrendatario.direccion}</div>}
+                  {inmuebleDelArrendatario.direccion && <div style={{ fontSize: 12.5, color: "#64748b" }}>{inmuebleDelArrendatario.direccion}</div>}
                 </div>
                 <span style={S.chip(estadoFiltroCiclo ? ESTADO_CICLO_INFO[estadoFiltroCiclo.tipo].color : "#16a34a")}>
                   {estadoFiltroCiclo ? ESTADO_CICLO_INFO[estadoFiltroCiclo.tipo].label(estadoFiltroCiclo) : "Al día"}
@@ -1421,7 +1421,7 @@ const HistoricoTab = ({ historial, pagos }) => {
                   <div style={{ fontWeight: 700, color: BLUE.text, fontSize: 14 }}>
                     <span style={{ color: "#aaa", fontWeight: 400 }}>{idx + 1}. </span>{h.arrendatarioNombre}
                   </div>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0" }}>{h.inmuebleNombre}</div>
+                  <div style={{ fontSize: 12.5, color: "#64748b" }}>{h.inmuebleNombre}</div>
                 </div>
                 <span style={S.chip(h.saldoFinal > 0 ? "#dc2626" : "#16a34a")}>{h.saldoFinal > 0 ? "Con saldo" : "Paz y salvo"}</span>
               </div>
@@ -1674,7 +1674,7 @@ const ArriendosPage = () => {
     setArrendatarios((p) => p.map((x) => x.id === datos.arrendatarioId ? { ...x, activo: false } : x));
   };
 
-  if (loading) return <div style={{ padding: 40, color: "#6b87b0", fontSize: 13 }}>Cargando…</div>;
+  if (loading) return <div style={{ padding: 40, color: "#64748b", fontSize: 13 }}>Cargando…</div>;
 
   return (
     <div>
@@ -1689,7 +1689,7 @@ const ArriendosPage = () => {
               padding: "9px 18px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: t.proximamente ? "default" : "pointer",
               background: tab === t.id ? BLUE.primary : t.proximamente ? "transparent" : "#fff",
               color: tab === t.id ? "#fff" : t.proximamente ? "#bbb" : "#555",
-              boxShadow: t.proximamente ? "none" : "0 1px 4px rgba(26,86,219,0.08)",
+              boxShadow: t.proximamente ? "none" : "0 1px 4px rgba(15,23,42,0.08)",
             }}
           >
             {t.label}

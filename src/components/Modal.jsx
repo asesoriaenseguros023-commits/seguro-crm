@@ -4,11 +4,6 @@ import Icon from "./Icon.jsx";
 
 export const FontLoader = () => {
   useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap";
-    document.head.appendChild(link);
     document.body.style.margin = "0";
     document.body.style.padding = "0";
     document.documentElement.style.margin = "0";
@@ -25,17 +20,17 @@ export const LoadingScreen = () => (
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#f0f4ff",
-      fontFamily: "'DM Sans', sans-serif",
+      background: "#f1f5f9",
+      fontFamily: "ui-sans-serif, system-ui, sans-serif",
     }}
   >
     <div style={{ textAlign: "center" }}>
       <div
-        style={{ fontSize: 26, fontWeight: 700, color: "#1e3a5f", marginBottom: 8 }}
+        style={{ fontSize: 26, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}
       >
         Asesoría en Seguros
       </div>
-      <div style={{ fontSize: 13, color: "#6b87b0" }}>Cargando datos…</div>
+      <div style={{ fontSize: 13, color: "#64748b" }}>Cargando datos…</div>
     </div>
   </div>
 );

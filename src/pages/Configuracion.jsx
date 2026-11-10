@@ -40,7 +40,7 @@ const ConfiguracionPage = ({ agentes, onAdd, onEdit, onDelete }) => {
           return (
             <div
               key={a.id}
-              style={{ background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", border: `1px solid ${BLUE.border}` }}
+              style={{ background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 6px rgba(15,23,42,0.08)", border: `1px solid ${BLUE.border}` }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
                 <div style={{ width: 46, height: 46, borderRadius: "50%", background: `linear-gradient(135deg,${rolColor},${rolColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 16 }}>

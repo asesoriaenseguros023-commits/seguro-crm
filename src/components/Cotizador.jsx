@@ -38,11 +38,11 @@ export default function Cotizador({ onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.2)" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: BLUE.text }}>Cotizar SOAT</div>
-            <div style={{ fontSize: 12.5, color: "#6b87b0", marginTop: 2 }}>Tarifas 2026 + costo del servicio · llena los datos del vehículo</div>
+            <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 2 }}>Tarifas 2026 + costo del servicio · llena los datos del vehículo</div>
           </div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: 22, color: "#9aa8c7", cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
@@ -85,7 +85,7 @@ export default function Cotizador({ onClose }) {
                 <div style={{ fontSize: 13, color: "#9aa8c7" }}>{r.error}</div>
               ) : (
                 <>
-                  <div style={{ fontSize: 12.5, color: "#6b87b0", marginBottom: 4 }}>Tarifa {r.tarifa.codigo} · {r.descripcion}</div>
+                  <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 4 }}>Tarifa {r.tarifa.codigo} · {r.descripcion}</div>
                   {r.antiguedad !== null && <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 8 }}>Antigüedad: {r.antiguedad} {r.antiguedad === 1 ? "año" : "años"} ({r.antiguedad >= 10 ? "10 años o más" : "0 a 9 años"})</div>}
                   <div style={{ fontSize: 34, fontWeight: 700, color: BLUE.primary, letterSpacing: -0.5 }}>{fmt(r.totalCliente)}</div>
                   <div style={{ fontSize: 12, color: "#9aa8c7", marginBottom: 12 }}>Total a pagar (SOAT + servicio)</div>

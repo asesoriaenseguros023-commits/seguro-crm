@@ -4,23 +4,25 @@ export const ROL_ADMIN = "Admin";
 export const ROL_AGENTE = "Agente";
 
 export const BLUE = {
-  primary: "#1a56db",
-  primaryDark: "#1044b8",
-  sidebar: "#0d2d6b",
-  sidebarDark: "#071d47",
-  accent: "#3b82f6",
-  light: "#eff6ff",
-  border: "#bfdbfe",
-  text: "#1e3a5f",
+  primary: "#1e40af",     // blue-800 (barra y botones de POS Tocancipá)
+  primaryDark: "#1e3a8a", // blue-900
+  sidebar: "#1e40af",
+  sidebarDark: "#1e3a8a",
+  accent: "#2563eb",      // blue-600
+  light: "#eff6ff",       // blue-50
+  border: "#e2e8f0",      // slate-200
+  text: "#1e293b",        // slate-800
 };
+
+const FUENTE = 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"';
 
 // ─── ESTILOS ─────────────────────────────────────────────────────────────────
 export const S = {
-  app: { display: "flex", minHeight: "100vh", background: `linear-gradient(135deg, ${BLUE.sidebarDark} 0%, #0a2255 100%)`, fontFamily: "'DM Sans', sans-serif", color: "#1a1a1a" },
+  app: { minHeight: "100vh", background: "#f1f5f9", fontFamily: FUENTE, color: "#1e293b" },
   sidebar: { width: 210, background: `linear-gradient(180deg, ${BLUE.sidebarDark} 0%, ${BLUE.sidebar} 100%)`, display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" },
-  main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
+  main: { maxWidth: 1280, width: "100%", margin: "0 auto", boxSizing: "border-box", flex: 1 },
   topbar: { background: "#fff", borderBottom: `1px solid ${BLUE.border}`, padding: "0 28px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 },
-  content: { flex: 1, padding: "20px 16px", overflowY: "auto", background: "#f0f4ff" },
+  content: { background: "#fff", borderRadius: 16, boxShadow: "0 1px 2px rgba(15,23,42,0.06)", border: "1px solid #f1f5f9", minHeight: "80vh", boxSizing: "border-box" },
   sbLogo: { padding: "20px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.1)" },
   sbLogoText: { fontSize: 18, color: "#fff", fontWeight: 700, letterSpacing: -0.5 },
   sbLogoSub: { fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 3 },
@@ -32,14 +34,14 @@ export const S = {
   sbAvatar: { width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#60a5fa,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700, flexShrink: 0 },
   pageHeader: { marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 },
   pageTitle: { fontSize: 26, fontWeight: 700, letterSpacing: -0.5, color: BLUE.text },
-  pageSub: { fontSize: 13, color: "#6b87b0", marginTop: 3 },
+  pageSub: { fontSize: 13, color: "#64748b", marginTop: 3 },
   statGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 14, marginBottom: 24 },
-  statCard: (accent) => ({ background: "#fff", borderRadius: 12, padding: "18px 20px", borderTop: `3px solid ${accent}`, boxShadow: "0 1px 6px rgba(26,86,219,0.08)" }),
+  statCard: (accent) => ({ background: "#fff", borderRadius: 12, padding: "18px 20px", borderTop: `3px solid ${accent}`, boxShadow: "0 1px 6px rgba(15,23,42,0.08)" }),
   statNum: { fontSize: 28, fontWeight: 700, color: BLUE.text, letterSpacing: -1 },
-  statLabel: { fontSize: 11.5, color: "#6b87b0", fontWeight: 600, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.5 },
-  tableWrap: { background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(26,86,219,0.08)", overflow: "hidden" },
+  statLabel: { fontSize: 11.5, color: "#64748b", fontWeight: 600, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.5 },
+  tableWrap: { background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(15,23,42,0.08)", overflow: "hidden" },
   tableHead: { display: "grid", background: BLUE.light, borderBottom: `1px solid ${BLUE.border}`, padding: "10px 18px", fontSize: 11, fontWeight: 700, color: BLUE.primary, letterSpacing: 0.8, textTransform: "uppercase" },
-  tableRow: { display: "grid", padding: "13px 18px", borderBottom: "1px solid #e8f0fe", alignItems: "center", fontSize: 13.5, transition: "background 0.12s" },
+  tableRow: { display: "grid", padding: "13px 18px", borderBottom: "1px solid #f1f5f9", alignItems: "center", fontSize: 13.5, transition: "background 0.12s" },
   badge: (color) => ({ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, background: color + "18", color }),
   btn: (variant = "primary") => ({
     display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer", border: "none", transition: "all 0.15s",
@@ -54,7 +56,7 @@ export const S = {
   formGroup: { marginBottom: 16 },
   select: { width: "100%", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "9px 12px", fontSize: 13.5, color: "#1a1a1a", background: "#fff", outline: "none", fontFamily: "inherit" },
   overlay: { position: "fixed", inset: 0, background: "rgba(7,29,71,0.55)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
-  modal: { background: "#fff", borderRadius: 14, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(26,86,219,0.2)" },
+  modal: { background: "#fff", borderRadius: 14, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(15,23,42,0.2)" },
   modalHeader: { padding: "20px 24px 16px", borderBottom: `1px solid ${BLUE.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: BLUE.light },
   modalTitle: { fontSize: 18, fontWeight: 700, color: BLUE.text },
   modalBody: { padding: "20px 24px" },
@@ -70,19 +72,25 @@ export const S = {
     border: `1px solid ${done ? "#bbf7d0" : active ? BLUE.primary : BLUE.border}`,
   }),
   // ─── Inicio (tarjetas de sección) ───────────────────────────────────────────
-  homeWrap: { maxWidth: 760, margin: "48px auto 0", textAlign: "center" },
-  homeTitle: { fontSize: 22, fontWeight: 700, color: BLUE.text },
-  homeSub: { fontSize: 13.5, color: "#6b87b0", marginTop: 6, marginBottom: 32 },
-  homeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px,1fr))", gap: 16 },
-  homeCard: { background: "#fff", borderRadius: 14, padding: "30px 18px", border: `2px solid ${BLUE.border}`, cursor: "pointer", transition: "border-color 0.15s, background 0.15s", textAlign: "center" },
-  homeCardIcon: { width: 46, height: 46, borderRadius: 12, background: BLUE.light, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", color: BLUE.primary },
-  homeCardLabel: { fontSize: 14.5, fontWeight: 700, color: BLUE.text },
+  nav: { background: "#1e40af", boxShadow: "0 10px 15px -3px rgba(15,23,42,0.15), 0 4px 6px -4px rgba(15,23,42,0.15)", position: "sticky", top: 0, zIndex: 40 },
+  navLogoBtn: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0, background: "transparent", border: "none", borderRadius: 8, padding: 4, margin: -4, cursor: "pointer", fontFamily: "inherit" },
+  navLogoImg: { width: 32, height: 32, objectFit: "contain", borderRadius: 8, background: "#fff", padding: 2, boxSizing: "border-box" },
+  navTab: (active) => ({ flexShrink: 0, padding: "6px 12px", borderRadius: 6, fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", border: "none", cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s", background: active ? "#fff" : "transparent", color: active ? "#1e40af" : "#bfdbfe", boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none" }),
+  navSalir: { flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#bfdbfe", background: "rgba(30,58,138,0.6)", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" },
+  navHamburger: { color: "#fff", width: 44, height: 44, flexShrink: 0, borderRadius: 8, background: "transparent", border: "none", fontSize: 20, lineHeight: 1, cursor: "pointer" },
+  navMobileItem: (active) => ({ display: "flex", alignItems: "center", width: "100%", padding: "12px 16px", borderRadius: 8, fontSize: 16, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", background: active ? "#fff" : "transparent", color: active ? "#1e40af" : "#dbeafe" }),
+  homeLogo: { width: 64, height: 64, objectFit: "contain", borderRadius: 12, background: "#fff", boxShadow: "0 1px 2px rgba(15,23,42,0.06)", border: "1px solid #f1f5f9", padding: 4, boxSizing: "border-box", display: "block", margin: "0 auto 12px" },
+  homeTitle: { fontSize: 20, fontWeight: 700, color: "#1e293b", margin: 0, letterSpacing: "normal", lineHeight: 1.4 },
+  homeSub: { fontSize: 14, color: "#64748b", marginTop: 4, marginBottom: 0 },
+  homeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px,1fr))", gap: 12, maxWidth: 768, margin: "0 auto" },
+  homeCard: { background: "#fff", borderRadius: 12, padding: 20, border: "2px solid #e2e8f0", cursor: "pointer", transition: "all 0.15s", textAlign: "center", fontFamily: "inherit" },
+  homeCardLabel: { fontSize: 14, fontWeight: 600, color: "#1e293b" },
   // ─── Sub-pestañas dentro de una sección (CRM Seguros / Configuraciones) ─────
   subTabBar: { display: "flex", gap: 2, marginBottom: 20, borderBottom: `1px solid ${BLUE.border}`, flexWrap: "wrap" },
   subTabBtn: (active) => ({
     padding: "9px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", background: "transparent",
     border: "none", borderBottom: active ? `2px solid ${BLUE.primary}` : "2px solid transparent",
-    color: active ? BLUE.primary : "#6b87b0", marginBottom: -1, fontFamily: "inherit",
+    color: active ? BLUE.primary : "#64748b", marginBottom: -1, fontFamily: "inherit",
   }),
 };
 
