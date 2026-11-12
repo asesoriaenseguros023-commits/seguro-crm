@@ -262,27 +262,38 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
   const [finalizarItem, setFinalizarItem] = useState(null);
   const [fechaFinalizar, setFechaFinalizar] = useState("");
   const [finalizando, setFinalizando] = useState(false);
-  // Reactivar un arrendatario inactivo: se vuelve a asignar un inmueble
-  // vacante con su fecha de inicio y, antes de confirmar, se recalcula en
-  // vivo lo que adeuda (mismo cálculo de las cuentas de cobro: desde el
-  // último pago cubierto, o desde la fecha de inicio si nunca ha pagado).
+  // Reactivar un arrendatario inactivo NO crea un contrato nuevo: abre su
+  // cierre para corregir la fecha de terminación (y la de inicio / el
+  // inmueble si hace falta) y recalcula en vivo el saldo hasta esa fecha,
+  // con el mismo cálculo de las cuentas de cobro y de "Finalizar".
   const [reactivarItem, setReactivarItem] = useState(null);
   const [reactInmueble, setReactInmueble] = useState("");
-  const [reactFecha, setReactFecha] = useState("");
+  const [reactInicio, setReactInicio] = useState("");
+  const [reactFin, setReactFin] = useState("");
   const [reactivando, setReactivando] = useState(false);
-  const inmueblesLibres = (a) => inmuebles.filter((i) => i.activo && (!i.arrendatarioId || i.arrendatarioId === a.id));
   const abrirReactivar = (a) => {
     const h = historialDe(a.id);
-    const libres = inmueblesLibres(a);
-    const previo = libres.find((i) => i.id === h?.inmuebleId);
+    const actual = inmuebleDe(a.id);
     setReactivarItem(a);
-    setReactInmueble(previo?.id || libres[0]?.id || "");
-    setReactFecha(h?.fechaInicio || previo?.fechaInicioArriendo || "");
+    setReactInmueble(h?.inmuebleId || actual?.id || "");
+    setReactInicio(h?.fechaInicio || actual?.fechaInicioArriendo || "");
+    setReactFin(h?.fechaFin || today());
   };
   const confirmarReactivar = async () => {
-    if (!reactInmueble || !reactFecha) return;
+    const inm = inmuebles.find((i) => i.id === reactInmueble);
+    if (!inm || !reactInicio || !reactFin) return;
     setReactivando(true);
-    await onReactivar(reactivarItem.id, reactInmueble, reactFecha);
+    const { periodosAdeudados } = calcularEstadoCuentaCobro({ ...inm, fechaInicioArriendo: reactInicio }, reactivarItem.id, pagos, new Date(reactFin + "T00:00:00"));
+    const totalPagado = pagos.filter((p) => p.arrendatarioId === reactivarItem.id).reduce((x, p) => x + (p.valor || 0), 0);
+    await onReactivar({
+      historialId: historialDe(reactivarItem.id)?.id || null,
+      datos: {
+        arrendatarioId: reactivarItem.id, arrendatarioNombre: reactivarItem.nombre,
+        inmuebleId: inm.id, inmuebleNombre: inm.nombre,
+        fechaInicio: reactInicio, fechaFin: reactFin, totalPagado,
+        saldoFinal: periodosAdeudados.reduce((x, p) => x + p.valor, 0), detalleAdeudado: periodosAdeudados,
+      },
+    });
     setReactivando(false);
     setReactivarItem(null);
   };
@@ -553,9 +564,9 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
       )}
 
       {reactivarItem && (() => {
-        const libres = inmueblesLibres(reactivarItem);
-        const inm = libres.find((i) => i.id === reactInmueble);
-        const calculo = inm && reactFecha ? calcularEstadoCuentaCobro({ ...inm, fechaInicioArriendo: reactFecha }, reactivarItem.id, pagos) : null;
+        const inm = inmuebles.find((i) => i.id === reactInmueble);
+        const valido = inm && reactInicio && reactFin && reactFin >= reactInicio;
+        const calculo = valido ? calcularEstadoCuentaCobro({ ...inm, fechaInicioArriendo: reactInicio }, reactivarItem.id, pagos, new Date(reactFin + "T00:00:00")) : null;
         const adeudados = calculo?.periodosAdeudados || [];
         const totalDeuda = adeudados.reduce((x, p) => x + p.valor, 0);
         const totalPagado = pagos.filter((p) => p.arrendatarioId === reactivarItem.id).reduce((x, p) => x + (p.valor || 0), 0);
@@ -566,39 +577,47 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
             footer={
               <>
                 <button style={S.btn("secondary")} onClick={() => setReactivarItem(null)}>Cancelar</button>
-                <button style={{ ...S.btn("primary"), opacity: reactivando || !inm || !reactFecha ? 0.6 : 1 }} onClick={confirmarReactivar} disabled={reactivando || !inm || !reactFecha}>
-                  {reactivando ? "Reactivando…" : "Reactivar"}
+                <button style={{ ...S.btn("primary"), opacity: reactivando || !valido ? 0.6 : 1 }} onClick={confirmarReactivar} disabled={reactivando || !valido}>
+                  {reactivando ? "Guardando…" : "Guardar y recalcular"}
                 </button>
               </>
             }
           >
+            <div style={{ fontSize: 12.5, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+              No es un contrato nuevo: corrige la fecha de terminación de su arriendo y recalcula lo que debe hasta esa fecha.
+            </div>
             <div style={S.formGroup}>
-              <label style={S.label}>Inmueble</label>
+              <label style={S.label}>Inmueble que arrendaba</label>
               <select style={S.select} value={reactInmueble} onChange={(e) => setReactInmueble(e.target.value)}>
-                {libres.length === 0 && <option value="">No hay inmuebles vacantes</option>}
-                {libres.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
+                <option value="">— Elige —</option>
+                {inmuebles.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
               </select>
             </div>
-            <div style={S.formGroup}>
-              <label style={S.label}>Fecha de inicio del arriendo</label>
-              <input style={S.input} type="date" value={reactFecha} onChange={(e) => setReactFecha(e.target.value)} />
-              <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 4 }}>Desde aquí cuenta lo que debe si nunca ha pagado; si ya tiene pagos, cuenta desde donde terminó su último pago.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={S.formGroup}>
+                <label style={S.label}>Inicio del arriendo</label>
+                <input style={S.input} type="date" value={reactInicio} onChange={(e) => setReactInicio(e.target.value)} />
+              </div>
+              <div style={S.formGroup}>
+                <label style={S.label}>Fecha de terminación</label>
+                <input style={S.input} type="date" value={reactFin} onChange={(e) => setReactFin(e.target.value)} autoFocus />
+              </div>
             </div>
             <div style={{ fontWeight: 700, fontSize: 13, color: BLUE.text, margin: "6px 0" }}>Recálculo de saldos</div>
-            {!calculo && <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Elige el inmueble y la fecha de inicio para calcular.</div>}
+            {!calculo && <div style={{ fontSize: 12.5, color: "#94a3b8" }}>{reactFin && reactInicio && reactFin < reactInicio ? "La terminación no puede ser antes del inicio." : "Elige el inmueble y las fechas para calcular."}</div>}
             {calculo && (
               <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 13 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total pagado hasta hoy</span><strong>{fmt(totalPagado)}</strong></div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total pagado</span><strong>{fmt(totalPagado)}</strong></div>
                 {adeudados.map((p) => (
                   <div key={p.periodoFin} style={{ display: "flex", justifyContent: "space-between", color: "#dc2626", marginTop: 4 }}>
                     <span>Debe {fmtDate(p.periodoInicio)} a {fmtDate(p.periodoFin)}</span><span>{fmt(p.valor)}</span>
                   </div>
                 ))}
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BLUE.border}` }}>
-                  <span style={{ fontWeight: 700 }}>Saldo pendiente</span>
+                  <span style={{ fontWeight: 700 }}>Saldo pendiente al {fmtDate(reactFin)}</span>
                   <strong style={{ color: totalDeuda > 0 ? "#dc2626" : "#16a34a" }}>{totalDeuda > 0 ? fmt(totalDeuda) : "Paz y salvo"}</strong>
                 </div>
-                <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 6 }}>Canon actual de {inm.nombre}: {fmt((inm.valorCanonBase || 0) + (inm.tieneAdministracion ? (inm.valorAdministracion || 0) : 0))} al mes.</div>
+                <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 6 }}>Canon de {inm.nombre}: {fmt((inm.valorCanonBase || 0) + (inm.tieneAdministracion ? (inm.valorAdministracion || 0) : 0))} al mes.</div>
               </div>
             )}
           </Modal>
@@ -1886,11 +1905,19 @@ const ArriendosPage = () => {
     setArrendatarios((p) => p.map((x) => x.id === arrendatario.id ? { ...x, activo: !arrendatario.activo } : x));
   };
 
-  const reactivarArrendatario = async (arrendatarioId, inmuebleId, fechaInicio) => {
-    const { error } = await supabase.from("arrendatarios").update({ activo: true }).eq("id", arrendatarioId);
-    if (error) { console.error("reactivarArrendatario error:", error); return; }
-    setArrendatarios((p) => p.map((x) => x.id === arrendatarioId ? { ...x, activo: true } : x));
-    await asignarInmuebleAArrendatario(arrendatarioId, inmuebleId, fechaInicio);
+  // Corrige el cierre de un arriendo ya finalizado (fecha de terminación,
+  // saldo recalculado). Si el arrendatario nunca tuvo registro de cierre, lo crea.
+  const reactivarArrendatario = async ({ historialId, datos }) => {
+    const fila = toHistorialRow(datos);
+    if (historialId) {
+      const { data, error } = await supabase.from("historial_arrendatarios").update(fila).eq("id", historialId).select().single();
+      if (error) { console.error("reactivarArrendatario update error:", error); return; }
+      if (data) setHistorial((p) => p.map((x) => (x.id === historialId ? mapHistorial(data) : x)));
+    } else {
+      const { data, error } = await supabase.from("historial_arrendatarios").insert([fila]).select().single();
+      if (error) { console.error("reactivarArrendatario insert error:", error); return; }
+      if (data) setHistorial((p) => [mapHistorial(data), ...p]);
+    }
   };
 
   const addPago = async (f) => {
