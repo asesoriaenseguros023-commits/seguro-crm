@@ -1499,7 +1499,14 @@ const CuadreAlejandroTab = ({ inmuebles, arrendatarios, pagos }) => {
   const [egresos, setEgresos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errTabla, setErrTabla] = useState("");
-  const [filtroDesde, setFiltroDesde] = useState(mesEnCursoStr);
+  // Por defecto el cuadre arranca en el mes del primer arriendo pagado de
+  // estos pisos (pedido del usuario) y llega hasta el mes en curso.
+  const primerMes = () => {
+    const ids = new Set(inmuebles.filter((i) => NOMBRES_CUADRE.includes(normalizarNombre(i.nombre))).map((i) => i.id));
+    const fechas = pagos.filter((p) => ids.has(p.inmuebleId) && p.estado === "pagado" && p.fechaPago).map((p) => p.fechaPago.slice(0, 7)).sort();
+    return fechas[0] || mesEnCursoStr();
+  };
+  const [filtroDesde, setFiltroDesde] = useState(primerMes);
   const [filtroHasta, setFiltroHasta] = useState(mesEnCursoStr);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ fecha: today(), concepto: "", valor: "" });
@@ -1545,7 +1552,7 @@ const CuadreAlejandroTab = ({ inmuebles, arrendatarios, pagos }) => {
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.orden - b.orden);
   const movimientos = ordenados.map((m, i) => ({ ...m, saldo: ordenados.slice(0, i + 1).reduce((s, x) => s + x.ingreso - x.egreso, 0) }));
   const labelPeriodo = desde === hasta ? fmtMesAnio(desde) : `${fmtMesAnio(desde)} – ${fmtMesAnio(hasta)}`;
-  const esPorDefecto = filtroDesde === mesEnCursoStr() && filtroHasta === mesEnCursoStr();
+  const esPorDefecto = filtroDesde === primerMes() && filtroHasta === mesEnCursoStr();
 
   const guardarEgreso = async () => {
     const valor = Number(form.valor);
@@ -1603,7 +1610,7 @@ const CuadreAlejandroTab = ({ inmuebles, arrendatarios, pagos }) => {
           <label style={S.label}>Hasta</label>
           <input type="month" style={{ ...S.input, width: "auto" }} value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
         </div>
-        {!esPorDefecto && <button style={S.btn("ghost")} onClick={() => { setFiltroDesde(mesEnCursoStr()); setFiltroHasta(mesEnCursoStr()); }}>Mes en curso</button>}
+        {!esPorDefecto && <button style={S.btn("ghost")} onClick={() => { setFiltroDesde(primerMes()); setFiltroHasta(mesEnCursoStr()); }}>Desde el primer arriendo</button>}
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
