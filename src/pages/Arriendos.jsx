@@ -14,6 +14,7 @@ const TABS = [
   { id: "alertas", label: "Alertas" },
   { id: "arrendadores", label: "Arrendadores" },
   { id: "historico", label: "Histórico" },
+  { id: "cuadre", label: "Cuadre Alejandro" },
 ];
 
 const INMUEBLE_INIT = { nombre: "", direccion: "", valorCanonBase: "", diaVencimientoPago: 5, activo: true, arrendatarioId: "", arrendadorId: "", tieneAdministracion: false, valorAdministracion: "", fechaInicioArriendo: "" };
@@ -1487,6 +1488,197 @@ const HistoricoTab = ({ historial, pagos }) => {
 };
 
 // ─── Página raíz del módulo ───────────────────────────────────────────────
+// ─── Cuadre Alejandro ─────────────────────────────────────────────────────
+// Solo Piso 1A y Piso 2A: los pagos con estado "pagado" son el ingreso, los
+// egresos se registran aparte (tabla cuadre_egresos) y el subtotal de
+// disponible es ingresos menos egresos del período elegido.
+const normalizarNombre = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+const NOMBRES_CUADRE = ["piso1a", "piso2a"];
+
+const CuadreAlejandroTab = ({ inmuebles, arrendatarios, pagos }) => {
+  const [egresos, setEgresos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errTabla, setErrTabla] = useState("");
+  const [filtroDesde, setFiltroDesde] = useState(mesEnCursoStr);
+  const [filtroHasta, setFiltroHasta] = useState(mesEnCursoStr);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ fecha: today(), concepto: "", valor: "" });
+  const [errForm, setErrForm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [delItem, setDelItem] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    supabase.from("cuadre_egresos").select("*").order("fecha", { ascending: false }).then(({ data, error }) => {
+      if (!vivo) return;
+      if (error) setErrTabla("Falta crear la tabla de egresos en Supabase (archivo supabase_cuadre_alejandro.sql).");
+      else setEgresos((data || []).map((r) => ({ id: r.id, fecha: r.fecha, concepto: r.concepto, valor: Number(r.valor) || 0 })));
+      setCargando(false);
+    });
+    return () => { vivo = false; };
+  }, []);
+
+  const inmueblesCuadre = inmuebles.filter((i) => NOMBRES_CUADRE.includes(normalizarNombre(i.nombre)));
+  const idsCuadre = new Set(inmueblesCuadre.map((i) => i.id));
+  const nombreInm = (id) => inmuebles.find((i) => i.id === id)?.nombre || "—";
+  const nombreArr = (id) => arrendatarios.find((a) => a.id === id)?.nombre || "—";
+
+  const desde = filtroDesde <= filtroHasta ? filtroDesde : filtroHasta;
+  const hasta = filtroDesde <= filtroHasta ? filtroHasta : filtroDesde;
+  const enPeriodo = (f) => { const ym = (f || "").slice(0, 7); return ym && ym >= desde && ym <= hasta; };
+
+  const pagosCuadre = pagos
+    .filter((p) => idsCuadre.has(p.inmuebleId) && p.estado === "pagado" && enPeriodo(p.fechaPago))
+    .sort((a, b) => b.fechaPago.localeCompare(a.fechaPago));
+  const egresosPeriodo = egresos.filter((e) => enPeriodo(e.fecha)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const totalIngresos = pagosCuadre.reduce((s, p) => s + (p.valor || 0), 0);
+  const totalEgresos = egresosPeriodo.reduce((s, e) => s + e.valor, 0);
+  const disponible = totalIngresos - totalEgresos;
+
+  // Lista única en orden cronológico (los más antiguos primero), con el
+  // saldo acumulado después de cada movimiento; el último saldo es el
+  // subtotal disponible. A igual fecha, el ingreso va antes que el egreso.
+  const ordenados = [
+    ...pagosCuadre.map((p) => ({ key: "p" + p.id, fecha: p.fechaPago, orden: 0, detalle: `Arriendo ${nombreInm(p.inmuebleId)} · ${nombreArr(p.arrendatarioId)}`, sub: `Período ${fmtDate(p.periodoInicio)} a ${fmtDate(p.periodoFin)} · ${METODOS_LABEL[p.metodo] || p.metodo}`, ingreso: p.valor || 0, egreso: 0 })),
+    ...egresosPeriodo.map((e) => ({ key: "e" + e.id, fecha: e.fecha, orden: 1, detalle: e.concepto, sub: "Egreso", ingreso: 0, egreso: e.valor, egresoRef: e })),
+  ]
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.orden - b.orden);
+  const movimientos = ordenados.map((m, i) => ({ ...m, saldo: ordenados.slice(0, i + 1).reduce((s, x) => s + x.ingreso - x.egreso, 0) }));
+  const labelPeriodo = desde === hasta ? fmtMesAnio(desde) : `${fmtMesAnio(desde)} – ${fmtMesAnio(hasta)}`;
+  const esPorDefecto = filtroDesde === mesEnCursoStr() && filtroHasta === mesEnCursoStr();
+
+  const guardarEgreso = async () => {
+    const valor = Number(form.valor);
+    if (!form.fecha) { setErrForm("Elige la fecha"); return; }
+    if (!form.concepto.trim()) { setErrForm("Escribe el concepto"); return; }
+    if (!valor || valor <= 0) { setErrForm("Escribe un valor mayor a cero"); return; }
+    setSaving(true);
+    setErrForm("");
+    const { data, error } = await supabase.from("cuadre_egresos").insert({ fecha: form.fecha, concepto: form.concepto.trim(), valor }).select().single();
+    setSaving(false);
+    if (error) { setErrForm("No se pudo guardar: " + error.message); return; }
+    setEgresos((p) => [{ id: data.id, fecha: data.fecha, concepto: data.concepto, valor: Number(data.valor) || 0 }, ...p]);
+    setShowForm(false);
+    setForm({ fecha: today(), concepto: "", valor: "" });
+  };
+
+  const eliminarEgreso = async () => {
+    const { error } = await supabase.from("cuadre_egresos").delete().eq("id", delItem.id);
+    if (!error) setEgresos((p) => p.filter((e) => e.id !== delItem.id));
+    setDelItem(null);
+  };
+
+  const tarjeta = (titulo, valor, color) => (
+    <div style={{ ...cardS, marginBottom: 0, flex: 1, minWidth: 180 }}>
+      <div style={cardLabelS}>{titulo}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color, marginTop: 4 }}>{fmt(valor)}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <div style={S.pageTitle}>Cuadre Alejandro</div>
+          <div style={S.pageSub}>Arriendos pagados de Piso 1A y Piso 2A, menos egresos</div>
+        </div>
+        <button style={S.btn("primary")} onClick={() => { setErrForm(""); setShowForm(true); }}>
+          <Icon name="plus" size={14} /> Agregar egreso
+        </button>
+      </div>
+
+      {inmueblesCuadre.length < 2 && (
+        <div style={{ ...cardS, background: "#fffbeb", borderColor: "#fde68a", color: "#92400e", fontSize: 13 }}>
+          {inmueblesCuadre.length === 0 ? "No encontré inmuebles llamados «Piso 1A» ni «Piso 2A»." : `Solo encontré ${inmueblesCuadre.map((i) => i.nombre).join(", ")}; falta el otro piso.`} Revisa el nombre en la pestaña Inmuebles.
+        </div>
+      )}
+      {errTabla && <div style={{ ...cardS, background: "#fef2f2", borderColor: "#fecaca", color: "#dc2626", fontSize: 13 }}>{errTabla}</div>}
+
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={S.label}>Desde</label>
+          <input type="month" style={{ ...S.input, width: "auto" }} value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={S.label}>Hasta</label>
+          <input type="month" style={{ ...S.input, width: "auto" }} value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
+        </div>
+        {!esPorDefecto && <button style={S.btn("ghost")} onClick={() => { setFiltroDesde(mesEnCursoStr()); setFiltroHasta(mesEnCursoStr()); }}>Mes en curso</button>}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
+        {tarjeta(`Arriendos pagados · ${labelPeriodo}`, totalIngresos, BLUE.primary)}
+        {tarjeta("Egresos", totalEgresos, "#dc2626")}
+        {tarjeta("Subtotal disponible", disponible, disponible < 0 ? "#dc2626" : "#16a34a")}
+      </div>
+
+      <div style={{ fontWeight: 700, fontSize: 14, color: BLUE.text, marginBottom: 8 }}>Movimientos</div>
+      {cargando && <div style={{ color: "#94a3b8", fontSize: 13 }}>Cargando…</div>}
+      {movimientos.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "92px 1fr 110px 110px 120px 34px", gap: 8, padding: "0 16px 6px", fontSize: 11, fontWeight: 700, color: "#9aa8c7", textTransform: "uppercase", letterSpacing: 0.4 }}>
+          <div>Fecha</div><div>Detalle</div><div style={{ textAlign: "right" }}>Ingreso</div><div style={{ textAlign: "right" }}>Egreso</div><div style={{ textAlign: "right" }}>Saldo</div><div />
+        </div>
+      )}
+      {movimientos.map((m) => (
+        <div key={m.key} style={{ ...cardS, marginBottom: 6, padding: "10px 16px", display: "grid", gridTemplateColumns: "92px 1fr 110px 110px 120px 34px", gap: 8, alignItems: "center", fontSize: 13 }}>
+          <div style={{ color: "#64748b" }}>{fmtDate(m.fecha)}</div>
+          <div>
+            <div style={{ fontWeight: 600 }}>{m.detalle}</div>
+            {m.sub && <div style={cardLabelS}>{m.sub}</div>}
+          </div>
+          <div style={{ textAlign: "right", fontWeight: 600, color: "#16a34a" }}>{m.ingreso ? fmt(m.ingreso) : ""}</div>
+          <div style={{ textAlign: "right", fontWeight: 600, color: "#dc2626" }}>{m.egreso ? fmt(m.egreso) : ""}</div>
+          <div style={{ textAlign: "right", fontWeight: 700, color: m.saldo < 0 ? "#dc2626" : BLUE.text }}>{fmt(m.saldo)}</div>
+          <div>{m.egresoRef && <button style={{ ...S.btn("ghost"), color: "#dc2626", padding: 4 }} onClick={() => setDelItem(m.egresoRef)}><Icon name="trash" size={14} /></button>}</div>
+        </div>
+      ))}
+      {!cargando && movimientos.length === 0 && <div style={{ padding: "10px 4px", color: "#aaa", fontSize: 13 }}>No hay movimientos en el período.</div>}
+
+      {showForm && (
+        <Modal
+          title="Agregar egreso"
+          onClose={() => setShowForm(false)}
+          footer={
+            <>
+              <button style={S.btn("secondary")} onClick={() => setShowForm(false)}>Cancelar</button>
+              <button style={{ ...S.btn("primary"), opacity: saving ? 0.6 : 1 }} onClick={guardarEgreso} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</button>
+            </>
+          }
+        >
+          <div style={S.formGroup}>
+            <label style={S.label}>Fecha *</label>
+            <input style={S.input} type="date" value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} />
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Concepto *</label>
+            <input style={S.input} value={form.concepto} onChange={(e) => setForm((f) => ({ ...f, concepto: e.target.value }))} placeholder="Ej. Reparación, servicios, retiro" autoFocus />
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Valor *</label>
+            <input style={S.input} type="number" value={form.valor} onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))} placeholder="0" />
+          </div>
+          {errForm && <p style={{ color: "#dc2626", fontSize: 13 }}>{errForm}</p>}
+        </Modal>
+      )}
+
+      {delItem && (
+        <Modal
+          title="Eliminar egreso"
+          onClose={() => setDelItem(null)}
+          footer={
+            <>
+              <button style={S.btn("secondary")} onClick={() => setDelItem(null)}>Cancelar</button>
+              <button style={S.btn("danger")} onClick={eliminarEgreso}>Eliminar</button>
+            </>
+          }
+        >
+          <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar el egreso «{delItem.concepto}» por {fmt(delItem.valor)}?</p>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
 const ArriendosPage = () => {
   const [tab, setTab] = useState("dashboard");
   const [inmuebles, setInmuebles] = useState([]);
@@ -1709,6 +1901,7 @@ const ArriendosPage = () => {
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendadores" && <ArrendadoresTab arrendadores={arrendadores} inmuebles={inmuebles} onAdd={addArrendador} onEdit={editArrendador} onDelete={deleteArrendador} />}
       {tab === "historico" && <HistoricoTab historial={historial} pagos={pagos} />}
+      {tab === "cuadre" && <CuadreAlejandroTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
     </div>
   );
 };
