@@ -252,7 +252,7 @@ const InmueblesTab = ({ inmuebles, arrendatarios, arrendadores, onAdd, onEdit, o
 };
 
 // ─── Arrendatarios ────────────────────────────────────────────────────────
-const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuentasCobro, historial, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo, onAgregarCuentaCobro, onFinalizarArriendo }) => {
+const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuentasCobro, historial, onAdd, onEdit, onDelete, onAsignarInmueble, onToggleActivo, onAgregarCuentaCobro, onFinalizarArriendo, onReactivar }) => {
   const isMobile = useIsMobile();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -262,6 +262,30 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
   const [finalizarItem, setFinalizarItem] = useState(null);
   const [fechaFinalizar, setFechaFinalizar] = useState("");
   const [finalizando, setFinalizando] = useState(false);
+  // Reactivar un arrendatario inactivo: se vuelve a asignar un inmueble
+  // vacante con su fecha de inicio y, antes de confirmar, se recalcula en
+  // vivo lo que adeuda (mismo cálculo de las cuentas de cobro: desde el
+  // último pago cubierto, o desde la fecha de inicio si nunca ha pagado).
+  const [reactivarItem, setReactivarItem] = useState(null);
+  const [reactInmueble, setReactInmueble] = useState("");
+  const [reactFecha, setReactFecha] = useState("");
+  const [reactivando, setReactivando] = useState(false);
+  const inmueblesLibres = (a) => inmuebles.filter((i) => i.activo && (!i.arrendatarioId || i.arrendatarioId === a.id));
+  const abrirReactivar = (a) => {
+    const h = historialDe(a.id);
+    const libres = inmueblesLibres(a);
+    const previo = libres.find((i) => i.id === h?.inmuebleId);
+    setReactivarItem(a);
+    setReactInmueble(previo?.id || libres[0]?.id || "");
+    setReactFecha(h?.fechaInicio || previo?.fechaInicioArriendo || "");
+  };
+  const confirmarReactivar = async () => {
+    if (!reactInmueble || !reactFecha) return;
+    setReactivando(true);
+    await onReactivar(reactivarItem.id, reactInmueble, reactFecha);
+    setReactivando(false);
+    setReactivarItem(null);
+  };
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const inmuebleDe = (arrendatarioId) => inmuebles.find((i) => i.arrendatarioId === arrendatarioId);
   // Último registro de historial de este arrendatario (si ya finalizó un
@@ -421,6 +445,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
                 {!inmuebleDe(a.id) && historialDe(a.id) && (
                   <button style={{ ...S.btn("secondary"), flex: 1 }} onClick={() => reimprimirDocumentoFinal(a)}>Generar</button>
                 )}
+                {!a.activo && <button style={{ ...S.btn("secondary"), color: "#16a34a" }} onClick={() => abrirReactivar(a)}>Reactivar</button>}
                 <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
                 <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
               </div>
@@ -432,11 +457,11 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
         </div>
       ) : (
       <div style={S.tableWrap}>
-        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 230px" }}>
+        <div style={{ ...S.tableHead, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 320px" }}>
           <div>#</div><div>Nombre</div><div>Teléfono</div><div>Documento</div><div>Inmueble</div><div></div>
         </div>
         {arrendatarios.map((a, idx) => (
-          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 230px" }}>
+          <div key={a.id} style={{ ...S.tableRow, gridTemplateColumns: "40px 1.3fr 0.9fr 0.9fr 1.1fr 320px" }}>
             <div style={{ color: "#aaa", fontSize: 12 }}>{idx + 1}</div>
             <div style={{ fontWeight: 600, color: BLUE.text }}>{a.nombre}</div>
             <div style={{ color: a.telefono ? "inherit" : "#ccc" }}>{a.telefono || "—"}</div>
@@ -458,6 +483,7 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
               {inmuebleDe(a.id) && <button style={S.btn("secondary")} onClick={() => generarCuenta(a)}>Generar</button>}
               {inmuebleDe(a.id) && <button style={{ ...S.btn("secondary"), color: "#dc2626" }} onClick={() => abrirFinalizar(a)}>Finalizar</button>}
               {!inmuebleDe(a.id) && historialDe(a.id) && <button style={S.btn("secondary")} onClick={() => reimprimirDocumentoFinal(a)}>Generar</button>}
+              {!a.activo && <button style={{ ...S.btn("secondary"), color: "#16a34a" }} onClick={() => abrirReactivar(a)}>Reactivar</button>}
               <button style={S.btn("ghost")} onClick={() => abrirEditar(a)}><Icon name="edit" size={14} /></button>
               <button style={{ ...S.btn("ghost"), color: "#dc2626" }} onClick={() => setDelItem(a)}><Icon name="trash" size={14} /></button>
             </div>
@@ -525,6 +551,59 @@ const ArrendatariosTab = ({ arrendatarios, inmuebles, pagos, arrendadores, cuent
           <p style={{ fontSize: 14, color: "#555" }}>¿Eliminar <strong>{delItem.nombre}</strong>? Esto solo es posible si no tiene contratos asociados.</p>
         </Modal>
       )}
+
+      {reactivarItem && (() => {
+        const libres = inmueblesLibres(reactivarItem);
+        const inm = libres.find((i) => i.id === reactInmueble);
+        const calculo = inm && reactFecha ? calcularEstadoCuentaCobro({ ...inm, fechaInicioArriendo: reactFecha }, reactivarItem.id, pagos) : null;
+        const adeudados = calculo?.periodosAdeudados || [];
+        const totalDeuda = adeudados.reduce((x, p) => x + p.valor, 0);
+        const totalPagado = pagos.filter((p) => p.arrendatarioId === reactivarItem.id).reduce((x, p) => x + (p.valor || 0), 0);
+        return (
+          <Modal
+            title={`Reactivar — ${reactivarItem.nombre}`}
+            onClose={() => setReactivarItem(null)}
+            footer={
+              <>
+                <button style={S.btn("secondary")} onClick={() => setReactivarItem(null)}>Cancelar</button>
+                <button style={{ ...S.btn("primary"), opacity: reactivando || !inm || !reactFecha ? 0.6 : 1 }} onClick={confirmarReactivar} disabled={reactivando || !inm || !reactFecha}>
+                  {reactivando ? "Reactivando…" : "Reactivar"}
+                </button>
+              </>
+            }
+          >
+            <div style={S.formGroup}>
+              <label style={S.label}>Inmueble</label>
+              <select style={S.select} value={reactInmueble} onChange={(e) => setReactInmueble(e.target.value)}>
+                {libres.length === 0 && <option value="">No hay inmuebles vacantes</option>}
+                {libres.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.direccion ? ` — ${i.direccion}` : ""}</option>)}
+              </select>
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Fecha de inicio del arriendo</label>
+              <input style={S.input} type="date" value={reactFecha} onChange={(e) => setReactFecha(e.target.value)} />
+              <div style={{ fontSize: 11, color: "#9aa8c7", marginTop: 4 }}>Desde aquí cuenta lo que debe si nunca ha pagado; si ya tiene pagos, cuenta desde donde terminó su último pago.</div>
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: BLUE.text, margin: "6px 0" }}>Recálculo de saldos</div>
+            {!calculo && <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Elige el inmueble y la fecha de inicio para calcular.</div>}
+            {calculo && (
+              <div style={{ background: "#f8faff", border: `1px solid ${BLUE.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total pagado hasta hoy</span><strong>{fmt(totalPagado)}</strong></div>
+                {adeudados.map((p) => (
+                  <div key={p.periodoFin} style={{ display: "flex", justifyContent: "space-between", color: "#dc2626", marginTop: 4 }}>
+                    <span>Debe {fmtDate(p.periodoInicio)} a {fmtDate(p.periodoFin)}</span><span>{fmt(p.valor)}</span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BLUE.border}` }}>
+                  <span style={{ fontWeight: 700 }}>Saldo pendiente</span>
+                  <strong style={{ color: totalDeuda > 0 ? "#dc2626" : "#16a34a" }}>{totalDeuda > 0 ? fmt(totalDeuda) : "Paz y salvo"}</strong>
+                </div>
+                <div style={{ fontSize: 11.5, color: "#9aa8c7", marginTop: 6 }}>Canon actual de {inm.nombre}: {fmt((inm.valorCanonBase || 0) + (inm.tieneAdministracion ? (inm.valorAdministracion || 0) : 0))} al mes.</div>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
 
       {finalizarItem && (
         <Modal
@@ -1807,6 +1886,13 @@ const ArriendosPage = () => {
     setArrendatarios((p) => p.map((x) => x.id === arrendatario.id ? { ...x, activo: !arrendatario.activo } : x));
   };
 
+  const reactivarArrendatario = async (arrendatarioId, inmuebleId, fechaInicio) => {
+    const { error } = await supabase.from("arrendatarios").update({ activo: true }).eq("id", arrendatarioId);
+    if (error) { console.error("reactivarArrendatario error:", error); return; }
+    setArrendatarios((p) => p.map((x) => x.id === arrendatarioId ? { ...x, activo: true } : x));
+    await asignarInmuebleAArrendatario(arrendatarioId, inmuebleId, fechaInicio);
+  };
+
   const addPago = async (f) => {
     const { data, error } = await supabase.from("pagos").insert([toPagoRow(f)]).select().single();
     if (error) { console.error("addPago error:", error); return; }
@@ -1903,7 +1989,7 @@ const ArriendosPage = () => {
 
       {tab === "dashboard" && <DashboardTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "inmuebles" && <InmueblesTab inmuebles={inmuebles} arrendatarios={arrendatarios} arrendadores={arrendadores} onAdd={addInmueble} onEdit={editInmueble} onDelete={deleteInmueble} />}
-      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendadores={arrendadores} cuentasCobro={cuentasCobro} historial={historial} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} onAgregarCuentaCobro={addCuentaCobro} onFinalizarArriendo={finalizarArriendo} />}
+      {tab === "arrendatarios" && <ArrendatariosTab arrendatarios={arrendatarios} inmuebles={inmuebles} pagos={pagos} arrendadores={arrendadores} cuentasCobro={cuentasCobro} historial={historial} onAdd={addArrendatario} onEdit={editArrendatario} onDelete={deleteArrendatario} onAsignarInmueble={asignarInmuebleAArrendatario} onToggleActivo={toggleActivoArrendatario} onAgregarCuentaCobro={addCuentaCobro} onFinalizarArriendo={finalizarArriendo} onReactivar={reactivarArrendatario} />}
       {tab === "pagos" && <PagosTab pagos={pagos} inmuebles={inmuebles} arrendatarios={arrendatarios} arrendadores={arrendadores} onAdd={addPago} onEdit={editPago} onDelete={deletePago} onAsignarNumero={asignarNumeroComprobante} />}
       {tab === "alertas" && <AlertasTab inmuebles={inmuebles} arrendatarios={arrendatarios} pagos={pagos} />}
       {tab === "arrendadores" && <ArrendadoresTab arrendadores={arrendadores} inmuebles={inmuebles} onAdd={addArrendador} onEdit={editArrendador} onDelete={deleteArrendador} />}
